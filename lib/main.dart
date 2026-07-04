@@ -1,0 +1,84 @@
+import 'dart:io' show Platform;
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:intl/date_symbol_data_local.dart';
+
+import 'pages/splash/splash_page.dart';
+import 'theme/app_theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Necesario para que DateFormat con nombres de mes/día ('EEEE', 'MMMM')
+  // funcione en español (ej. resumen de pedido: "viernes 4 de julio").
+  await initializeDateFormatting('es');
+  await _inicializarFirebaseSiAplica();
+  await _inicializarAdMobSiAplica();
+  runApp(const PanaderiaApp());
+}
+
+/// Firebase (usado para notificaciones push) solo tiene configuración nativa
+/// para Android en este proyecto por ahora — en web/escritorio no se
+/// inicializa.
+Future<void> _inicializarFirebaseSiAplica() async {
+  if (kIsWeb) return;
+  if (!Platform.isAndroid) return;
+
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {
+    // No bloquea el arranque de la app si Firebase no pudo inicializarse.
+  }
+}
+
+/// google_mobile_ads solo tiene implementación para Android e iOS; en web
+/// o escritorio simplemente no se inicializa (el banner ya lo maneja).
+Future<void> _inicializarAdMobSiAplica() async {
+  if (kIsWeb) return;
+  if (!(Platform.isAndroid || Platform.isIOS)) return;
+
+  try {
+    await MobileAds.instance.initialize();
+  } catch (_) {
+    // No bloquea el arranque de la app si AdMob no pudo inicializarse.
+  }
+}
+
+class PanaderiaApp extends StatelessWidget {
+  const PanaderiaApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Corporación Ronceros',
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(),
+      // Respeta la fuente grande del sistema (accesibilidad) pero la limita
+      // a 1.25x para que nunca desborde botones ni formularios. Ojo:
+      // encadenar `.clamp()` sobre el TextScaler del sistema (en vez de
+      // sobre un número) revienta con "maxScale > minScale: is not true" en
+      // Android 14+ (escalado de fuente no lineal) cuando el usuario tiene
+      // configurado un tamaño de letra grande — el TextScaler del sistema ya
+      // viene con sus propios límites internos, y el segundo `.clamp()`
+      // puede terminar con un mínimo mayor que el máximo. Por eso acá se
+      // deriva un factor numérico simple (con un tamaño de referencia) y se
+      // aplica un clamp normal sobre ese número, nunca sobre el TextScaler.
+      builder: (context, child) {
+        final mediaQuery = MediaQuery.of(context);
+        const tamanoReferencia = 100.0;
+        final factorActual =
+            mediaQuery.textScaler.scale(tamanoReferencia) / tamanoReferencia;
+        final factorSeguro = factorActual.clamp(1.0, 1.25);
+        return MediaQuery(
+          data: mediaQuery.copyWith(
+            textScaler: TextScaler.linear(factorSeguro),
+          ),
+          child: child!,
+        );
+      },
+      home: const SplashPage(),
+    );
+  }
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Permite tráfico HTTP sin cifrar (cleartext) solo para desarrollo local,
+  ya que el backend corre en la red local (http://IP-LAN:4000) sin HTTPS.
+  Antes de publicar la app en producción, esto debe restringirse o
+  eliminarse una vez que el backend tenga un dominio con HTTPS.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

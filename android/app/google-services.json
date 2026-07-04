@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "84046109248",
+    "project_id": "conversor-af3c6",
+    "storage_bucket": "conversor-af3c6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:84046109248:android:4f6153441c9c20600d1da5",
+        "android_client_info": {
+          "package_name": "com.corporacionronceros.panaderia_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtP4lbDdEfL1Oi3DRA5Xoy_HY6YaJ4bP0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
