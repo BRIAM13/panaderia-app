@@ -1,10 +1,19 @@
+const fs = require('fs');
 const path = require('path');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getMessaging } = require('firebase-admin/messaging');
 
+// En local, el archivo vive en config/firebase-service-account.json. En
+// Render, los "Secret Files" no admiten subcarpetas en el nombre — quedan
+// montados tal cual en /etc/secrets/<archivo> — así que ahí se busca
+// primero si existe.
+const RUTA_SECRETO_RENDER = '/etc/secrets/firebase-service-account.json';
+const RUTA_LOCAL = path.join(__dirname, '..', 'config', 'firebase-service-account.json');
+
 function obtenerApp() {
   if (getApps().length === 0) {
-    const credenciales = require(path.join(__dirname, '..', 'config', 'firebase-service-account.json'));
+    const ruta = fs.existsSync(RUTA_SECRETO_RENDER) ? RUTA_SECRETO_RENDER : RUTA_LOCAL;
+    const credenciales = require(ruta);
     initializeApp({ credential: cert(credenciales) });
   }
 }
