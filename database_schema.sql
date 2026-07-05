@@ -128,6 +128,7 @@ CREATE TABLE Clientes (
     LimiteCredito            DECIMAL(10,2)       NOT NULL DEFAULT 0,
     PuntosFidelidad          INT                 NOT NULL DEFAULT 0,
     DescripcionNegocio       NVARCHAR(300)       NULL,   -- si el cliente es un negocio (restaurante, bodega, etc.)
+    NombreComercialOficial   BIT                 NOT NULL DEFAULT 0,  -- 1 si DescripcionNegocio vino de SUNAT (no editable a mano)
     Estado                   BIT                 NOT NULL DEFAULT 1,
     CONSTRAINT PK_Clientes PRIMARY KEY (IdCliente),
     CONSTRAINT UQ_Clientes_Persona UNIQUE (IdPersona),
