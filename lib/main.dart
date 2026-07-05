@@ -33,6 +33,18 @@ Future<void> _inicializarFirebaseSiAplica() async {
   }
 }
 
+/// Dispositivos marcados como "de prueba" ante AdMob: aunque el código use
+/// el ID de bloque de anuncios REAL, estos dispositivos siempre reciben un
+/// anuncio de prueba (claramente marcado como tal) en vez de uno real —
+/// así se puede seguir probando la app sin arriesgar la cuenta por "tráfico
+/// inválido" (Google suspende cuentas que detectan clics/vistas repetidas
+/// del propio dueño sobre sus anuncios reales). El ID de cada dispositivo
+/// aparece en el logcat la primera vez que intenta cargar un anuncio real
+/// (buscar "Use RequestConfiguration.Builder().setTestDeviceIds(...)").
+const _dispositivosDePrueba = <String>[
+  '75ECA870F184FC2776473AF1AFB4B0CF', // Samsung Galaxy S24 Ultra (Briam, dispositivo de pruebas)
+];
+
 /// google_mobile_ads solo tiene implementación para Android e iOS; en web
 /// o escritorio simplemente no se inicializa (el banner ya lo maneja).
 Future<void> _inicializarAdMobSiAplica() async {
@@ -41,6 +53,9 @@ Future<void> _inicializarAdMobSiAplica() async {
 
   try {
     await MobileAds.instance.initialize();
+    await MobileAds.instance.updateRequestConfiguration(
+      RequestConfiguration(testDeviceIds: _dispositivosDePrueba),
+    );
   } catch (_) {
     // No bloquea el arranque de la app si AdMob no pudo inicializarse.
   }

@@ -11,9 +11,8 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 class AdBanner extends StatefulWidget {
   const AdBanner({super.key});
 
-  // ID de bloque de anuncios de PRUEBA oficial de Google (banner adaptable).
-  // Reemplazar por el ID real de producción antes de publicar la app.
-  static const _adUnitId = 'ca-app-pub-3940256099942544/6300978111';
+  // ID real del bloque de anuncios "Banner Cliente Inferior" en AdMob.
+  static const _adUnitId = 'ca-app-pub-8167336469205854/6934217199';
 
   @override
   State<AdBanner> createState() => _AdBannerState();
