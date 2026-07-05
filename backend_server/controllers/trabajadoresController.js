@@ -150,6 +150,14 @@ async function crearTrabajador(req, res, next) {
     let idPersona;
     if (existente.recordset.length > 0) {
       idPersona = existente.recordset[0].IdPersona;
+
+      // Nadie puede registrarse a sí mismo como trabajador — no tiene
+      // sentido (ya tiene su propia cuenta y acceso) y puede dejar estados
+      // raros, como crearse una ficha de Trabajador/Cliente redundante.
+      if (idPersona === req.usuario.idPersona) {
+        await transaction.rollback();
+        return res.status(400).json({ mensaje: 'No puedes registrarte a ti mismo como trabajador.' });
+      }
     } else {
       const nuevaPersona = await new sql.Request(transaction)
         .input('DNI', sql.VarChar(15), dniLimpio)

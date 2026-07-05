@@ -22,7 +22,25 @@ class SlideUpFadeRoute<T> extends PageRouteBuilder<T> {
                 begin: const Offset(0, 0.08),
                 end: Offset.zero,
               ).animate(curved),
-              child: child,
+              child: AnimatedBuilder(
+                animation: curved,
+                child: child,
+                // La página nueva "se endereza" desde una leve inclinación
+                // en perspectiva (como si viniera desde el fondo de la
+                // pantalla) en vez de aparecer plana — el toque 3D del
+                // deslizamiento hacia arriba.
+                builder: (context, child) {
+                  final t = curved.value;
+                  final matriz = Matrix4.identity()
+                    ..setEntry(3, 2, 0.0012)
+                    ..rotateX((1 - t) * -0.12);
+                  return Transform(
+                    alignment: Alignment.center,
+                    transform: matriz,
+                    child: child,
+                  );
+                },
+              ),
             ),
           );
         },

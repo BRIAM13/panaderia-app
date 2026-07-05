@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/cliente_model.dart';
 import '../theme/app_theme.dart';
+import 'tarjeta_3d.dart';
 
 /// Tarjeta premium de cliente: contenido dinámico según su tipo de
 /// documento (DNI, RUC persona natural con/sin negocio, RUC persona
@@ -90,103 +91,96 @@ class ClienteCard extends StatelessWidget {
     final direccion = cliente.direccion;
     final nombreComercial = _nombreComercialDestacado;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.textPrimary.withValues(alpha: 0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(22),
-        child: InkWell(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Tarjeta3D(
+        onTap: onTap,
+        borderRadius: 22,
+        child: Material(
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(22),
-          onTap: onTap,
-          splashColor: color.withValues(alpha: 0.08),
-          highlightColor: color.withValues(alpha: 0.04),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 14, 16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        color.withValues(alpha: 0.20),
-                        color.withValues(alpha: 0.08),
-                      ],
-                    ),
-                    border: Border.all(
-                      color: color.withValues(alpha: 0.35),
-                      width: 1.4,
-                    ),
-                  ),
-                  child: Icon(_iconoTipo, color: color, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        cliente.nombreParaMostrar,
-                        style: theme.textTheme.titleMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(22),
+            onTap: onTap,
+            splashColor: color.withValues(alpha: 0.08),
+            highlightColor: color.withValues(alpha: 0.04),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 14, 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          color.withValues(alpha: 0.20),
+                          color.withValues(alpha: 0.08),
+                        ],
                       ),
-                      if (nombreComercial != null &&
-                          nombreComercial.trim().isNotEmpty) ...[
-                        const SizedBox(height: 2),
+                      border: Border.all(
+                        color: color.withValues(alpha: 0.35),
+                        width: 1.4,
+                      ),
+                    ),
+                    child: Icon(_iconoTipo, color: color, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          nombreComercial,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.secondary,
+                          cliente.nombreParaMostrar,
+                          style: theme.textTheme.titleMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (nombreComercial != null &&
+                            nombreComercial.trim().isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            nombreComercial,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.secondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                        ],
+                        const SizedBox(height: 3),
+                        Text(
+                          direccion != null && direccion.trim().isNotEmpty
+                              ? '$_etiquetaDocumento · $direccion'
+                              : _etiquetaDocumento,
+                          style: theme.textTheme.bodyMedium,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
-                      const SizedBox(height: 3),
-                      Text(
-                        direccion != null && direccion.trim().isNotEmpty
-                            ? '$_etiquetaDocumento · $direccion'
-                            : _etiquetaDocumento,
-                        style: theme.textTheme.bodyMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Chip(
-                  avatar: Icon(_iconoCalidad, size: 15, color: color),
-                  label: Text(_etiquetaCalidad),
-                  labelStyle: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
+                  const SizedBox(width: 8),
+                  Chip(
+                    avatar: Icon(_iconoCalidad, size: 15, color: color),
+                    label: Text(_etiquetaCalidad),
+                    labelStyle: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
+                    backgroundColor: color.withValues(alpha: 0.1),
+                    side: BorderSide.none,
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  backgroundColor: color.withValues(alpha: 0.1),
-                  side: BorderSide.none,
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

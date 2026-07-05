@@ -14,6 +14,7 @@ import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
+import '../../widgets/tarjeta_3d.dart';
 import 'deudas_page.dart';
 import 'pedidos_page.dart';
 
@@ -195,7 +196,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 )
                 .animate()
                 .fadeIn(delay: 100.ms, duration: 400.ms)
-                .moveY(begin: 16, end: 0),
+                .moveY(begin: 16, end: 0)
+                .flipH(begin: 0.1, end: 0, duration: 350.ms),
             const SizedBox(height: 16),
             GridView.count(
               crossAxisCount: 2,
@@ -253,7 +255,8 @@ class _DashboardPageState extends State<DashboardPage> {
             _GraficoVentas7Dias(serie: resumen.ventasUltimos7Dias)
                 .animate()
                 .fadeIn(delay: 340.ms, duration: 400.ms)
-                .moveY(begin: 16, end: 0),
+                .moveY(begin: 16, end: 0)
+                .flipH(begin: 0.1, end: 0, duration: 350.ms),
             const SizedBox(height: 24),
             Text(
               'Pedidos por entregar, según urgencia',
@@ -263,7 +266,8 @@ class _DashboardPageState extends State<DashboardPage> {
             _GraficoPendientesPorUrgencia(resumen: resumen)
                 .animate()
                 .fadeIn(delay: 420.ms, duration: 400.ms)
-                .moveY(begin: 16, end: 0),
+                .moveY(begin: 16, end: 0)
+                .flipH(begin: 0.1, end: 0, duration: 350.ms),
           ],
         ],
       ),
@@ -307,58 +311,54 @@ class _TarjetaVentasHoy extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.secondary],
+    return Tarjeta3D(
+      borderRadius: 24,
+      profundidad: 0.0022,
+      child: Container(
+        padding: const EdgeInsets.all(22),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.primary, AppColors.secondary],
+          ),
         ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.trending_up_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Ventas de hoy',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(color: Colors.white),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _ContadorAnimado(
-            valor: total,
-            formatear: (v) => 'S/ ${v.toStringAsFixed(2)}',
-            estilo: const TextStyle(
-              color: Colors.white,
-              fontSize: 34,
-              fontWeight: FontWeight.w800,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.trending_up_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Ventas de hoy',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(color: Colors.white),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '$cantidad pedido(s) entregado(s) hoy',
-            style: const TextStyle(color: Colors.white70),
-          ),
-        ],
+            const SizedBox(height: 10),
+            _ContadorAnimado(
+              valor: total,
+              formatear: (v) => 'S/ ${v.toStringAsFixed(2)}',
+              estilo: const TextStyle(
+                color: Colors.white,
+                fontSize: 34,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$cantidad pedido(s) entregado(s) hoy',
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -390,80 +390,75 @@ class _TarjetaEstadistica extends StatelessWidget {
     final theme = Theme.of(context);
     final esNumero = double.tryParse(valor.replaceAll(RegExp('[^0-9.]'), ''));
 
-    return Material(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.textPrimary.withValues(alpha: 0.05),
-                    blurRadius: 12,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icono, color: color, size: 18),
-                  ),
-                  const SizedBox(height: 8),
-                  esNumero != null
-                      ? _ContadorAnimado(
-                          valor: esNumero,
-                          formatear: (v) => valor.startsWith('S/')
-                              ? 'S/ ${v.toStringAsFixed(2)}'
-                              : v.toStringAsFixed(0),
-                          estilo: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        )
-                      : Text(
-                          valor,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                  Text(
-                    titulo,
-                    style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (subtitulo != null)
-                    Text(
-                      subtitulo!,
-                      style: TextStyle(
-                        color: subtituloColor ?? AppColors.textSecondary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
+    return Tarjeta3D(
+          onTap: onTap,
+          borderRadius: 20,
+          child: Material(
+            color: AppColors.surface,
+            child: InkWell(
+              onTap: onTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
                       ),
+                      child: Icon(icono, color: color, size: 18),
+                    ),
+                    const SizedBox(height: 8),
+                    esNumero != null
+                        ? _ContadorAnimado(
+                            valor: esNumero,
+                            formatear: (v) => valor.startsWith('S/')
+                                ? 'S/ ${v.toStringAsFixed(2)}'
+                                : v.toStringAsFixed(0),
+                            estilo: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          )
+                        : Text(
+                            valor,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                    Text(
+                      titulo,
+                      style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                ],
+                    if (subtitulo != null)
+                      Text(
+                        subtitulo!,
+                        style: TextStyle(
+                          color: subtituloColor ?? AppColors.textSecondary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
         )
         .animate(delay: delay.ms)
         .fadeIn(duration: 350.ms)
-        .moveY(begin: 14, end: 0);
+        .moveY(begin: 14, end: 0)
+        .flipH(begin: 0.1, end: 0, duration: 320.ms);
   }
 }
 
@@ -483,88 +478,80 @@ class _GraficoVentas7Dias extends StatelessWidget {
     final techo = maximo <= 0 ? 10.0 : maximo * 1.25;
     final formatoDia = DateFormat('EEE', 'es');
 
-    return Container(
-      height: 220,
-      padding: const EdgeInsets.fromLTRB(12, 20, 12, 8),
-      decoration: BoxDecoration(
+    return Tarjeta3D(
+      child: Container(
+        height: 220,
+        padding: const EdgeInsets.fromLTRB(12, 20, 12, 8),
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.textPrimary.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: BarChart(
-        BarChartData(
-          maxY: techo,
-          alignment: BarChartAlignment.spaceAround,
-          barTouchData: BarTouchData(
-            touchTooltipData: BarTouchTooltipData(
-              getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                  BarTooltipItem(
-                    'S/ ${rod.toY.toStringAsFixed(2)}',
-                    const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-            ),
-          ),
-          titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, meta) {
-                  final indice = value.toInt();
-                  if (indice < 0 || indice >= serie.length)
-                    return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      formatoDia.format(serie[indice].fecha),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
+        child: BarChart(
+          BarChartData(
+            maxY: techo,
+            alignment: BarChartAlignment.spaceAround,
+            barTouchData: BarTouchData(
+              touchTooltipData: BarTouchTooltipData(
+                getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                    BarTooltipItem(
+                      'S/ ${rod.toY.toStringAsFixed(2)}',
+                      const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  );
-                },
               ),
             ),
-          ),
-          gridData: const FlGridData(show: false),
-          borderData: FlBorderData(show: false),
-          barGroups: serie.asMap().entries.map((entry) {
-            final esHoy = entry.key == serie.length - 1;
-            return BarChartGroupData(
-              x: entry.key,
-              barRods: [
-                BarChartRodData(
-                  toY: entry.value.total,
-                  color: esHoy
-                      ? AppColors.primary
-                      : AppColors.secondary.withValues(alpha: 0.55),
-                  width: 22,
-                  borderRadius: BorderRadius.circular(6),
+            titlesData: FlTitlesData(
+              leftTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (value, meta) {
+                    final indice = value.toInt();
+                    if (indice < 0 || indice >= serie.length)
+                      return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        formatoDia.format(serie[indice].fecha),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ],
-            );
-          }).toList(),
+              ),
+            ),
+            gridData: const FlGridData(show: false),
+            borderData: FlBorderData(show: false),
+            barGroups: serie.asMap().entries.map((entry) {
+              final esHoy = entry.key == serie.length - 1;
+              return BarChartGroupData(
+                x: entry.key,
+                barRods: [
+                  BarChartRodData(
+                    toY: entry.value.total,
+                    color: esHoy
+                        ? AppColors.primary
+                        : AppColors.secondary.withValues(alpha: 0.55),
+                    width: 22,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+          duration: const Duration(milliseconds: 700),
+          curve: Curves.easeOutCubic,
         ),
-        duration: const Duration(milliseconds: 700),
-        curve: Curves.easeOutCubic,
       ),
     );
   }
@@ -604,85 +591,77 @@ class _GraficoPendientesPorUrgencia extends StatelessWidget {
       );
     }
 
-    return Container(
-      height: 200,
-      padding: const EdgeInsets.fromLTRB(12, 20, 12, 8),
-      decoration: BoxDecoration(
+    return Tarjeta3D(
+      child: Container(
+        height: 200,
+        padding: const EdgeInsets.fromLTRB(12, 20, 12, 8),
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.textPrimary.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: BarChart(
-        BarChartData(
-          maxY: techo,
-          alignment: BarChartAlignment.spaceAround,
-          barTouchData: BarTouchData(
-            touchTooltipData: BarTouchTooltipData(
-              getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                  BarTooltipItem(
-                    '${rod.toY.toInt()} pedido(s)',
-                    const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-            ),
-          ),
-          titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, meta) {
-                  final indice = value.toInt();
-                  if (indice < 0 || indice >= categorias.length)
-                    return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      categorias[indice].$1,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
+        child: BarChart(
+          BarChartData(
+            maxY: techo,
+            alignment: BarChartAlignment.spaceAround,
+            barTouchData: BarTouchData(
+              touchTooltipData: BarTouchTooltipData(
+                getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                    BarTooltipItem(
+                      '${rod.toY.toInt()} pedido(s)',
+                      const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  );
-                },
               ),
             ),
-          ),
-          gridData: const FlGridData(show: false),
-          borderData: FlBorderData(show: false),
-          barGroups: categorias.asMap().entries.map((entry) {
-            return BarChartGroupData(
-              x: entry.key,
-              barRods: [
-                BarChartRodData(
-                  toY: entry.value.$2.toDouble(),
-                  color: entry.value.$3,
-                  width: 28,
-                  borderRadius: BorderRadius.circular(6),
+            titlesData: FlTitlesData(
+              leftTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (value, meta) {
+                    final indice = value.toInt();
+                    if (indice < 0 || indice >= categorias.length)
+                      return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        categorias[indice].$1,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ],
-            );
-          }).toList(),
+              ),
+            ),
+            gridData: const FlGridData(show: false),
+            borderData: FlBorderData(show: false),
+            barGroups: categorias.asMap().entries.map((entry) {
+              return BarChartGroupData(
+                x: entry.key,
+                barRods: [
+                  BarChartRodData(
+                    toY: entry.value.$2.toDouble(),
+                    color: entry.value.$3,
+                    width: 28,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+          duration: const Duration(milliseconds: 700),
+          curve: Curves.easeOutCubic,
         ),
-        duration: const Duration(milliseconds: 700),
-        curve: Curves.easeOutCubic,
       ),
     );
   }

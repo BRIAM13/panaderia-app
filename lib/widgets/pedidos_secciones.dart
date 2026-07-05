@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../services/pedidos_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/fecha_pedido_utils.dart';
+import 'tarjeta_3d.dart';
 
 /// Sección temporal a la que pertenece un pedido, según su fecha de
 /// entrega comparada con hoy. No es un dato guardado — se recalcula cada
@@ -222,7 +223,8 @@ class SeccionPedidos extends StatelessWidget {
                     )
                     .animate(delay: (40 * entry.key).ms)
                     .fadeIn(duration: 250.ms)
-                    .moveY(begin: 8, end: 0),
+                    .moveY(begin: 8, end: 0)
+                    .flipH(begin: 0.12, end: 0, duration: 320.ms),
           ),
         ],
       ),
@@ -319,189 +321,188 @@ class PedidoCard extends StatelessWidget {
         pedido.estado == 'PENDIENTE' && onEntregar != null;
     final mostrarAccionCancelar = pedido.sePuedeCancelar && onCancelar != null;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.textPrimary.withValues(alpha: 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        colorSeccion.withValues(alpha: 0.20),
-                        colorSeccion.withValues(alpha: 0.08),
-                      ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Tarjeta3D(
+        borderRadius: 20,
+        child: Container(
+          color: AppColors.surface,
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          colorSeccion.withValues(alpha: 0.20),
+                          colorSeccion.withValues(alpha: 0.08),
+                        ],
+                      ),
+                    ),
+                    child: Icon(
+                      pedido.tipoPedido == 'PAQUETES'
+                          ? Icons.inventory_2_rounded
+                          : Icons.local_dining_rounded,
+                      color: colorSeccion,
+                      size: 20,
                     ),
                   ),
-                  child: Icon(
-                    pedido.tipoPedido == 'PAQUETES'
-                        ? Icons.inventory_2_rounded
-                        : Icons.local_dining_rounded,
-                    color: colorSeccion,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (mostrarNombreCliente) ...[
-                        Text(
-                          cliente.nombreParaMostrar,
-                          style: theme.textTheme.titleMedium,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (nombreComercial != null) ...[
-                          const SizedBox(height: 1),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (mostrarNombreCliente) ...[
                           Text(
-                            nombreComercial,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.secondary,
-                            ),
+                            cliente.nombreParaMostrar,
+                            style: theme.textTheme.titleMedium,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                        const SizedBox(height: 4),
-                      ],
-                      Text(
-                        '${pedido.tipoPedido == 'PAQUETES' ? 'Paquetes' : 'Unidades'} · ${pedido.cantidad} · S/ ${pedido.total.toStringAsFixed(2)}',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Icon(
-                            pedido.fechaEntrega != null
-                                ? Icons.schedule_rounded
-                                : Icons.event_busy_rounded,
-                            size: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              pedido.fechaEntrega != null
-                                  ? formatearFechaEntrega(pedido.fechaEntrega!)
-                                  : 'Sin fecha programada',
+                          if (nombreComercial != null) ...[
+                            const SizedBox(height: 1),
+                            Text(
+                              nombreComercial,
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.secondary,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                          ),
+                          ],
+                          const SizedBox(height: 4),
                         ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: estadoInfo.color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(estadoInfo.icono, size: 13, color: estadoInfo.color),
-                      const SizedBox(width: 4),
-                      Text(
-                        estadoInfo.texto,
-                        style: TextStyle(
-                          color: estadoInfo.color,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 11,
+                        Text(
+                          '${pedido.tipoPedido == 'PAQUETES' ? 'Paquetes' : 'Unidades'} · ${pedido.cantidad} · S/ ${pedido.total.toStringAsFixed(2)}',
+                          style: theme.textTheme.bodyMedium,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(
+                              pedido.fechaEntrega != null
+                                  ? Icons.schedule_rounded
+                                  : Icons.event_busy_rounded,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                pedido.fechaEntrega != null
+                                    ? formatearFechaEntrega(
+                                        pedido.fechaEntrega!,
+                                      )
+                                    : 'Sin fecha programada',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontSize: 12,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            if (mostrarAccionesSolicitud) ...[
+                ],
+              ),
               const SizedBox(height: 10),
               Row(
                 children: [
-                  if (onRechazar != null)
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: onRechazar,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFC62828),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: estadoInfo.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          estadoInfo.icono,
+                          size: 13,
+                          color: estadoInfo.color,
                         ),
-                        child: const Text('Rechazar'),
-                      ),
+                        const SizedBox(width: 4),
+                        Text(
+                          estadoInfo.texto,
+                          style: TextStyle(
+                            color: estadoInfo.color,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
-                  if (onRechazar != null && onAprobar != null)
-                    const SizedBox(width: 10),
-                  if (onAprobar != null)
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: onAprobar,
-                        child: const Text('Aceptar'),
-                      ),
-                    ),
+                  ),
                 ],
               ),
-            ],
-            if (mostrarAccionEntregar) ...[
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: onEntregar,
-                  icon: const Icon(Icons.local_shipping_rounded, size: 18),
-                  label: const Text('Marcar entregado'),
+              if (mostrarAccionesSolicitud) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    if (onRechazar != null)
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: onRechazar,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFC62828),
+                          ),
+                          child: const Text('Rechazar'),
+                        ),
+                      ),
+                    if (onRechazar != null && onAprobar != null)
+                      const SizedBox(width: 10),
+                    if (onAprobar != null)
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: onAprobar,
+                          child: const Text('Aceptar'),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-            ],
-            if (mostrarAccionCancelar) ...[
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: onCancelar,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFC62828),
+              ],
+              if (mostrarAccionEntregar) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: onEntregar,
+                    icon: const Icon(Icons.local_shipping_rounded, size: 18),
+                    label: const Text('Marcar entregado'),
                   ),
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  label: const Text('Cancelar pedido'),
                 ),
-              ),
+              ],
+              if (mostrarAccionCancelar) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: onCancelar,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFC62828),
+                    ),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    label: const Text('Cancelar pedido'),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

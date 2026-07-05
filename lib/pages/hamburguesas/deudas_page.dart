@@ -9,6 +9,7 @@ import '../../services/solicitudes_pago_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/tarjeta_3d.dart';
 
 /// Deudas pendientes (pedidos ENTREGADO con EstadoPago=DEUDA) de las
 /// tiendas asignadas al personal, agrupadas por cliente con su total —
@@ -259,7 +260,8 @@ class _DeudasPageState extends State<DeudasPage> {
                       )
                       .animate(delay: (60 * entry.key).ms)
                       .fadeIn(duration: 300.ms)
-                      .moveY(begin: 10, end: 0),
+                      .moveY(begin: 10, end: 0)
+                      .flipH(begin: 0.12, end: 0, duration: 320.ms),
             ),
             const SizedBox(height: 20),
           ],
@@ -315,80 +317,73 @@ class _TarjetaSolicitudPago extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.textPrimary.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        solicitud.nombreParaMostrar,
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      Text(
-                        '${solicitud.medioPago} · Ref: ${solicitud.codigoReferencia}',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      Text(
-                        solicitud.estado == 'REPORTADO'
-                            ? 'El cliente ya reportó el pago'
-                            : 'Aún no lo reporta',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontSize: 12,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Tarjeta3D(
+        borderRadius: 18,
+        child: Container(
+          color: AppColors.surface,
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          solicitud.nombreParaMostrar,
+                          style: theme.textTheme.titleMedium,
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  'S/ ${solicitud.montoTotal.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: onRechazar,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFC62828),
+                        Text(
+                          '${solicitud.medioPago} · Ref: ${solicitud.codigoReferencia}',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        Text(
+                          solicitud.estado == 'REPORTADO'
+                              ? 'El cliente ya reportó el pago'
+                              : 'Aún no lo reporta',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
-                    child: const Text('Rechazar'),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: onConfirmar,
-                    child: const Text('Confirmar'),
+                  Text(
+                    'S/ ${solicitud.montoTotal.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onRechazar,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFC62828),
+                      ),
+                      child: const Text('Rechazar'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: onConfirmar,
+                      child: const Text('Confirmar'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -406,103 +401,95 @@ class _GrupoDeudaCliente extends StatelessWidget {
     final theme = Theme.of(context);
     final nombreComercial = grupo.cliente.nombreComercial;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.textPrimary.withValues(alpha: 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        grupo.cliente.nombreParaMostrar,
-                        style: theme.textTheme.titleMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (nombreComercial != null)
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Tarjeta3D(
+        child: Container(
+          color: AppColors.surface,
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          nombreComercial,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.secondary,
-                          ),
+                          grupo.cliente.nombreParaMostrar,
+                          style: theme.textTheme.titleMedium,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (nombreComercial != null)
+                          Text(
+                            nombreComercial,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.secondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC62828).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'S/ ${grupo.total.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: Color(0xFFC62828),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+              ...grupo.pedidos.map(
+                (pedido) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Pedido #${pedido.idPedido} · S/ ${pedido.total.toStringAsFixed(2)}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (pedido.fechaEntregaReal != null)
+                              Text(
+                                'Entregado el ${formatearFechaEntrega(pedido.fechaEntregaReal!)}',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontSize: 12,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      OutlinedButton(
+                        onPressed: () => onMarcarPagada(pedido),
+                        child: const Text('Marcar pagada'),
+                      ),
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFC62828).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'S/ ${grupo.total.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: Color(0xFFC62828),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 20),
-            ...grupo.pedidos.map(
-              (pedido) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Pedido #${pedido.idPedido} · S/ ${pedido.total.toStringAsFixed(2)}',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (pedido.fechaEntregaReal != null)
-                            Text(
-                              'Entregado el ${formatearFechaEntrega(pedido.fechaEntregaReal!)}',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontSize: 12,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    OutlinedButton(
-                      onPressed: () => onMarcarPagada(pedido),
-                      child: const Text('Marcar pagada'),
-                    ),
-                  ],
-                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

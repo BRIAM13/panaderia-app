@@ -9,6 +9,7 @@ import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/text_formatters.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/tarjeta_3d.dart';
 
 const _tiposMedioPago = ['YAPE', 'PLIN', 'TRANSFERENCIA', 'OTRO'];
 
@@ -219,7 +220,8 @@ class _MediosPagoPageState extends State<MediosPagoPage> {
                       )
                       .animate(delay: (60 * entry.key).ms)
                       .fadeIn(duration: 300.ms)
-                      .moveY(begin: 10, end: 0),
+                      .moveY(begin: 10, end: 0)
+                      .flipH(begin: 0.12, end: 0, duration: 320.ms),
             ),
         ],
       ),
@@ -253,50 +255,48 @@ class _TarjetaMedioPago extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.textPrimary.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(_icono, color: AppColors.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(medio.etiquetaTipo, style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${medio.titular} · ${medio.numeroDestino}',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  if (medio.nombreBanco != null)
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Tarjeta3D(
+        borderRadius: 18,
+        child: Container(
+          color: AppColors.surface,
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(_icono, color: AppColors.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      medio.nombreBanco!,
-                      style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                      medio.etiquetaTipo,
+                      style: theme.textTheme.titleMedium,
                     ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      '${medio.titular} · ${medio.numeroDestino}',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    if (medio.nombreBanco != null)
+                      Text(
+                        medio.nombreBanco!,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            IconButton(
-              onPressed: onEditar,
-              icon: const Icon(Icons.edit_rounded, size: 20),
-            ),
-            Switch(value: medio.estado, onChanged: onCambiarEstado),
-          ],
+              IconButton(
+                onPressed: onEditar,
+                icon: const Icon(Icons.edit_rounded, size: 20),
+              ),
+              Switch(value: medio.estado, onChanged: onCambiarEstado),
+            ],
+          ),
         ),
       ),
     );

@@ -499,14 +499,32 @@ INSERT INTO Roles (NombreRol, Descripcion) VALUES
     ('SUPERADMIN',  'Acceso total al sistema y configuración (propietario)');
 GO
 
-INSERT INTO Categorias (Nombre) VALUES
-    ('Pan de Hamburguesa'),
-    ('Horneados');
+-- Hamburguesas/Horneados ya operativas; el resto queda como "Próximamente"
+-- (Disponible=0) hasta que el negocio las active.
+INSERT INTO Tiendas (Nombre, Slug, Disponible) VALUES
+    ('Hamburguesas', 'hamburguesas', 1),
+    ('Horneados',    'horneados',    1),
+    ('Panadería',    'panaderia',    0),
+    ('Mercadería',   'mercaderia',   0),
+    ('Pastelería',   'pasteleria',   0);
+GO
+
+INSERT INTO Categorias (IdTienda, Nombre)
+SELECT t.IdTienda, 'Pan de Hamburguesa' FROM Tiendas t WHERE t.Slug = 'hamburguesas'
+UNION ALL
+SELECT t.IdTienda, 'Horneados' FROM Tiendas t WHERE t.Slug = 'horneados';
 GO
 
 INSERT INTO Productos (IdCategoria, Nombre, Descripcion, PrecioUnitario, Stock, UnidadMedida)
 SELECT IdCategoria, 'Pan de Hamburguesa Clásico', 'Pan artesanal para hamburguesa, unidad', 0.80, 500, 'UNIDAD'
 FROM Categorias WHERE Nombre = 'Pan de Hamburguesa';
+GO
+
+-- Producto genérico para que Horneados tenga al menos un ítem configurado
+-- mientras no se defina su catálogo real (ver memoria de Fase 16).
+INSERT INTO Productos (IdCategoria, Nombre, Descripcion, PrecioUnitario, Stock, UnidadMedida)
+SELECT IdCategoria, 'Producto Horneados General', 'Placeholder hasta definir el catálogo real de Horneados', 1.00, 100, 'UNIDAD'
+FROM Categorias WHERE Nombre = 'Horneados';
 GO
 
 INSERT INTO Configuraciones (Clave, Valor, Descripcion) VALUES

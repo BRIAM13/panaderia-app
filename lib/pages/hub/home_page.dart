@@ -70,7 +70,6 @@ class _HomePageState extends State<HomePage> {
   final _notificacionesService = NotificacionesService();
   final _tiendasService = TiendasService();
   final _misPedidosKey = GlobalKey<MisPedidosPendientesViewState>();
-  late bool _vistaTrabajador;
 
   /// Slugs de las tiendas a las que este trabajador/admin tiene acceso
   /// vigente — controla qué entradas de "Gestionar X" ve en el drawer.
@@ -80,13 +79,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    // El personal puro (no híbrido) siempre parte en su vista de gestión;
-    // un cliente puro siempre parte en la vista de cliente. Solo el
-    // usuario híbrido puede alternar libremente entre ambas.
-    _vistaTrabajador =
-        widget.usuario.esPersonalDeGestion && !widget.usuario.esCliente;
-    // Registrar el token de notificaciones push una vez por sesión, ya con
-    // el usuario autenticado (HomePage es la raíz de la sesión).
     _notificacionesService.inicializarYRegistrar();
     if (widget.usuario.esPersonalDeGestion) _cargarMisTiendas();
   }
@@ -178,6 +170,12 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final usuario = widget.usuario;
+    // El personal (trabajador/admin/superadmin) siempre parte en su vista
+    // de gestión, sea o no también cliente — ver a un cliente que además
+    // trabaja ahí no debe cambiarle su pantalla principal. Sus apartados
+    // de cliente (Mis pedidos, Mis deudas, Hacer pedido) quedan en el
+    // drawer, no reemplazando el Dashboard/hub de tiendas.
+    final vistaTrabajador = usuario.esPersonalDeGestion;
 
     // El Hub es la raíz de la sesión autenticada: el botón/gesto de
     // retroceso nunca debe devolver al usuario al Login (algunos caminos,
@@ -188,18 +186,17 @@ class _HomePageState extends State<HomePage> {
         appBar: AppBar(title: const Text('Corporación Ronceros')),
         drawer: AppDrawer(
           usuario: usuario,
-          vistaTrabajador: _vistaTrabajador,
           misSlugsTiendas: _misSlugsTiendas,
-          onCambiarVista: (valor) => setState(() => _vistaTrabajador = valor),
           onAbrirGestion: _abrirGestion,
           onAbrirHamburguesas: _abrirGestionHamburguesas,
           onAbrirMiPerfil: _abrirMiPerfil,
           onAbrirMisPedidos: _abrirMisPedidos,
           onAbrirMisDeudas: _abrirMisDeudas,
+          onHacerPedido: _hacerPedido,
           onAbrirTrabajadores: _abrirTrabajadores,
           onCerrarSesion: _cerrarSesion,
         ),
-        floatingActionButton: _vistaTrabajador
+        floatingActionButton: vistaTrabajador
             ? null
             : FloatingActionButton.extended(
                 onPressed: _hacerPedido,
@@ -210,13 +207,13 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             children: [
               Expanded(
-                child: _vistaTrabajador
+                child: vistaTrabajador
                     ? (usuario.rol == 'ADMIN' || usuario.rol == 'SUPERADMIN'
                           ? DashboardPage(usuario: usuario)
                           : _construirGridTiendas(theme, usuario))
                     : MisPedidosPendientesView(key: _misPedidosKey),
               ),
-              if (!_vistaTrabajador) const AdBanner(),
+              if (!vistaTrabajador) const AdBanner(),
             ],
           ),
         ),

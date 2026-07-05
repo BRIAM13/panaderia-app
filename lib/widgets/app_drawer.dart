@@ -2,32 +2,36 @@ import 'package:flutter/material.dart';
 
 import '../models/usuario_sesion.dart';
 
-/// Drawer de perfil con el switch "Cambiar de vista" para usuarios
-/// híbridos (Cliente + Trabajador) y el menú de gestión para el personal.
+/// Drawer de perfil: sección "GESTIÓN" para el personal (trabajador/admin/
+/// superadmin) y sección "MI CUENTA" con los apartados propios de cliente
+/// (pedidos, deudas, perfil) — un usuario híbrido (a la vez trabajador y
+/// cliente, ej. porque todo trabajador nuevo también se registra como
+/// cliente) ve AMBAS secciones a la vez, sin que eso le cambie su pantalla
+/// principal: su vista de inicio sigue siendo siempre la de gestión
+/// (Dashboard/tiendas), y el apartado de cliente queda aquí, a un toque de
+/// distancia, en vez de intercambiar toda la pantalla.
 class AppDrawer extends StatelessWidget {
   const AppDrawer({
     super.key,
     required this.usuario,
-    required this.vistaTrabajador,
-    required this.onCambiarVista,
     required this.onAbrirGestion,
     required this.onAbrirHamburguesas,
     required this.onAbrirMiPerfil,
     required this.onAbrirMisPedidos,
     required this.onAbrirMisDeudas,
+    required this.onHacerPedido,
     required this.onAbrirTrabajadores,
     required this.onCerrarSesion,
     this.misSlugsTiendas = const {},
   });
 
   final UsuarioSesion usuario;
-  final bool vistaTrabajador;
-  final ValueChanged<bool> onCambiarVista;
   final void Function(String nombre, IconData icono) onAbrirGestion;
   final VoidCallback onAbrirHamburguesas;
   final VoidCallback onAbrirMiPerfil;
   final VoidCallback onAbrirMisPedidos;
   final VoidCallback onAbrirMisDeudas;
+  final VoidCallback onHacerPedido;
   final VoidCallback onAbrirTrabajadores;
   final VoidCallback onCerrarSesion;
 
@@ -101,29 +105,11 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             const Divider(height: 1),
-            if (usuario.esHibrido) ...[
-              SwitchListTile(
-                value: vistaTrabajador,
-                onChanged: onCambiarVista,
-                secondary: Icon(
-                  vistaTrabajador
-                      ? Icons.storefront_rounded
-                      : Icons.shopping_bag_rounded,
-                ),
-                title: const Text('Cambiar de vista'),
-                subtitle: Text(
-                  vistaTrabajador
-                      ? 'Viendo como Trabajador'
-                      : 'Viendo como Cliente',
-                ),
-              ),
-              const Divider(height: 1),
-            ],
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
-                  if (vistaTrabajador) ...[
+                  if (usuario.esPersonalDeGestion) ...[
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                       child: Text(
@@ -154,7 +140,24 @@ class AppDrawer extends StatelessWidget {
                         title: const Text('Trabajadores'),
                         onTap: onAbrirTrabajadores,
                       ),
-                  ] else ...[
+                  ],
+                  if (usuario.esCliente) ...[
+                    if (usuario.esPersonalDeGestion) const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: Text(
+                        'MI CUENTA',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    if (usuario.esPersonalDeGestion)
+                      ListTile(
+                        leading: const Icon(Icons.add_shopping_cart_rounded),
+                        title: const Text('Hacer pedido'),
+                        onTap: onHacerPedido,
+                      ),
                     ListTile(
                       leading: const Icon(Icons.receipt_long_rounded),
                       title: const Text('Mis pedidos'),

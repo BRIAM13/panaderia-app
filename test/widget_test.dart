@@ -9,8 +9,7 @@ import 'package:panaderia_app/theme/app_theme.dart';
 // local_auth, cuyos canales de plataforma no existen en el harness de
 // `flutter test` (no es un dispositivo real ni un navegador). Por eso
 // HomePage se prueba aquí de forma aislada (no depende de esos plugins),
-// y el flujo de login/biometría, así como la interacción de tocar el
-// switch "Cambiar de vista", se verifican con un build real en navegador
+// y el flujo de login/biometría se verifica con un build real en navegador
 // (ver flujo documentado para la Fase 2/3).
 //
 // Tampoco se usa pumpAndSettle(): el AdBanner de la vista Cliente tiene una
@@ -124,7 +123,7 @@ void main() {
     },
   );
 
-  testWidgets('Un cliente puro no ve el switch de cambiar de vista', (
+  testWidgets('Un cliente puro no ve la sección de GESTIÓN en el drawer', (
     WidgetTester tester,
   ) async {
     await _montar(tester, const HomePage(usuario: _clienteDemo));
@@ -132,21 +131,29 @@ void main() {
     await tester.tap(find.byIcon(Icons.menu));
     await _asentar(tester);
 
-    expect(find.text('Cambiar de vista'), findsNothing);
+    expect(find.text('GESTIÓN'), findsNothing);
     expect(find.text('Mis pedidos'), findsOneWidget);
   });
 
   testWidgets(
-    'Un usuario híbrido ve el switch de cambiar de vista en el drawer',
+    'Un usuario híbrido sigue viendo su Dashboard de gestión como pantalla '
+    'principal, y ve AMBAS secciones (GESTIÓN y MI CUENTA) en el drawer',
     (WidgetTester tester) async {
       await _montar(tester, const HomePage(usuario: _hibridoDemo));
+
+      // La pantalla principal sigue siendo la de gestión (hub de tiendas),
+      // no la de cliente — ser también cliente ya no le cambia el inicio.
+      expect(find.text('Elige tu tienda'), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.menu));
       await _asentar(tester);
 
-      expect(find.text('Cambiar de vista'), findsOneWidget);
-      expect(find.text('Viendo como Cliente'), findsOneWidget);
-      expect(find.byType(SwitchListTile), findsOneWidget);
+      expect(find.text('Cambiar de vista'), findsNothing);
+      expect(find.text('GESTIÓN'), findsOneWidget);
+      expect(find.text('MI CUENTA'), findsOneWidget);
+      expect(find.text('Hacer pedido'), findsOneWidget);
+      expect(find.text('Mis pedidos'), findsOneWidget);
+      expect(find.text('Mis deudas'), findsOneWidget);
     },
   );
 }

@@ -11,6 +11,7 @@ import '../../services/trabajadores_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
+import '../../widgets/tarjeta_3d.dart';
 import 'trabajador_form_page.dart';
 
 /// Directorio completo de trabajadores (cruzado entre tiendas): un
@@ -215,7 +216,8 @@ class _TrabajadoresPageState extends State<TrabajadoresPage> {
               )
               .animate(delay: (30 * index).ms)
               .fadeIn(duration: 250.ms)
-              .moveY(begin: 8, end: 0);
+              .moveY(begin: 8, end: 0)
+              .flipH(begin: 0.12, end: 0, duration: 320.ms);
         },
       ),
     );
@@ -252,90 +254,84 @@ class _TrabajadorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.textPrimary.withValues(alpha: 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Tarjeta3D(
+        child: Container(
+          color: AppColors.surface,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.secondaryContainer,
-                ),
-                child: Icon(Icons.badge_outlined, color: AppColors.primary),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      trabajador.nombreCompleto,
-                      style: theme.textTheme.titleMedium,
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.secondaryContainer,
                     ),
-                    Text(
-                      'DNI ${trabajador.dni ?? '—'} · $_etiquetaRol',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              if (onEditarRol != null)
-                IconButton(
-                  onPressed: onEditarRol,
-                  icon: const Icon(Icons.admin_panel_settings_outlined),
-                  tooltip: 'Editar rol',
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              // Tiendas que administro: switch real para otorgar/revocar.
-              ...misTiendas.map((tienda) {
-                final activo = trabajador.tieneAccesoA(tienda.idTienda);
-                return _ChipTiendaConSwitch(
-                  nombre: tienda.nombre,
-                  activo: activo,
-                  onChanged: (v) => onAlternarAcceso(tienda, v),
-                );
-              }),
-              // Tiendas de OTROS administradores donde ya trabaja: solo
-              // informativo, no se puede tocar desde aquí.
-              ...trabajador.tiendas
-                  .where(
-                    (t) => !misTiendas.any((m) => m.idTienda == t.idTienda),
-                  )
-                  .map(
-                    (t) => Chip(
-                      label: Text(
-                        t.activo ? t.nombre : '${t.nombre} (inactivo)',
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      backgroundColor: AppColors.surfaceMuted,
+                    child: Icon(Icons.badge_outlined, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          trabajador.nombreCompleto,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        Text(
+                          'DNI ${trabajador.dni ?? '—'} · $_etiquetaRol',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
                     ),
                   ),
+                  if (onEditarRol != null)
+                    IconButton(
+                      onPressed: onEditarRol,
+                      icon: const Icon(Icons.admin_panel_settings_outlined),
+                      tooltip: 'Editar rol',
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  // Tiendas que administro: switch real para otorgar/revocar.
+                  ...misTiendas.map((tienda) {
+                    final activo = trabajador.tieneAccesoA(tienda.idTienda);
+                    return _ChipTiendaConSwitch(
+                      nombre: tienda.nombre,
+                      activo: activo,
+                      onChanged: (v) => onAlternarAcceso(tienda, v),
+                    );
+                  }),
+                  // Tiendas de OTROS administradores donde ya trabaja: solo
+                  // informativo, no se puede tocar desde aquí.
+                  ...trabajador.tiendas
+                      .where(
+                        (t) => !misTiendas.any((m) => m.idTienda == t.idTienda),
+                      )
+                      .map(
+                        (t) => Chip(
+                          label: Text(
+                            t.activo ? t.nombre : '${t.nombre} (inactivo)',
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: AppColors.surfaceMuted,
+                        ),
+                      ),
+                ],
+              ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
