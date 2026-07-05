@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/usuario_sesion.dart';
@@ -208,14 +209,16 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 32),
                 TextFormField(
                       controller: _usuarioController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
-                        labelText: 'Usuario',
+                        labelText: 'Usuario (DNI o RUC)',
                         prefixIcon: Icon(Icons.person_outline_rounded),
                       ),
                       validator: (value) =>
                           (value == null || value.trim().isEmpty)
-                          ? 'Ingresa tu usuario'
+                          ? 'Ingresa tu DNI o RUC'
                           : null,
                     )
                     .animate()

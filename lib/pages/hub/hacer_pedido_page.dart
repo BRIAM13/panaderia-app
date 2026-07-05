@@ -9,6 +9,7 @@ import '../../services/pedidos_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../utils/text_formatters.dart';
+import '../../widgets/ad_banner.dart';
 import '../../widgets/loading_indicator.dart';
 
 /// Autoservicio (rol CLIENTE): el propio cliente registra su pedido, sin
@@ -20,7 +21,12 @@ import '../../widgets/loading_indicator.dart';
 /// personal de la tienda recibe una notificación push real para aceptarlo
 /// o rechazarlo según stock.
 class HacerPedidoPage extends StatefulWidget {
-  const HacerPedidoPage({super.key});
+  const HacerPedidoPage({super.key, this.mostrarAnuncio = false});
+
+  /// Solo debe encender esto quien la abre sabiendo que el usuario es
+  /// cliente puro (no híbrido) — el anuncio existe para monetizar a
+  /// quienes solo compran, no a quienes también trabajan ahí.
+  final bool mostrarAnuncio;
 
   @override
   State<HacerPedidoPage> createState() => _HacerPedidoPageState();
@@ -258,7 +264,9 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Hacer un pedido')),
+      bottomNavigationBar: widget.mostrarAnuncio ? const AdBanner() : null,
       body: SafeArea(
+        bottom: !widget.mostrarAnuncio,
         child: _cargandoTiendas
             ? const Center(child: AppLoadingIndicator())
             : _errorCarga != null

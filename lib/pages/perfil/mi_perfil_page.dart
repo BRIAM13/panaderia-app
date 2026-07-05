@@ -7,6 +7,7 @@ import '../../services/clientes_service.dart';
 import '../../services/geolocation_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/text_formatters.dart';
+import '../../widgets/ad_banner.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/verificacion_otp.dart';
@@ -20,7 +21,12 @@ import 'cambiar_password_seguro_page.dart';
 /// enviado a ese canal — así, si alguien más usa la sesión ya iniciada del
 /// dueño, no puede tocar estos datos sin acceso real a su celular/correo.
 class MiPerfilPage extends StatefulWidget {
-  const MiPerfilPage({super.key});
+  const MiPerfilPage({super.key, this.mostrarAnuncio = false});
+
+  /// Solo debe encender esto quien la abre sabiendo que el usuario es
+  /// cliente puro (no híbrido) — el anuncio existe para monetizar a
+  /// quienes solo compran, no a quienes también trabajan ahí.
+  final bool mostrarAnuncio;
 
   @override
   State<MiPerfilPage> createState() => _MiPerfilPageState();
@@ -184,7 +190,9 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Mi perfil')),
+      bottomNavigationBar: widget.mostrarAnuncio ? const AdBanner() : null,
       body: SafeArea(
+        bottom: !widget.mostrarAnuncio,
         child: _cargando
             ? const Center(child: AppLoadingIndicator())
             : cliente == null

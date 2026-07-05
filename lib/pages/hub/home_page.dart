@@ -119,16 +119,30 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  /// El anuncio solo existe para monetizar a quienes SOLO son clientes —
+  /// un trabajador que también es cliente no lo ve al entrar a estos
+  /// mismos apartados desde su drawer.
+  bool get _esClientePuro => !widget.usuario.esPersonalDeGestion;
+
   void _abrirMiPerfil() {
-    pushSlideUpFade(context, (context) => const MiPerfilPage());
+    pushSlideUpFade(
+      context,
+      (context) => MiPerfilPage(mostrarAnuncio: _esClientePuro),
+    );
   }
 
   void _abrirMisPedidos() {
-    pushSlideUpFade(context, (context) => const MisPedidosPendientesPage());
+    pushSlideUpFade(
+      context,
+      (context) => MisPedidosPendientesPage(mostrarAnuncio: _esClientePuro),
+    );
   }
 
   void _abrirMisDeudas() {
-    pushSlideUpFade(context, (context) => const MisDeudasPage());
+    pushSlideUpFade(
+      context,
+      (context) => MisDeudasPage(mostrarAnuncio: _esClientePuro),
+    );
   }
 
   void _abrirTrabajadores() {
@@ -138,7 +152,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _hacerPedido() async {
     final registrado = await pushSlideUpFade<bool>(
       context,
-      (context) => const HacerPedidoPage(),
+      (context) => HacerPedidoPage(mostrarAnuncio: _esClientePuro),
     );
     if (registrado == true) _misPedidosKey.currentState?.recargar();
   }
@@ -203,19 +217,18 @@ class _HomePageState extends State<HomePage> {
                 icon: const Icon(Icons.add_shopping_cart_rounded),
                 label: const Text('Hacer pedido'),
               ),
+        // El banner va en bottomNavigationBar (no dentro del body) para que
+        // el Scaffold acomode el FAB automáticamente encima de él — antes,
+        // al estar dentro del body, el FAB flotaba sin saber cuánto espacio
+        // ocupaba el banner abajo y terminaba sobreponiéndosele.
+        bottomNavigationBar: vistaTrabajador ? null : const AdBanner(),
         body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: vistaTrabajador
-                    ? (usuario.rol == 'ADMIN' || usuario.rol == 'SUPERADMIN'
-                          ? DashboardPage(usuario: usuario)
-                          : _construirGridTiendas(theme, usuario))
-                    : MisPedidosPendientesView(key: _misPedidosKey),
-              ),
-              if (!vistaTrabajador) const AdBanner(),
-            ],
-          ),
+          bottom: vistaTrabajador,
+          child: vistaTrabajador
+              ? (usuario.rol == 'ADMIN' || usuario.rol == 'SUPERADMIN'
+                    ? DashboardPage(usuario: usuario)
+                    : _construirGridTiendas(theme, usuario))
+              : MisPedidosPendientesView(key: _misPedidosKey),
         ),
       ),
     );

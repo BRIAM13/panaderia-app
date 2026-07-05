@@ -10,6 +10,7 @@ import '../../services/medios_pago_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/solicitudes_pago_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/ad_banner.dart';
 import '../../widgets/loading_indicator.dart';
 
 /// Autoservicio (rol CLIENTE): sus deudas (pedidos entregados sin pagar),
@@ -20,7 +21,12 @@ import '../../widgets/loading_indicator.dart';
 /// referencia — el pago real se hace a mano en su Yape/Plin/banco, y
 /// luego reporta "Ya pagué" para que el personal lo confirme.
 class MisDeudasPage extends StatefulWidget {
-  const MisDeudasPage({super.key});
+  const MisDeudasPage({super.key, this.mostrarAnuncio = false});
+
+  /// Solo debe encender esto quien la abre sabiendo que el usuario es
+  /// cliente puro (no híbrido) — el anuncio existe para monetizar a
+  /// quienes solo compran, no a quienes también trabajan ahí.
+  final bool mostrarAnuncio;
 
   @override
   State<MisDeudasPage> createState() => _MisDeudasPageState();
@@ -180,9 +186,8 @@ class _MisDeudasPageState extends State<MisDeudasPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Mis deudas')),
       body: SafeArea(child: _construirCuerpo()),
-      bottomNavigationBar: _seleccionados.isEmpty
-          ? null
-          : SafeArea(
+      bottomNavigationBar: _seleccionados.isNotEmpty
+          ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: FilledButton(
@@ -192,7 +197,8 @@ class _MisDeudasPageState extends State<MisDeudasPage> {
                   ),
                 ),
               ),
-            ),
+            )
+          : (widget.mostrarAnuncio ? const AdBanner() : null),
     );
   }
 

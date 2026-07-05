@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
+import '../../widgets/ad_banner.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/pedidos_secciones.dart';
@@ -205,7 +206,12 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
 /// Envoltorio con Scaffold/AppBar/FAB propios, para abrir "Mis pedidos" como
 /// página independiente (ej. desde el drawer) fuera del Hub.
 class MisPedidosPendientesPage extends StatefulWidget {
-  const MisPedidosPendientesPage({super.key});
+  const MisPedidosPendientesPage({super.key, this.mostrarAnuncio = false});
+
+  /// Solo debe encender esto quien la abre sabiendo que el usuario es
+  /// cliente puro (no híbrido) — el anuncio existe para monetizar a
+  /// quienes solo compran, no a quienes también trabajan ahí.
+  final bool mostrarAnuncio;
 
   @override
   State<MisPedidosPendientesPage> createState() =>
@@ -218,7 +224,7 @@ class _MisPedidosPendientesPageState extends State<MisPedidosPendientesPage> {
   Future<void> _hacerPedido() async {
     final registrado = await pushSlideUpFade<bool>(
       context,
-      (_) => const HacerPedidoPage(),
+      (_) => HacerPedidoPage(mostrarAnuncio: widget.mostrarAnuncio),
     );
     if (registrado == true) _contenidoKey.currentState?.recargar();
   }
@@ -232,7 +238,11 @@ class _MisPedidosPendientesPageState extends State<MisPedidosPendientesPage> {
         icon: const Icon(Icons.add_shopping_cart_rounded),
         label: const Text('Hacer pedido'),
       ),
-      body: SafeArea(child: MisPedidosPendientesView(key: _contenidoKey)),
+      bottomNavigationBar: widget.mostrarAnuncio ? const AdBanner() : null,
+      body: SafeArea(
+        bottom: !widget.mostrarAnuncio,
+        child: MisPedidosPendientesView(key: _contenidoKey),
+      ),
     );
   }
 }
