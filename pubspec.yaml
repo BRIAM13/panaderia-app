@@ -48,7 +48,7 @@ dependencies:
   local_auth: ^2.3.0
 
   # Monetización con banners de Google AdMob.
-  google_mobile_ads: ^5.2.0
+  google_mobile_ads: ^9.0.0
 
   # Abrir marcador telefónico, WhatsApp y Google Maps desde la app.
   url_launcher: ^6.3.1

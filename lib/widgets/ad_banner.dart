@@ -39,7 +39,7 @@ class _AdBannerState extends State<AdBanner> {
 
     final anchoDisponible = MediaQuery.sizeOf(context).width.truncate();
     final tamano =
-        await AdSize.getAnchoredAdaptiveBannerAdSize(
+        await AdSize.getLargeAnchoredAdaptiveBannerAdSizeWithOrientation(
           Orientation.portrait,
           anchoDisponible,
         ) ??
@@ -87,17 +87,28 @@ class _AdBannerState extends State<AdBanner> {
     // gestos/navegación del sistema; el padding extra deja un margen táctil
     // de por medio para que no se disparen toques accidentales de esa barra
     // ni del contenido justo encima.
+    //
+    // OJO: el alto total va en un SizedBox explícito, no en un Container
+    // con alignment — un Container con alignment, al recibir restricciones
+    // "acotadas pero grandes" (como las de bottomNavigationBar, que permite
+    // hasta casi toda la pantalla), SE EXPANDE para llenar todo ese espacio
+    // y luego centra el anuncio adentro — eso es justo lo que causaba que
+    // el banner apareciera "flotando" en la mitad de la pantalla con un
+    // hueco enorme debajo. Un SizedBox con alto fijo no tiene ese problema:
+    // siempre mide exactamente lo que se le pide.
+    final altoTotal = anuncio.size.height.toDouble() + 14;
     return SafeArea(
           top: false,
           minimum: const EdgeInsets.only(bottom: 6),
-          child: Container(
+          child: SizedBox(
             width: double.infinity,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.fromLTRB(0, 8, 0, 6),
-            child: SizedBox(
-              width: anuncio.size.width.toDouble(),
-              height: anuncio.size.height.toDouble(),
-              child: AdWidget(ad: anuncio),
+            height: altoTotal,
+            child: Center(
+              child: SizedBox(
+                width: anuncio.size.width.toDouble(),
+                height: anuncio.size.height.toDouble(),
+                child: AdWidget(ad: anuncio),
+              ),
             ),
           ),
         )
