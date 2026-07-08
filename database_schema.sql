@@ -208,6 +208,13 @@ CREATE TABLE Usuarios (
     FechaBloqueo                 DATETIME2           NULL,
     UltimoAcceso                 DATETIME2           NULL,
     RequiereCambioPassword       BIT                 NOT NULL DEFAULT 0,
+    -- Dueño original del sistema (el primer SUPERADMIN, quien instaló la
+    -- app) — SOLO puede haber uno. Ningún otro SUPERADMIN, aunque tenga el
+    -- mismo rol nominal, puede cambiarle el rol ni darlo de baja (ver
+    -- candado en trabajadoresController.js) — así, si algún día se asciende
+    -- a alguien más a SUPERADMIN, ese nuevo usuario nunca puede quitarle
+    -- acceso ni adueñarse del sistema por encima del dueño original.
+    EsPropietario                BIT                 NOT NULL DEFAULT 0,
     FechaCreacion                DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME(),
     FechaActualizacion           DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_Usuarios PRIMARY KEY (IdUsuario),

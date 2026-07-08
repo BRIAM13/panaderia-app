@@ -9,6 +9,17 @@ const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
 const MENSAJE_ROL_CAMBIADO =
   'Tu cuenta fue actualizada con nuevos permisos. Vuelve a iniciar sesión para continuar.';
 
+// Protege al dueño original del sistema (Usuarios.EsPropietario = 1) de
+// cualquier otro usuario — incluido otro SUPERADMIN con el mismo rol
+// nominal — que intente cambiarle el rol o darlo de baja. Sin esto, un
+// segundo SUPERADMIN (ej. alguien ascendido de confianza más adelante)
+// podría despojar de acceso al dueño original, algo que el propio dueño
+// pidió explícitamente evitar. Se revisa en los 3 lugares donde se puede
+// tocar el IdRol/Estado de acceso de otra persona: crearTrabajador,
+// cambiarRolTrabajador, darDeBajaTrabajador.
+const MENSAJE_PROTECCION_PROPIETARIO =
+  'No se puede modificar la cuenta del propietario del sistema.';
+
 /**
  * Avisa por push (todos los dispositivos registrados de ese usuario) que su
  * rol cambió — así la app puede reaccionar al instante (forzar volver al
@@ -175,6 +186,27 @@ async function crearTrabajador(req, res, next) {
   }
 
   const pool = await getPool();
+
+  // Ver comentario de MENSAJE_PROTECCION_PROPIETARIO: si este DNI ya es el
+  // dueño del sistema, ni siquiera otro SUPERADMIN puede "registrarlo como
+  // trabajador" — eso reasignaría su IdRol y le quitaría el control.
+  const propietarioResult = await pool
+    .request()
+    .input('DNI', sql.VarChar(15), dniLimpio)
+    .query(`
+      SELECT u.EsPropietario, p.IdPersona
+      FROM Personas p
+      INNER JOIN Usuarios u ON u.IdPersona = p.IdPersona
+      WHERE p.DNI = @DNI
+    `);
+  if (
+    propietarioResult.recordset.length > 0 &&
+    propietarioResult.recordset[0].EsPropietario &&
+    propietarioResult.recordset[0].IdPersona !== req.usuario.idPersona
+  ) {
+    return res.status(403).json({ mensaje: MENSAJE_PROTECCION_PROPIETARIO });
+  }
+
   const transaction = new sql.Transaction(pool);
 
   try {
@@ -465,9 +497,12 @@ async function cambiarRolTrabajador(req, res, next) {
     const usuario = await pool
       .request()
       .input('IdPersona', sql.Int, idPersona)
-      .query('SELECT IdUsuario, IdRol FROM Usuarios WHERE IdPersona = @IdPersona');
+      .query('SELECT IdUsuario, IdRol, EsPropietario FROM Usuarios WHERE IdPersona = @IdPersona');
     if (usuario.recordset.length === 0) {
       return res.status(404).json({ mensaje: 'Esta persona todavía no tiene una cuenta de acceso.' });
+    }
+    if (usuario.recordset[0].EsPropietario) {
+      return res.status(403).json({ mensaje: MENSAJE_PROTECCION_PROPIETARIO });
     }
     const { IdUsuario: idUsuarioTrabajador, IdRol: idRolAnterior } = usuario.recordset[0];
 
@@ -627,12 +662,15 @@ async function darDeBajaTrabajador(req, res, next) {
       .request()
       .input('IdPersona', sql.Int, idPersona)
       .query(`
-        SELECT u.IdUsuario, r.NombreRol
+        SELECT u.IdUsuario, r.NombreRol, u.EsPropietario
         FROM Usuarios u INNER JOIN Roles r ON r.IdRol = u.IdRol
         WHERE u.IdPersona = @IdPersona
       `);
     if (usuario.recordset.length === 0) {
       return res.status(404).json({ mensaje: 'Esta persona todavía no tiene una cuenta de acceso.' });
+    }
+    if (usuario.recordset[0].EsPropietario) {
+      return res.status(403).json({ mensaje: MENSAJE_PROTECCION_PROPIETARIO });
     }
     const { IdUsuario: idUsuario, NombreRol: rolActual } = usuario.recordset[0];
 
