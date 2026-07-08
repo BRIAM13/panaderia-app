@@ -455,10 +455,18 @@ async function crearTrabajador(req, res, next) {
       if (idRolAnterior !== idRolAsignado) {
         idUsuarioParaNotificar = idUsuarioExistente;
       }
+      // IdCreadoPor se actualiza a quien hace ESTA asignación — si un ADMIN
+      // dio de baja a un ADMIN que él mismo había creado y luego el
+      // SUPERADMIN (u otro ADMIN autorizado) lo vuelve a registrar, el
+      // control pasa a ser de quien lo reactivó ahora, no del creador
+      // original. Solo llega hasta acá quien ya tenía permiso (el creador
+      // actual o SUPERADMIN, ver puedeModificarA arriba), así que este
+      // cambio siempre es seguro.
       await new sql.Request(transaction)
         .input('IdUsuario', sql.Int, idUsuarioExistente)
         .input('IdRol', sql.Int, idRolAsignado)
-        .query('UPDATE Usuarios SET IdRol = @IdRol WHERE IdUsuario = @IdUsuario');
+        .input('IdCreadoPor', sql.Int, req.usuario.idUsuario)
+        .query('UPDATE Usuarios SET IdRol = @IdRol, IdCreadoPor = @IdCreadoPor WHERE IdUsuario = @IdUsuario');
     }
 
     await transaction.commit();
@@ -619,11 +627,15 @@ async function cambiarRolTrabajador(req, res, next) {
     const rolResult = await pool.request().input('NombreRol', sql.VarChar(50), rol).query('SELECT IdRol FROM Roles WHERE NombreRol = @NombreRol');
     const idRolAsignado = rolResult.recordset[0].IdRol;
 
+    // Mismo criterio que en crearTrabajador: quien hace ESTE cambio de rol
+    // pasa a ser el responsable/creador actual — solo llega hasta acá quien
+    // ya tenía permiso, así que es seguro.
     await pool
       .request()
       .input('IdUsuario', sql.Int, idUsuarioTrabajador)
       .input('IdRol', sql.Int, idRolAsignado)
-      .query('UPDATE Usuarios SET IdRol = @IdRol WHERE IdUsuario = @IdUsuario');
+      .input('IdCreadoPor', sql.Int, req.usuario.idUsuario)
+      .query('UPDATE Usuarios SET IdRol = @IdRol, IdCreadoPor = @IdCreadoPor WHERE IdUsuario = @IdUsuario');
 
     await pool.request().input('IdTrabajador', sql.Int, id).input('Cargo', sql.NVarChar(100), rol).query('UPDATE Trabajadores SET Cargo = @Cargo WHERE IdTrabajador = @IdTrabajador');
 
