@@ -522,11 +522,20 @@ String _etiquetaRolAuditoria(String? rol) {
       return 'Super administrador';
     case 'TRABAJADOR':
       return 'Trabajador';
-    case 'CLIENTE':
-      return 'el propio cliente';
     default:
       return rol ?? '';
   }
+}
+
+/// "Registrado por" necesita el NOMBRE de quien lo hizo, no solo su rol —
+/// [Pedido.vendedor] ya trae el nombre (viene de otro campo, independiente
+/// del filtro de auditoría), acá solo se combinan los dos.
+String _descripcionRegistro(Pedido pedido) {
+  if (pedido.registradoPorRol == 'CLIENTE') return 'el propio cliente';
+  final nombre = pedido.vendedor;
+  final rol = _etiquetaRolAuditoria(pedido.registradoPorRol);
+  if (nombre == null) return rol;
+  return '$nombre ($rol)';
 }
 
 /// Quién registró/confirmó/canceló/entregó el pedido — el backend solo
@@ -542,7 +551,7 @@ class _InfoAuditoriaPedido extends StatelessWidget {
   Widget build(BuildContext context) {
     final lineas = <String>[
       if (pedido.registradoPorRol != null)
-        'Registrado por: ${_etiquetaRolAuditoria(pedido.registradoPorRol)}',
+        'Registrado por: ${_descripcionRegistro(pedido)}',
       if (pedido.aprobadoPor != null) 'Confirmado por: ${pedido.aprobadoPor}',
       if (pedido.canceladoPor != null)
         'Cancelado por: ${pedido.canceladoPor}',
