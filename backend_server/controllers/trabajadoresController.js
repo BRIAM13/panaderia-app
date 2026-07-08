@@ -107,9 +107,14 @@ function puedeModificarA({
   idCreadoPorObjetivo,
 }) {
   if (rolQueLlama === 'SUPERADMIN') return true;
-  if (rolActualObjetivo == null || rolActualObjetivo === 'TRABAJADOR') return true;
   if (rolActualObjetivo === 'ADMIN') return idCreadoPorObjetivo === idUsuarioQueLlama;
-  return false;
+  if (rolActualObjetivo === 'SUPERADMIN') return false;
+  // null (nunca tuvo cuenta), CLIENTE (ej. alguien dado de baja como
+  // ADMIN/TRABAJADOR, que volvió a ser cliente puro) o TRABAJADOR: no está
+  // "controlado" por nadie en particular, cualquier ADMIN puede
+  // contratarlo/ascenderlo — es como registrar a alguien nuevo, no como
+  // modificar a un ADMIN ajeno.
+  return true;
 }
 
 /** Un ADMIN puede VER (aunque no necesariamente asignar) hasta su propio
