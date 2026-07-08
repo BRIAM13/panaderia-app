@@ -477,6 +477,17 @@ class _GrupoDeudaCliente extends StatelessWidget {
                                   fontSize: 12,
                                 ),
                               ),
+                            // Solo llega si quien ve esta pantalla es
+                            // ADMIN/SUPERADMIN (el backend lo filtra según
+                            // el rol, ver pedidosController.js).
+                            if (pedido.entregadoPor != null)
+                              Text(
+                                'Entregado por: ${pedido.entregadoPor}',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
                           ],
                         ),
                       ),
