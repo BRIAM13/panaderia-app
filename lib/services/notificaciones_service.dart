@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:ui' show Color;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -135,9 +136,12 @@ class NotificacionesService {
   Future<void> _inicializarNotificacionesLocales() async {
     if (_canalCreado) return;
 
+    // '@drawable/ic_notification': silueta blanca simple, como pide Android
+    // para la barra de estado — el ícono a color completo (@mipmap/ic_launcher)
+    // se ve mal ahí (Android lo recorta a un cuadrado sólido).
     await _notificacionesLocales.initialize(
       const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('@drawable/ic_notification'),
       ),
     );
 
@@ -169,6 +173,9 @@ class NotificacionesService {
           _canalNombre,
           importance: Importance.high,
           priority: Priority.high,
+          // Terracota de marca — con lo que Android tiñe la silueta blanca
+          // de ic_notification en la barra de estado.
+          color: Color(0xFFB5451B),
         ),
       ),
     );

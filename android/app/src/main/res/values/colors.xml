@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#B5451B</color>
+    <!-- Color con el que Android tiñe la silueta blanca de
+         ic_notification.png en la barra de estado. -->
+    <color name="notification_color">#B5451B</color>
+</resources>

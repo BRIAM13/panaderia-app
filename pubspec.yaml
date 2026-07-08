@@ -91,6 +91,21 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+  # Genera el ícono nativo (launcher) para Android/iOS a partir de un solo
+  # PNG maestro — se corre una vez con `dart run flutter_launcher_icons`,
+  # no se usa en tiempo de ejecución de la app.
+  flutter_launcher_icons: ^0.14.3
+
+# Config de flutter_launcher_icons — ícono de Corporación Ronceros (pan
+# estilizado sobre degradado terracota/bronce, la paleta de marca).
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#B5451B"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
