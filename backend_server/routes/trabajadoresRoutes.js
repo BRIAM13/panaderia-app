@@ -6,6 +6,7 @@ const {
   cambiarRolTrabajador,
   otorgarAccesoTienda,
   revocarAccesoTienda,
+  darDeBajaTrabajador,
 } = require('../controllers/trabajadoresController');
 const { validateTrabajador } = require('../middlewares/validators');
 const { verificarToken, autorizarRoles, autorizarTienda } = require('../middlewares/authMiddleware');
@@ -23,5 +24,6 @@ router.post('/', validateTrabajador, crearTrabajador);
 router.put('/:id/rol', cambiarRolTrabajador);
 router.put('/:id/tiendas/:idTienda', autorizarTienda((req) => req.params.idTienda), otorgarAccesoTienda);
 router.delete('/:id/tiendas/:idTienda', autorizarTienda((req) => req.params.idTienda), revocarAccesoTienda);
+router.delete('/:id', darDeBajaTrabajador);
 
 module.exports = router;

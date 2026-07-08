@@ -119,4 +119,14 @@ class TrabajadoresService {
       'rol': rol,
     }, token: token);
   }
+
+  /// Da de baja por completo a un trabajador: revoca su acceso a todas las
+  /// tiendas y su cuenta vuelve al rol CLIENTE — nunca se borra nada, solo
+  /// se marca inactivo (ver comentario en el backend). Si tenía sesión
+  /// abierta, la app la fuerza a volver a iniciar sesión (mismo mecanismo
+  /// que un ascenso de rol).
+  Future<void> darDeBaja({required int idTrabajador}) async {
+    final token = await _storage.obtenerAccessToken();
+    await _api.delete('/trabajadores/$idTrabajador', token: token);
+  }
 }

@@ -114,6 +114,50 @@ class _TrabajadoresPageState extends State<TrabajadoresPage> {
     }
   }
 
+  Future<void> _darDeBaja(Trabajador trabajador) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Dar de baja?'),
+        content: Text(
+          '${trabajador.nombreCompleto} perderá su acceso a todas las '
+          'tiendas y su cuenta volverá a ser de cliente. Si tiene sesión '
+          'abierta, se cerrará automáticamente. Esto se puede revertir '
+          'después volviendo a registrarlo como trabajador.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Dar de baja'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+
+    try {
+      await _trabajadoresService.darDeBaja(
+        idTrabajador: trabajador.idTrabajador,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${trabajador.nombreCompleto} fue dado de baja.'),
+        ),
+      );
+      _cargar();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.mensaje)));
+    }
+  }
+
   Future<void> _nuevoTrabajador() async {
     final registrado = await pushSlideUpFade<bool>(
       context,
@@ -213,6 +257,7 @@ class _TrabajadoresPageState extends State<TrabajadoresPage> {
                 onEditarRol: _puedeEditarRoles
                     ? () => _editarRol(trabajador)
                     : null,
+                onDarDeBaja: () => _darDeBaja(trabajador),
               )
               .animate(delay: (30 * index).ms)
               .fadeIn(duration: 250.ms)
@@ -229,12 +274,14 @@ class _TrabajadorCard extends StatelessWidget {
     required this.trabajador,
     required this.misTiendas,
     required this.onAlternarAcceso,
+    required this.onDarDeBaja,
     this.onEditarRol,
   });
 
   final Trabajador trabajador;
   final List<Tienda> misTiendas;
   final void Function(Tienda tienda, bool otorgar) onAlternarAcceso;
+  final VoidCallback onDarDeBaja;
   final VoidCallback? onEditarRol;
 
   String get _etiquetaRol {
@@ -296,6 +343,12 @@ class _TrabajadorCard extends StatelessWidget {
                       icon: const Icon(Icons.admin_panel_settings_outlined),
                       tooltip: 'Editar rol',
                     ),
+                  IconButton(
+                    onPressed: onDarDeBaja,
+                    icon: const Icon(Icons.person_remove_outlined),
+                    color: AppColors.error,
+                    tooltip: 'Dar de baja',
+                  ),
                 ],
               ),
               const SizedBox(height: 12),

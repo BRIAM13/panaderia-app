@@ -591,6 +591,93 @@ async function revocarAccesoTienda(req, res, next) {
   }
 }
 
+/**
+ * Da de baja por completo a un trabajador: revoca su acceso a todas las
+ * tiendas, desactiva su ficha de Trabajador (Estado = 0, con FechaCese) y
+ * su cuenta de acceso vuelve al rol CLIENTE — nunca se borra nada de la
+ * base de datos, solo se marca inactivo (igual que el resto de la app),
+ * así se conserva su historial (ventas, auditoría) y sigue siendo
+ * reversible con "Crear trabajador" si algún día vuelve a contratarse. Si
+ * ya era cliente antes de ser trabajador, su perfil de Cliente queda
+ * intacto — solo cambia su nivel de acceso.
+ */
+async function darDeBajaTrabajador(req, res, next) {
+  const { id } = req.params;
+
+  try {
+    if (await esUnoMismo(req, id)) {
+      return res.status(400).json({ mensaje: 'No puedes darte de baja a ti mismo.' });
+    }
+
+    const pool = await getPool();
+    const trabajador = await pool
+      .request()
+      .input('IdTrabajador', sql.Int, id)
+      .query('SELECT IdPersona FROM Trabajadores WHERE IdTrabajador = @IdTrabajador');
+    if (trabajador.recordset.length === 0) {
+      return res.status(404).json({ mensaje: 'Trabajador no encontrado' });
+    }
+    const { IdPersona: idPersona } = trabajador.recordset[0];
+
+    const usuario = await pool
+      .request()
+      .input('IdPersona', sql.Int, idPersona)
+      .query(`
+        SELECT u.IdUsuario, r.NombreRol
+        FROM Usuarios u INNER JOIN Roles r ON r.IdRol = u.IdRol
+        WHERE u.IdPersona = @IdPersona
+      `);
+    if (usuario.recordset.length === 0) {
+      return res.status(404).json({ mensaje: 'Esta persona todavía no tiene una cuenta de acceso.' });
+    }
+    const { IdUsuario: idUsuario, NombreRol: rolActual } = usuario.recordset[0];
+
+    // Mismo candado que crear/cambiar rol: un ADMIN no puede dar de baja a
+    // otro ADMIN/SUPERADMIN, eso es exclusivo de SUPERADMIN.
+    if (!rolesQuePuedeAsignar(req.usuario.rol).includes(rolActual)) {
+      return res.status(403).json({ mensaje: 'No tienes permiso para dar de baja a alguien con ese rol.' });
+    }
+
+    await pool
+      .request()
+      .input('IdTrabajador', sql.Int, id)
+      .query(`
+        UPDATE TrabajadorTiendas SET Estado = 0, FechaRevocacion = SYSUTCDATETIME()
+        WHERE IdTrabajador = @IdTrabajador AND Estado = 1
+      `);
+
+    await pool
+      .request()
+      .input('IdTrabajador', sql.Int, id)
+      .query('UPDATE Trabajadores SET Estado = 0, FechaCese = SYSUTCDATETIME() WHERE IdTrabajador = @IdTrabajador');
+
+    const rolCliente = await pool.request().query("SELECT IdRol FROM Roles WHERE NombreRol = 'CLIENTE'");
+    const idRolCliente = rolCliente.recordset[0].IdRol;
+
+    await pool
+      .request()
+      .input('IdUsuario', sql.Int, idUsuario)
+      .input('IdRol', sql.Int, idRolCliente)
+      .query('UPDATE Usuarios SET IdRol = @IdRol WHERE IdUsuario = @IdUsuario');
+
+    await notificarCambioRol(idUsuario);
+
+    await registrarAuditoria({
+      idUsuario: req.usuario.idUsuario,
+      accion: 'DAR_DE_BAJA_TRABAJADOR',
+      tablaAfectada: 'Trabajadores',
+      registroAfectadoId: String(id),
+      datosNuevos: { idPersona, rolAnterior: rolActual },
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return res.status(200).json({ mensaje: 'Trabajador dado de baja correctamente' });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   buscarPorDni,
   crearTrabajador,
@@ -598,4 +685,5 @@ module.exports = {
   cambiarRolTrabajador,
   otorgarAccesoTienda,
   revocarAccesoTienda,
+  darDeBajaTrabajador,
 };
