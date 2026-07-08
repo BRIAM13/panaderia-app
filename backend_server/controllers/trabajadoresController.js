@@ -66,10 +66,20 @@ function mayuscula(valor) {
   return valor ? valor.trim().toUpperCase() : valor;
 }
 
-/** ADMIN solo puede asignar TRABAJADOR; SUPERADMIN puede asignar cualquiera
- * de los 3 roles de personal. CLIENTE nunca se asigna por esta vía. */
+/**
+ * ADMIN puede asignar TRABAJADOR o ADMIN (ej. ascender a alguien de su
+ * confianza para que lo apoye en su tienda) pero nunca SUPERADMIN — eso es
+ * exclusivo de SUPERADMIN, que puede asignar cualquiera de los 3 roles de
+ * personal. CLIENTE nunca se asigna por esta vía.
+ *
+ * OJO: esto solo dice qué rol se puede OTORGAR — no dice si se puede tocar
+ * a alguien que YA TIENE cierto rol (para eso existe puedeModificarA, que
+ * además respeta quién creó a quién entre administradores).
+ */
 function rolesQuePuedeAsignar(rolDelQueLlama) {
-  return rolDelQueLlama === 'SUPERADMIN' ? ['TRABAJADOR', 'ADMIN', 'SUPERADMIN'] : ['TRABAJADOR'];
+  if (rolDelQueLlama === 'SUPERADMIN') return ['TRABAJADOR', 'ADMIN', 'SUPERADMIN'];
+  if (rolDelQueLlama === 'ADMIN') return ['TRABAJADOR', 'ADMIN'];
+  return [];
 }
 
 /**
