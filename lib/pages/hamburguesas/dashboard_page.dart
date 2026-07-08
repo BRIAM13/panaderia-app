@@ -16,6 +16,7 @@ import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/tarjeta_3d.dart';
 import 'deudas_page.dart';
+import 'historial_ventas_page.dart';
 import 'pedidos_page.dart';
 
 /// Landing del ADMIN/SUPERADMIN al entrar en su vista de personal: un
@@ -65,6 +66,18 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _abrirDeudas() {
     pushSlideUpFade(context, (_) => const DeudasPage());
+  }
+
+  /// Solo Admin/Superadmin pueden entrar al historial completo de ventas —
+  /// un Trabajador raso ve la tarjeta "Ventas de hoy" igual, pero no puede
+  /// tocarla (ver [_esGestorDeVentas] y su uso en build()).
+  bool get _esGestorDeVentas =>
+      widget.usuario.rol == 'ADMIN' || widget.usuario.rol == 'SUPERADMIN';
+
+  void _abrirHistorialVentas() {
+    final tienda = _tiendaSeleccionada;
+    if (tienda == null) return;
+    pushSlideUpFade(context, (_) => HistorialVentasPage(tienda: tienda));
   }
 
   Future<void> _cargarTiendas() async {
@@ -193,6 +206,10 @@ class _DashboardPageState extends State<DashboardPage> {
             _TarjetaVentasHoy(
                   cantidad: resumen.ventasHoyCantidad,
                   total: resumen.ventasHoyTotal,
+                  // Solo Admin/Superadmin pueden entrar al historial
+                  // completo de ventas — un Trabajador raso ve esta misma
+                  // tarjeta, pero no puede tocarla.
+                  onTap: _esGestorDeVentas ? _abrirHistorialVentas : null,
                 )
                 .animate()
                 .fadeIn(delay: 100.ms, duration: 400.ms)
@@ -304,16 +321,25 @@ class _ContadorAnimado extends StatelessWidget {
 }
 
 class _TarjetaVentasHoy extends StatelessWidget {
-  const _TarjetaVentasHoy({required this.cantidad, required this.total});
+  const _TarjetaVentasHoy({
+    required this.cantidad,
+    required this.total,
+    this.onTap,
+  });
 
   final int cantidad;
   final double total;
+
+  /// Solo presente para Admin/Superadmin — un Trabajador raso ve esta
+  /// misma tarjeta pero no puede entrar al historial completo de ventas.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Tarjeta3D(
       borderRadius: 24,
       profundidad: 0.0022,
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(22),
         decoration: const BoxDecoration(
@@ -334,12 +360,19 @@ class _TarjetaVentasHoy extends StatelessWidget {
                   size: 20,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'Ventas de hoy',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleMedium?.copyWith(color: Colors.white),
+                Expanded(
+                  child: Text(
+                    'Ventas de hoy',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: Colors.white),
+                  ),
                 ),
+                if (onTap != null)
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white70,
+                  ),
               ],
             ),
             const SizedBox(height: 10),

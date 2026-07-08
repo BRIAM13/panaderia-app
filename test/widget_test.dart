@@ -15,7 +15,7 @@ import 'package:panaderia_app/theme/app_theme.dart';
 // Tampoco se usa pumpAndSettle(): el AdBanner de la vista Cliente tiene una
 // animación de pulso infinita (a propósito), y pumpAndSettle nunca
 // terminaría de asentar. Se usan pumps con duración fija, un viewport de
-// prueba lo bastante alto para que las 5 tiendas quepan sin scroll, y un
+// prueba lo bastante alto para el contenido de cada pantalla, y un
 // addTearDown que desmonta el árbol al final para liberar los
 // temporizadores del ciclo de animación infinito antes del cierre del test.
 
@@ -64,9 +64,9 @@ Widget _envolver(Widget home) {
 Future<void> _asentar(WidgetTester tester) =>
     tester.pump(const Duration(milliseconds: 700));
 
-/// Monta [home], fija un viewport alto (para que las 5 tiendas quepan sin
-/// scroll) y garantiza que el árbol se desmonte al final del test, para no
-/// dejar pendiente el temporizador del pulso infinito del AdBanner.
+/// Monta [home], fija un viewport alto y garantiza que el árbol se desmonte
+/// al final del test, para no dejar pendiente el temporizador del pulso
+/// infinito del AdBanner.
 Future<void> _montar(WidgetTester tester, Widget home) async {
   tester.view.physicalSize = const Size(420, 1100);
   tester.view.devicePixelRatio = 1.0;
@@ -80,32 +80,18 @@ Future<void> _montar(WidgetTester tester, Widget home) async {
 
 void main() {
   testWidgets(
-    'El hub de tiendas (vista Trabajador) muestra las 5 unidades de negocio',
+    'El personal (Trabajador) ya no ve el grid fijo de tiendas — su '
+    'pantalla principal ahora es el Dashboard de su tienda',
     (WidgetTester tester) async {
+      // DashboardPage pide datos reales por HTTP en initState, que no hay
+      // en el harness de `flutter test` — solo se verifica que el grid fijo
+      // "Elige tu tienda" (reemplazado por el Dashboard para todo el
+      // personal, no solo Admin/Superadmin) ya no aparece, sin asumir si la
+      // llamada de red resultó en carga, error o datos.
       await _montar(tester, const HomePage(usuario: _trabajadorDemo));
 
-      expect(find.text('Elige tu tienda'), findsOneWidget);
-      expect(find.text('Hamburguesas'), findsOneWidget);
-      expect(find.text('Horneados'), findsOneWidget);
-      expect(find.text('Panadería'), findsOneWidget);
-      expect(find.text('Mercadería'), findsOneWidget);
-      expect(find.text('Pastelería'), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'Tocar una tienda no disponible muestra el aviso de próximamente',
-    (WidgetTester tester) async {
-      await _montar(tester, const HomePage(usuario: _trabajadorDemo));
-
-      await tester.tap(find.text('Pastelería'));
-      await _asentar(tester);
-      expect(find.text('PRÓXIMAMENTE'), findsOneWidget);
-
-      // Cerrar el sheet antes de terminar, para dejar el árbol en un estado
-      // simple y evitar temporizadores de animación de sobra al desmontar.
-      await tester.tap(find.text('Entendido'));
-      await _asentar(tester);
+      expect(find.text('Elige tu tienda'), findsNothing);
+      expect(find.text('Pastelería'), findsNothing);
     },
   );
 
@@ -140,10 +126,6 @@ void main() {
     'principal, y ve AMBAS secciones (GESTIÓN y MI CUENTA) en el drawer',
     (WidgetTester tester) async {
       await _montar(tester, const HomePage(usuario: _hibridoDemo));
-
-      // La pantalla principal sigue siendo la de gestión (hub de tiendas),
-      // no la de cliente — ser también cliente ya no le cambia el inicio.
-      expect(find.text('Elige tu tienda'), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.menu));
       await _asentar(tester);

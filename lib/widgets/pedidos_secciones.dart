@@ -52,12 +52,11 @@ Map<SeccionPedido, List<Pedido>> agruparPedidosPorFecha(List<Pedido> pedidos) {
   return mapa;
 }
 
-/// Lista completa de secciones (Atrasados/Hoy/Próximos/Sin fecha + un
-/// Historial aparte para los ya finalizados), cada una oculta sola si no
-/// tiene pedidos. Los ENTREGADOS/RECHAZADOS/CANCELADOS nunca entran a
-/// Atrasados/Hoy/Próximos — ya se resolvieron, agruparlos por fecha
-/// programada solo confundiría ("Atrasado" debería significar "todavía
-/// pendiente y ya se pasó la fecha", no "ya se resolvió hace unos días").
+/// Lista completa de secciones activas (Atrasados/Hoy/Próximos/Sin fecha),
+/// cada una oculta sola si no tiene pedidos. Los ya finalizados
+/// (ENTREGADO/RECHAZADO/CANCELADO) no aparecen acá — se resolvieron, y
+/// viven aparte en la pantalla de Historial de ventas (Dashboard → "Ventas
+/// de hoy"), no agrupados por fecha programada como estos.
 /// [mostrarNombreCliente] se apaga en la vista del propio cliente (ya sabe
 /// quién es) y se prende en la vista de personal (necesita ver de quién es
 /// cada pedido). [onEntregar] solo tiene efecto en pedidos PENDIENTE — es
@@ -83,12 +82,9 @@ class ListaPedidosPorSeccion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final historial = pedidos.where((p) => p.esFinalizado).toList()
-      ..sort(
-        (a, b) => (b.fechaEntregaReal ?? b.fechaCreacion).compareTo(
-          a.fechaEntregaReal ?? a.fechaCreacion,
-        ),
-      );
+    // Los ya finalizados (entregados/rechazados/cancelados) ya no se
+    // muestran acá — se movieron a la nueva pantalla de Historial de
+    // ventas (Dashboard → "Ventas de hoy", solo Admin/Superadmin).
     final activos = pedidos.where((p) => !p.esFinalizado).toList();
     final agrupados = agruparPedidosPorFecha(activos);
 
@@ -133,14 +129,6 @@ class ListaPedidosPorSeccion extends StatelessWidget {
           mostrarNombreCliente: mostrarNombreCliente,
           onEntregar: onEntregar,
           onCancelar: onCancelar,
-        ),
-        SeccionPedidos(
-          titulo: 'Historial',
-          subtitulo: 'Entregados, rechazados o cancelados',
-          icono: Icons.inventory_rounded,
-          color: const Color(0xFF6D4C41),
-          pedidos: historial,
-          mostrarNombreCliente: mostrarNombreCliente,
         ),
       ],
     );
@@ -454,7 +442,7 @@ class PedidoCard extends StatelessWidget {
                   ),
                 ],
               ),
-              _InfoAuditoriaPedido(pedido: pedido),
+              InfoAuditoriaPedido(pedido: pedido),
               if (mostrarAccionesSolicitud) ...[
                 const SizedBox(height: 10),
                 Row(
@@ -542,8 +530,8 @@ String _descripcionRegistro(Pedido pedido) {
 /// llena estos campos si quien pidió la lista es ADMIN o SUPERADMIN (ver
 /// pedidosController.js), así que para cualquier otra vista (TRABAJADOR,
 /// el propio cliente) todos llegan null y este widget no muestra nada.
-class _InfoAuditoriaPedido extends StatelessWidget {
-  const _InfoAuditoriaPedido({required this.pedido});
+class InfoAuditoriaPedido extends StatelessWidget {
+  const InfoAuditoriaPedido({super.key, required this.pedido});
 
   final Pedido pedido;
 
