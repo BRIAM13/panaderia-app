@@ -6,8 +6,40 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'pages/auth/login_page.dart';
 import 'pages/splash/splash_page.dart';
+import 'services/api_client.dart';
+import 'services/secure_storage_service.dart';
 import 'theme/app_theme.dart';
+import 'widgets/page_transitions.dart';
+
+/// Referencia global al Navigator raíz — necesaria para poder forzar una
+/// navegación (cerrar sesión y volver al login) desde `ApiClient`, que
+/// puede reaccionar a una respuesta del backend desde cualquier pantalla,
+/// no solo desde la que originó la petición.
+final navigatorKey = GlobalKey<NavigatorState>();
+
+bool _manejandoRolCambiado = false;
+
+/// Se dispara cuando el backend detecta que el rol del usuario cambió
+/// mientras tenía la sesión abierta (ver `ApiClient.onRolCambiado` y
+/// `authMiddleware.js` → tipo 'ROL_CAMBIADO'). Cierra la sesión guardada y
+/// manda al usuario de vuelta al login con un aviso, sin importar en qué
+/// pantalla estuviera — así la app se recarga limpia con las pantallas que
+/// le corresponden a su rol nuevo.
+Future<void> _manejarRolCambiado(String mensaje) async {
+  if (_manejandoRolCambiado) return;
+  _manejandoRolCambiado = true;
+  // Solo borra los tokens (que ya no sirven) — conserva el usuario
+  // recordado y la preferencia de biometría, no fue un cierre de sesión
+  // decidido por el usuario.
+  await SecureStorageService().limpiarSesion();
+  navigatorKey.currentState?.pushAndRemoveUntil(
+    SlideUpFadeRoute(builder: (_) => LoginPage(mensajeInicial: mensaje)),
+    (route) => false,
+  );
+  _manejandoRolCambiado = false;
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +48,7 @@ Future<void> main() async {
   await initializeDateFormatting('es');
   await _inicializarFirebaseSiAplica();
   await _inicializarAdMobSiAplica();
+  ApiClient.onRolCambiado = _manejarRolCambiado;
   runApp(const PanaderiaApp());
 }
 
@@ -69,6 +102,7 @@ class PanaderiaApp extends StatelessWidget {
     return MaterialApp(
       title: 'Corporación Ronceros',
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
       theme: buildAppTheme(),
       // Respeta la fuente grande del sistema (accesibilidad) pero la limita
       // a 1.25x para que nunca desborde botones ni formularios. Ojo:

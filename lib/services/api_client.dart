@@ -49,6 +49,14 @@ class ApiConfig {
 class ApiClient {
   const ApiClient();
 
+  /// Se dispara cuando el backend rechaza una petición con `tipo:
+  /// 'ROL_CAMBIADO'` (ver authMiddleware.js — el rol del usuario cambió
+  /// mientras tenía la sesión abierta, ej. un cliente ascendido a
+  /// trabajador). Permite que la capa de UI reaccione (forzar cierre de
+  /// sesión y mostrar un aviso) sin que este cliente HTTP, que es puro dato
+  /// y se usa también en tests, dependa de Flutter/Navigator.
+  static void Function(String mensaje)? onRolCambiado;
+
   // Azure SQL (oferta gratuita) pausa la base de datos sola tras un rato de
   // inactividad, y la primera consulta tras eso puede tardar bastante en
   // "despertarla" — 15s no alcanzaba y la app mostraba "no se pudo conectar"
@@ -109,13 +117,21 @@ class ApiClient {
   /// loguearse mientras el refresh token (7 días) siga vigente — antes de
   /// esto, un access token vencido (1h) rompía silenciosamente cualquier
   /// pantalla hasta que el usuario cerrara y volviera a iniciar sesión.
+  ///
+  /// EXCEPCIÓN a propósito: si el 401 es por `tipo: 'ROL_CAMBIADO'`, NO se
+  /// renueva en silencio — renovar le daría un token nuevo con el rol
+  /// actualizado, pero la app en memoria seguiría armada con las pantallas
+  /// del rol viejo. Se deja que el 401 pase tal cual para forzar un login
+  /// nuevo y recargar todo de forma consistente.
   Future<Map<String, dynamic>> _conRenovacionDeToken(
     String? token,
     Future<http.Response> Function(String? token) peticion,
   ) async {
     http.Response respuesta = await _ejecutar(() => peticion(token));
 
-    if (respuesta.statusCode == 401 && token != null) {
+    if (respuesta.statusCode == 401 &&
+        token != null &&
+        _tipoDeRespuesta(respuesta) != 'ROL_CAMBIADO') {
       final nuevoToken = await _renovarAccessToken();
       if (nuevoToken != null) {
         respuesta = await _ejecutar(() => peticion(nuevoToken));
@@ -123,6 +139,15 @@ class ApiClient {
     }
 
     return _procesarRespuesta(respuesta);
+  }
+
+  String? _tipoDeRespuesta(http.Response respuesta) {
+    try {
+      final data = jsonDecode(respuesta.body) as Map<String, dynamic>;
+      return data['tipo'] as String?;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<http.Response> _ejecutar(
@@ -184,11 +209,18 @@ class ApiClient {
     final errores = (data['errores'] as List<dynamic>?)
         ?.map((e) => e.toString())
         .toList();
+    final mensaje = (data['mensaje'] as String?) ?? 'Ocurrió un error inesperado.';
+    final tipo = data['tipo'] as String?;
+
+    if (tipo == 'ROL_CAMBIADO') {
+      onRolCambiado?.call(mensaje);
+    }
+
     throw ApiException(
-      (data['mensaje'] as String?) ?? 'Ocurrió un error inesperado.',
+      mensaje,
       statusCode: respuesta.statusCode,
       errores: errores,
-      tipo: data['tipo'] as String?,
+      tipo: tipo,
     );
   }
 }

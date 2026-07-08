@@ -14,7 +14,12 @@ import '../hub/home_page.dart';
 import 'change_password_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, this.mensajeInicial});
+
+  /// Aviso a mostrar apenas se abre la pantalla (ej. "tu rol cambió, vuelve
+  /// a iniciar sesión") — usado cuando algo externo (no el propio usuario)
+  /// forzó volver al login. Ver `main.dart` → `_manejarRolCambiado`.
+  final String? mensajeInicial;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -35,10 +40,12 @@ class _LoginPageState extends State<LoginPage> {
   bool _tardandoMasDeLoNormal = false;
   Timer? _timerTardanza;
   String? _error;
+  String? _aviso;
 
   @override
   void initState() {
     super.initState();
+    _aviso = widget.mensajeInicial;
     _evaluarAccesoBiometrico();
     _cargarPreferenciasGuardadas();
   }
@@ -255,6 +262,37 @@ class _LoginPageState extends State<LoginPage> {
                     .animate()
                     .fadeIn(delay: 120.ms, duration: 300.ms)
                     .moveY(begin: 8, end: 0),
+                if (_aviso != null) ...[
+                  const SizedBox(height: 20),
+                  Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: scheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.info_outline_rounded,
+                              color: scheme.onPrimaryContainer,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _aviso!,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: scheme.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                      .animate()
+                      .fadeIn(duration: 300.ms)
+                      .moveY(begin: 8, end: 0),
+                ],
                 const SizedBox(height: 32),
                 AutofillGroup(
                   child: Column(

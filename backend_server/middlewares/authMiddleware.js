@@ -42,7 +42,25 @@ async function verificarToken(req, res, next) {
       return res.status(401).json({ mensaje: 'Usuario no encontrado o deshabilitado' });
     }
 
-    req.usuario = { ...payload, rol: resultado.recordset[0].NombreRol };
+    const rolActual = resultado.recordset[0].NombreRol;
+
+    // El rol guardado DENTRO del token es el que tenía al momento del login
+    // (o del último refresh) — si ya no coincide con el rol actual en la
+    // base de datos, alguien lo ascendió/cambió de rol mientras tenía la
+    // sesión abierta (ej. cliente promovido a trabajador). No basta con
+    // seguir la petición con el rol nuevo en silencio: la app del usuario
+    // sigue armada en memoria con las pantallas de su rol VIEJO, así que se
+    // le pide explícitamente volver a iniciar sesión para recargar todo
+    // correctamente en vez de dejarlo en un estado inconsistente.
+    if (rolActual !== payload.rol) {
+      return res.status(401).json({
+        mensaje:
+          'Tu cuenta fue actualizada con nuevos permisos. Vuelve a iniciar sesión para continuar.',
+        tipo: 'ROL_CAMBIADO',
+      });
+    }
+
+    req.usuario = { ...payload, rol: rolActual };
     next();
   } catch (err) {
     next(err);
