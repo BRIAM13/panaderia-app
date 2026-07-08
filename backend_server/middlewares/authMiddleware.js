@@ -1,19 +1,51 @@
 const { verifyAccessToken } = require('../utils/jwt');
 const { tieneAccesoATienda } = require('../utils/tiendaAcceso');
+const { getPool, sql } = require('../config/db');
 
-function verificarToken(req, res, next) {
+/**
+ * Verifica la firma/vencimiento del access token y, a propósito, además
+ * consulta el Estado y Rol ACTUALES del usuario en la base de datos en cada
+ * petición (no confía en el rol que trae el propio token) — así, si un
+ * SUPERADMIN desactiva a un trabajador o le cambia el rol, el corte de
+ * acceso es inmediato en su siguiente petición, sin esperar a que su access
+ * token vigente (hasta 1h) venza solo. Es una decisión consciente de
+ * cambiar algo de velocidad (una consulta liviana extra por petición) por
+ * revocación instantánea de verdad.
+ */
+async function verificarToken(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ mensaje: 'Token de acceso no proporcionado' });
   }
 
   const token = authHeader.split(' ')[1];
+  let payload;
   try {
-    const payload = verifyAccessToken(token);
-    req.usuario = payload;
-    next();
+    payload = verifyAccessToken(token);
   } catch (err) {
     return res.status(401).json({ mensaje: 'Token inválido o expirado' });
+  }
+
+  try {
+    const pool = await getPool();
+    const resultado = await pool
+      .request()
+      .input('IdUsuario', sql.Int, payload.idUsuario)
+      .query(`
+        SELECT u.Estado, r.NombreRol
+        FROM Usuarios u
+        INNER JOIN Roles r ON r.IdRol = u.IdRol
+        WHERE u.IdUsuario = @IdUsuario
+      `);
+
+    if (resultado.recordset.length === 0 || !resultado.recordset[0].Estado) {
+      return res.status(401).json({ mensaje: 'Usuario no encontrado o deshabilitado' });
+    }
+
+    req.usuario = { ...payload, rol: resultado.recordset[0].NombreRol };
+    next();
+  } catch (err) {
+    next(err);
   }
 }
 
