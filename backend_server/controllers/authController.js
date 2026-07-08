@@ -447,6 +447,27 @@ async function refrescarToken(req, res, next) {
     }
 
     const usuario = usuarioResult.recordset[0];
+
+    // El refresh token también trae el rol que tenía el usuario al momento
+    // del login/último refresh (mismo payload que el access token). Si ya
+    // no coincide con el rol actual en la base de datos, NO se renueva en
+    // silencio — eso le daría un access token nuevo con el rol correcto
+    // pero dejaría la app (armada en memoria con las pantallas del rol
+    // viejo) sin enterarse del cambio. Esta es la comprobación que de
+    // verdad importa: authMiddleware ya hace una comprobación parecida,
+    // pero solo alcanza a dispararse si el access token todavía no había
+    // vencido por tiempo — en la práctica, casi siempre se llega primero
+    // acá (al vencer y pedir uno nuevo), así que el chequeo real tiene que
+    // vivir en este endpoint para cubrir ambos casos sin depender de cuál
+    // ocurra primero.
+    if (usuario.NombreRol !== payload.rol) {
+      return res.status(401).json({
+        mensaje:
+          'Tu cuenta fue actualizada con nuevos permisos. Vuelve a iniciar sesión para continuar.',
+        tipo: 'ROL_CAMBIADO',
+      });
+    }
+
     const nuevoAccessToken = generateAccessToken({
       idUsuario: usuario.IdUsuario,
       idPersona: usuario.IdPersona,

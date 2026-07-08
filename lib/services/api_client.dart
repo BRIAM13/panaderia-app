@@ -24,6 +24,18 @@ class ApiException implements Exception {
   String toString() => mensaje;
 }
 
+/// Resultado interno de un intento de renovar el access token — separa
+/// "no se pudo renovar, sigue el error original" de "se rechazó a propósito
+/// porque el rol cambió", que necesita un manejo especial (ver
+/// `ApiClient._conRenovacionDeToken`).
+class _ResultadoRenovacion {
+  const _ResultadoRenovacion({this.token, this.tipoError, this.mensaje});
+
+  final String? token;
+  final String? tipoError;
+  final String? mensaje;
+}
+
 /// Resuelve la URL base del backend según la plataforma.
 ///
 /// IMPORTANTE: para probar en un celular físico conectado por Wi-Fi, ni
@@ -132,9 +144,27 @@ class ApiClient {
     if (respuesta.statusCode == 401 &&
         token != null &&
         _tipoDeRespuesta(respuesta) != 'ROL_CAMBIADO') {
-      final nuevoToken = await _renovarAccessToken();
-      if (nuevoToken != null) {
-        respuesta = await _ejecutar(() => peticion(nuevoToken));
+      final resultado = await _renovarAccessToken();
+
+      // El propio endpoint de refresh también puede detectar que el rol
+      // cambió (y es, en la práctica, el lugar donde esto se detecta CASI
+      // SIEMPRE — ver comentario en authController.js: por lo general el
+      // access token ya venció por tiempo antes de que el usuario alcance
+      // a tocar algo, así que se llega aquí, no al chequeo del middleware
+      // sobre un token todavía válido). Si pasó eso, no hay que reintentar
+      // con la respuesta vieja (genérica) — hay que avisar YA con el
+      // mensaje real que vino en el refresh.
+      if (resultado.tipoError == 'ROL_CAMBIADO') {
+        onRolCambiado?.call(resultado.mensaje!);
+        throw ApiException(
+          resultado.mensaje!,
+          statusCode: 401,
+          tipo: 'ROL_CAMBIADO',
+        );
+      }
+
+      if (resultado.token != null) {
+        respuesta = await _ejecutar(() => peticion(resultado.token));
       }
     }
 
@@ -165,10 +195,10 @@ class ApiClient {
   /// Instancia propia (no se guarda como campo para que `ApiClient` se
   /// mantenga `const`, como esperan todos sus constructores en los demás
   /// servicios) — solo se usa en el camino poco frecuente de renovar token.
-  Future<String?> _renovarAccessToken() async {
+  Future<_ResultadoRenovacion> _renovarAccessToken() async {
     final storage = SecureStorageService();
     final refreshToken = await storage.obtenerRefreshToken();
-    if (refreshToken == null) return null;
+    if (refreshToken == null) return const _ResultadoRenovacion();
 
     try {
       final respuesta = await http
@@ -179,16 +209,27 @@ class ApiClient {
           )
           .timeout(_timeoutHttp);
 
-      if (respuesta.statusCode != 200) return null;
+      Map<String, dynamic> data = const {};
+      try {
+        data = jsonDecode(respuesta.body) as Map<String, dynamic>;
+      } catch (_) {
+        // Respuesta sin cuerpo JSON — se maneja como falla genérica abajo.
+      }
 
-      final data = jsonDecode(respuesta.body) as Map<String, dynamic>;
+      if (respuesta.statusCode != 200) {
+        return _ResultadoRenovacion(
+          tipoError: data['tipo'] as String?,
+          mensaje: data['mensaje'] as String?,
+        );
+      }
+
       final nuevoAccessToken = data['accessToken'] as String?;
-      if (nuevoAccessToken == null) return null;
+      if (nuevoAccessToken == null) return const _ResultadoRenovacion();
 
       await storage.actualizarAccessToken(nuevoAccessToken);
-      return nuevoAccessToken;
+      return _ResultadoRenovacion(token: nuevoAccessToken);
     } catch (_) {
-      return null;
+      return const _ResultadoRenovacion();
     }
   }
 
