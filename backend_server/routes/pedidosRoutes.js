@@ -5,6 +5,7 @@ const {
   listarPedidos,
   misPedidos,
   cancelarMiPedido,
+  cancelarPedido,
   aprobarPedido,
   rechazarPedido,
   entregarPedido,
@@ -38,6 +39,7 @@ router.post('/', validatePedido, crearPedido);
 router.put('/:id/aprobar', aprobarPedido);
 router.put('/:id/rechazar', rechazarPedido);
 router.put('/:id/entregar', entregarPedido);
+router.put('/:id/cancelar', cancelarPedido);
 router.put('/:id/marcar-deuda-pagada', marcarDeudaPagada);
 
 module.exports = router;

@@ -326,7 +326,11 @@ const SELECT_PEDIDOS_BASE = `
          c.DescripcionNegocio AS ClienteDescripcionNegocio,
          t.Nombre AS TiendaNombre,
          prod.Nombre AS ProductoNombre,
-         trabPer.Nombres AS VendedorNombres, trabPer.ApellidoPaterno AS VendedorApellidoPaterno
+         trabPer.Nombres AS VendedorNombres, trabPer.ApellidoPaterno AS VendedorApellidoPaterno,
+         trabRol.NombreRol AS VendedorRol,
+         aprobPer.Nombres AS AprobadoNombres, aprobPer.ApellidoPaterno AS AprobadoApellidoPaterno,
+         cancelPer.Nombres AS CanceladoNombres, cancelPer.ApellidoPaterno AS CanceladoApellidoPaterno,
+         entregPer.Nombres AS EntregadoNombres, entregPer.ApellidoPaterno AS EntregadoApellidoPaterno
   FROM Pedidos pd
   INNER JOIN Clientes c ON c.IdCliente = pd.IdCliente
   INNER JOIN Personas per ON per.IdPersona = c.IdPersona
@@ -334,10 +338,23 @@ const SELECT_PEDIDOS_BASE = `
   INNER JOIN Productos prod ON prod.IdProducto = pd.IdProducto
   LEFT JOIN Trabajadores trab ON trab.IdTrabajador = pd.IdTrabajador
   LEFT JOIN Personas trabPer ON trabPer.IdPersona = trab.IdPersona
+  LEFT JOIN Usuarios trabUsr ON trabUsr.IdPersona = trabPer.IdPersona
+  LEFT JOIN Roles trabRol ON trabRol.IdRol = trabUsr.IdRol
+  LEFT JOIN Usuarios aprobUsr ON aprobUsr.IdUsuario = pd.IdUsuarioAprobo
+  LEFT JOIN Personas aprobPer ON aprobPer.IdPersona = aprobUsr.IdPersona
+  LEFT JOIN Usuarios cancelUsr ON cancelUsr.IdUsuario = pd.IdUsuarioCancelo
+  LEFT JOIN Personas cancelPer ON cancelPer.IdPersona = cancelUsr.IdPersona
+  LEFT JOIN Usuarios entregUsr ON entregUsr.IdUsuario = pd.IdUsuarioEntrego
+  LEFT JOIN Personas entregPer ON entregPer.IdPersona = entregUsr.IdPersona
 `;
 
-function mapearFilaPedido(fila) {
-  return {
+/**
+ * `incluirAuditoria` solo debe venir en true para SUPERADMIN/ADMIN (ver
+ * listarPedidos/listarDeudas) — un TRABAJADOR raso o el propio cliente
+ * nunca deben ver quién registró/aprobó/canceló/entregó cada pedido.
+ */
+function mapearFilaPedido(fila, incluirAuditoria = false) {
+  const base = {
     idPedido: fila.IdPedido,
     idCliente: fila.IdCliente,
     idTienda: fila.IdTienda,
@@ -363,6 +380,18 @@ function mapearFilaPedido(fila) {
     // null si lo registró el propio cliente (autoservicio), no el personal.
     vendedor: fila.VendedorNombres ? `${fila.VendedorNombres} ${fila.VendedorApellidoPaterno}` : null,
   };
+
+  if (!incluirAuditoria) return base;
+
+  return {
+    ...base,
+    // Quién registró el pedido: el rol del vendedor si lo hizo el
+    // personal, o 'CLIENTE' si fue autoservicio (vendedor null).
+    registradoPorRol: fila.VendedorNombres ? fila.VendedorRol : 'CLIENTE',
+    aprobadoPor: fila.AprobadoNombres ? `${fila.AprobadoNombres} ${fila.AprobadoApellidoPaterno}` : null,
+    canceladoPor: fila.CanceladoNombres ? `${fila.CanceladoNombres} ${fila.CanceladoApellidoPaterno}` : null,
+    entregadoPor: fila.EntregadoNombres ? `${fila.EntregadoNombres} ${fila.EntregadoApellidoPaterno}` : null,
+  };
 }
 
 /**
@@ -373,10 +402,15 @@ function mapearFilaPedido(fila) {
 async function listarPedidos(req, res, next) {
   try {
     const pool = await getPool();
+    // Quién registró/aprobó/canceló/entregó cada pedido es información
+    // sensible de gestión interna — solo ADMIN/SUPERADMIN la ven, un
+    // TRABAJADOR raso no.
+    const incluirAuditoria = ['ADMIN', 'SUPERADMIN'].includes(req.usuario.rol);
+    const mapear = (fila) => mapearFilaPedido(fila, incluirAuditoria);
 
     if (req.usuario.rol === 'SUPERADMIN') {
       const result = await pool.request().query(`${SELECT_PEDIDOS_BASE} ORDER BY pd.FechaCreacion DESC`);
-      return res.status(200).json({ pedidos: result.recordset.map(mapearFilaPedido) });
+      return res.status(200).json({ pedidos: result.recordset.map(mapear) });
     }
 
     const idTrabajador = await obtenerIdTrabajador(req.usuario.idPersona);
@@ -388,7 +422,7 @@ async function listarPedidos(req, res, next) {
     const result = await pool
       .request()
       .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdTienda IN (${idsTiendas.join(',')}) ORDER BY pd.FechaCreacion DESC`);
-    return res.status(200).json({ pedidos: result.recordset.map(mapearFilaPedido) });
+    return res.status(200).json({ pedidos: result.recordset.map(mapear) });
   } catch (err) {
     return next(err);
   }
@@ -467,7 +501,15 @@ async function cancelarMiPedido(req, res, next) {
       return res.status(400).json({ mensaje: 'Este pedido ya no se puede cancelar.' });
     }
 
-    await pool.request().input('IdPedido', sql.Int, pedido.IdPedido).query("UPDATE Pedidos SET Estado = 'CANCELADO' WHERE IdPedido = @IdPedido");
+    await pool
+      .request()
+      .input('IdPedido', sql.Int, pedido.IdPedido)
+      .input('IdUsuario', sql.Int, req.usuario.idUsuario)
+      .query(`
+        UPDATE Pedidos
+        SET Estado = 'CANCELADO', IdUsuarioCancelo = @IdUsuario, FechaCancelacion = SYSUTCDATETIME()
+        WHERE IdPedido = @IdPedido
+      `);
 
     await registrarAuditoria({
       idUsuario: req.usuario.idUsuario,
@@ -487,6 +529,55 @@ async function cancelarMiPedido(req, res, next) {
         datos: { tipo: 'PEDIDO_CANCELADO', idTienda: String(pedido.IdTienda), idPedido: String(pedido.IdPedido) },
       });
     }
+
+    return res.status(200).json({ mensaje: 'Pedido cancelado correctamente' });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * El personal cancela un pedido (SOLICITADO o PENDIENTE) desde su lado —
+ * ej. ya se había confirmado pero por algún motivo no se puede cumplir.
+ * Distinto de cancelarMiPedido (autoservicio del cliente): este lo usa el
+ * personal sobre cualquier pedido de su tienda, y deja registrado quién lo
+ * hizo. Antes de esto, la única acción disponible para un pedido ya
+ * confirmado era "marcar entregado" — no había forma de deshacerlo.
+ */
+async function cancelarPedido(req, res, next) {
+  try {
+    const pedido = await obtenerPedidoConAcceso(req, res);
+    if (!pedido) return;
+    if (pedido.Estado !== 'SOLICITADO' && pedido.Estado !== 'PENDIENTE') {
+      return res.status(400).json({ mensaje: 'Este pedido ya no se puede cancelar' });
+    }
+
+    const pool = await getPool();
+    await pool
+      .request()
+      .input('IdPedido', sql.Int, pedido.IdPedido)
+      .input('IdUsuario', sql.Int, req.usuario.idUsuario)
+      .query(`
+        UPDATE Pedidos
+        SET Estado = 'CANCELADO', IdUsuarioCancelo = @IdUsuario, FechaCancelacion = SYSUTCDATETIME()
+        WHERE IdPedido = @IdPedido
+      `);
+
+    await registrarAuditoria({
+      idUsuario: req.usuario.idUsuario,
+      accion: 'CANCELAR_PEDIDO',
+      tablaAfectada: 'Pedidos',
+      registroAfectadoId: String(pedido.IdPedido),
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    await notificarCliente({
+      idCliente: pedido.IdCliente,
+      titulo: 'Tu pedido fue cancelado',
+      cuerpo: `Tu pedido #${pedido.IdPedido} fue cancelado por la tienda.`,
+      datos: { tipo: 'PEDIDO_CANCELADO', idPedido: String(pedido.IdPedido) },
+    });
 
     return res.status(200).json({ mensaje: 'Pedido cancelado correctamente' });
   } catch (err) {
@@ -531,7 +622,15 @@ async function aprobarPedido(req, res, next) {
     }
 
     const pool = await getPool();
-    await pool.request().input('IdPedido', sql.Int, pedido.IdPedido).query("UPDATE Pedidos SET Estado = 'PENDIENTE' WHERE IdPedido = @IdPedido");
+    await pool
+      .request()
+      .input('IdPedido', sql.Int, pedido.IdPedido)
+      .input('IdUsuario', sql.Int, req.usuario.idUsuario)
+      .query(`
+        UPDATE Pedidos
+        SET Estado = 'PENDIENTE', IdUsuarioAprobo = @IdUsuario, FechaAprobacion = SYSUTCDATETIME()
+        WHERE IdPedido = @IdPedido
+      `);
 
     await registrarAuditoria({
       idUsuario: req.usuario.idUsuario,
@@ -601,10 +700,12 @@ async function listarDeudas(req, res, next) {
   try {
     const pool = await getPool();
     const filtroEstado = "WHERE pd.Estado = 'ENTREGADO' AND pd.EstadoPago = 'DEUDA'";
+    const incluirAuditoria = ['ADMIN', 'SUPERADMIN'].includes(req.usuario.rol);
+    const mapear = (fila) => mapearFilaPedido(fila, incluirAuditoria);
 
     if (req.usuario.rol === 'SUPERADMIN') {
       const result = await pool.request().query(`${SELECT_PEDIDOS_BASE} ${filtroEstado} ORDER BY pd.FechaEntregaReal ASC`);
-      return res.status(200).json({ pedidos: result.recordset.map(mapearFilaPedido) });
+      return res.status(200).json({ pedidos: result.recordset.map(mapear) });
     }
 
     const idTrabajador = await obtenerIdTrabajador(req.usuario.idPersona);
@@ -616,7 +717,7 @@ async function listarDeudas(req, res, next) {
     const result = await pool
       .request()
       .query(`${SELECT_PEDIDOS_BASE} ${filtroEstado} AND pd.IdTienda IN (${idsTiendas.join(',')}) ORDER BY pd.FechaEntregaReal ASC`);
-    return res.status(200).json({ pedidos: result.recordset.map(mapearFilaPedido) });
+    return res.status(200).json({ pedidos: result.recordset.map(mapear) });
   } catch (err) {
     return next(err);
   }
@@ -687,9 +788,10 @@ async function entregarPedido(req, res, next) {
       .request()
       .input('IdPedido', sql.Int, pedido.IdPedido)
       .input('EstadoPago', sql.VarChar(20), estadoPago)
+      .input('IdUsuario', sql.Int, req.usuario.idUsuario)
       .query(`
         UPDATE Pedidos
-        SET Estado = 'ENTREGADO', EstadoPago = @EstadoPago, FechaEntregaReal = SYSUTCDATETIME()
+        SET Estado = 'ENTREGADO', EstadoPago = @EstadoPago, FechaEntregaReal = SYSUTCDATETIME(), IdUsuarioEntrego = @IdUsuario
         WHERE IdPedido = @IdPedido
       `);
 
@@ -724,6 +826,7 @@ module.exports = {
   listarPedidos,
   misPedidos,
   cancelarMiPedido,
+  cancelarPedido,
   aprobarPedido,
   rechazarPedido,
   entregarPedido,

@@ -386,6 +386,14 @@ CREATE TABLE Pedidos (
     EstadoPago          VARCHAR(20)         NULL,   -- 'PAGADO' | 'DEUDA'
     FechaEntregaReal    DATETIME2           NULL,   -- cuándo se marcó como entregado (distinto de FechaEntrega, la programada)
     FechaPagoDeuda      DATETIME2           NULL,   -- cuándo se saldó una deuda (uso futuro: pago por distintos medios)
+    -- Quién realizó cada transición de estado (visible solo para
+    -- ADMIN/SUPERADMIN en la app) — quién REGISTRÓ el pedido ya se sabe por
+    -- IdTrabajador (NULL = lo registró el propio cliente).
+    IdUsuarioAprobo     INT                 NULL,
+    FechaAprobacion     DATETIME2           NULL,
+    IdUsuarioCancelo    INT                 NULL,   -- personal o el propio cliente (autoservicio)
+    FechaCancelacion    DATETIME2           NULL,
+    IdUsuarioEntrego    INT                 NULL,
     Notas               NVARCHAR(300)       NULL,
     FechaCreacion       DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_Pedidos PRIMARY KEY (IdPedido),
@@ -397,6 +405,12 @@ CREATE TABLE Pedidos (
         REFERENCES Productos(IdProducto),
     CONSTRAINT FK_Pedidos_Trabajador FOREIGN KEY (IdTrabajador)
         REFERENCES Trabajadores(IdTrabajador),
+    CONSTRAINT FK_Pedidos_UsuarioAprobo FOREIGN KEY (IdUsuarioAprobo)
+        REFERENCES Usuarios(IdUsuario),
+    CONSTRAINT FK_Pedidos_UsuarioCancelo FOREIGN KEY (IdUsuarioCancelo)
+        REFERENCES Usuarios(IdUsuario),
+    CONSTRAINT FK_Pedidos_UsuarioEntrego FOREIGN KEY (IdUsuarioEntrego)
+        REFERENCES Usuarios(IdUsuario),
     CONSTRAINT CK_Pedidos_TipoPedido CHECK (TipoPedido IN ('UNIDADES','PAQUETES')),
     CONSTRAINT CK_Pedidos_Cantidad CHECK (Cantidad > 0),
     CONSTRAINT CK_Pedidos_Estado CHECK (Estado IN ('SOLICITADO','PENDIENTE','RECHAZADO','ENTREGADO','CANCELADO')),

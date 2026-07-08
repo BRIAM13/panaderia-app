@@ -174,6 +174,14 @@ class PedidosService {
     }, token: token);
   }
 
+  /// Personal: cancela un pedido (SOLICITADO o PENDIENTE) de su tienda —
+  /// ej. ya se había confirmado pero por algún motivo no se puede cumplir.
+  /// Distinto de [cancelarMiPedido], que es el autoservicio del cliente.
+  Future<void> cancelar(int idPedido) async {
+    final token = await _storage.obtenerAccessToken();
+    await _api.put('/pedidos/$idPedido/cancelar', const {}, token: token);
+  }
+
   /// Personal: pedidos entregados con deuda pendiente, de sus tiendas.
   Future<List<Pedido>> listarDeudas() async {
     final token = await _storage.obtenerAccessToken();
@@ -227,6 +235,10 @@ class Pedido {
     required this.cliente,
     required this.producto,
     required this.vendedor,
+    this.registradoPorRol,
+    this.aprobadoPor,
+    this.canceladoPor,
+    this.entregadoPor,
   });
 
   factory Pedido.fromJson(Map<String, dynamic> json) => Pedido(
@@ -254,6 +266,13 @@ class Pedido {
     producto: json['producto'] as String,
     // null si lo registró el propio cliente (autoservicio), no el personal.
     vendedor: json['vendedor'] as String?,
+    // Estos 4 solo vienen del backend si quien pide la lista es
+    // ADMIN/SUPERADMIN (ver pedidosController.js) — para TRABAJADOR o el
+    // propio cliente siempre llegan null.
+    registradoPorRol: json['registradoPorRol'] as String?,
+    aprobadoPor: json['aprobadoPor'] as String?,
+    canceladoPor: json['canceladoPor'] as String?,
+    entregadoPor: json['entregadoPor'] as String?,
   );
 
   final int idPedido;
@@ -275,6 +294,14 @@ class Pedido {
   final PedidoClienteResumen cliente;
   final String producto;
   final String? vendedor;
+
+  /// Visibles solo para ADMIN/SUPERADMIN (el backend ya filtra esto, no
+  /// hace falta repetir el chequeo de rol acá — si no corresponde, llegan
+  /// null y la UI simplemente no muestra nada).
+  final String? registradoPorRol;
+  final String? aprobadoPor;
+  final String? canceladoPor;
+  final String? entregadoPor;
 
   bool get esSolicitado => estado == 'SOLICITADO';
   bool get esEntregado => estado == 'ENTREGADO';

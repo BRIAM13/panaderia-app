@@ -62,8 +62,11 @@ Map<SeccionPedido, List<Pedido>> agruparPedidosPorFecha(List<Pedido> pedidos) {
 /// quién es) y se prende en la vista de personal (necesita ver de quién es
 /// cada pedido). [onEntregar] solo tiene efecto en pedidos PENDIENTE — es
 /// lo que activa el botón "Marcar entregado" en la vista de personal.
-/// [onCancelar] solo tiene efecto en SOLICITADO/PENDIENTE — es lo que
-/// activa "Cancelar pedido" en la vista del propio cliente.
+/// [onCancelar] solo tiene efecto en SOLICITADO/PENDIENTE — activa
+/// "Cancelar pedido" tanto en la vista del propio cliente (autoservicio,
+/// solo sus pedidos) como en la de personal (cualquier pedido de su
+/// tienda) — cada vista pasa su propio callback contra el endpoint que le
+/// corresponde.
 class ListaPedidosPorSeccion extends StatelessWidget {
   const ListaPedidosPorSeccion({
     super.key,
@@ -304,9 +307,10 @@ class PedidoCard extends StatelessWidget {
   final VoidCallback? onRechazar;
   final VoidCallback? onEntregar;
 
-  /// Presente solo en la vista del propio cliente — igual que las de
-  /// arriba, solo se muestra si el pedido todavía se puede cancelar
-  /// (SOLICITADO o PENDIENTE, no si ya fue entregado).
+  /// Presente en la vista del propio cliente (cancela su propio pedido) o
+  /// en la de personal (cancela cualquier pedido de su tienda) — solo se
+  /// muestra si el pedido todavía se puede cancelar (SOLICITADO o
+  /// PENDIENTE, no si ya fue entregado).
   final VoidCallback? onCancelar;
 
   @override
@@ -450,6 +454,7 @@ class PedidoCard extends StatelessWidget {
                   ),
                 ],
               ),
+              _InfoAuditoriaPedido(pedido: pedido),
               if (mostrarAccionesSolicitud) ...[
                 const SizedBox(height: 10),
                 Row(
@@ -503,6 +508,71 @@ class PedidoCard extends StatelessWidget {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+String _etiquetaRolAuditoria(String? rol) {
+  switch (rol) {
+    case 'ADMIN':
+      return 'Administrador';
+    case 'SUPERADMIN':
+      return 'Super administrador';
+    case 'TRABAJADOR':
+      return 'Trabajador';
+    case 'CLIENTE':
+      return 'el propio cliente';
+    default:
+      return rol ?? '';
+  }
+}
+
+/// Quién registró/confirmó/canceló/entregó el pedido — el backend solo
+/// llena estos campos si quien pidió la lista es ADMIN o SUPERADMIN (ver
+/// pedidosController.js), así que para cualquier otra vista (TRABAJADOR,
+/// el propio cliente) todos llegan null y este widget no muestra nada.
+class _InfoAuditoriaPedido extends StatelessWidget {
+  const _InfoAuditoriaPedido({required this.pedido});
+
+  final Pedido pedido;
+
+  @override
+  Widget build(BuildContext context) {
+    final lineas = <String>[
+      if (pedido.registradoPorRol != null)
+        'Registrado por: ${_etiquetaRolAuditoria(pedido.registradoPorRol)}',
+      if (pedido.aprobadoPor != null) 'Confirmado por: ${pedido.aprobadoPor}',
+      if (pedido.canceladoPor != null)
+        'Cancelado por: ${pedido.canceladoPor}',
+      if (pedido.entregadoPor != null)
+        'Entregado por: ${pedido.entregadoPor}',
+    ];
+    if (lineas.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: lineas
+              .map(
+                (l) => Text(
+                  l,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              )
+              .toList(),
         ),
       ),
     );

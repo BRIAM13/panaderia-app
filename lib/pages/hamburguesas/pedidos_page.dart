@@ -182,6 +182,45 @@ class _PedidosPageState extends State<PedidosPage> {
     }
   }
 
+  Future<void> _cancelar(Pedido pedido) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancelar pedido'),
+        content: Text(
+          '¿Seguro que quieres cancelar el pedido #${pedido.idPedido}? '
+          'Se avisará al cliente y no podrá deshacerse.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('No'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sí, cancelar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+
+    try {
+      await _pedidosService.cancelar(pedido.idPedido);
+      NotificacionesService.avisarCambioPedido();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Pedido #${pedido.idPedido} cancelado.')),
+      );
+      _cargar();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.mensaje)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -304,7 +343,11 @@ class _PedidosPageState extends State<PedidosPage> {
             ),
             const SizedBox(height: 10),
           ],
-          ListaPedidosPorSeccion(pedidos: resto, onEntregar: _entregar),
+          ListaPedidosPorSeccion(
+            pedidos: resto,
+            onEntregar: _entregar,
+            onCancelar: _cancelar,
+          ),
         ],
       ),
     );
