@@ -92,6 +92,15 @@ async function crearPedido(req, res, next) {
       userAgent: req.headers['user-agent'],
     });
 
+    // Silencioso a propósito (sin titulo/cuerpo, ver enviarPush): solo para
+    // que las pantallas de Pedidos de OTROS dispositivos/miembros del
+    // personal de esta tienda se actualicen solas — nadie quiere un banner
+    // de notificación por cada acción de otro compañero, serían demasiadas.
+    await notificarPersonalTienda({
+      idTienda,
+      datos: { tipo: 'NUEVO_PEDIDO', idTienda: String(idTienda), idPedido: String(idPedido) },
+    });
+
     return res.status(201).json({
       mensaje: 'Pedido registrado correctamente',
       idPedido,
@@ -578,6 +587,13 @@ async function cancelarPedido(req, res, next) {
       cuerpo: `Tu pedido #${pedido.IdPedido} fue cancelado por la tienda.`,
       datos: { tipo: 'PEDIDO_CANCELADO', idPedido: String(pedido.IdPedido) },
     });
+    // Silencioso a propósito — ver comentario en notificarPersonalTienda
+    // de crearPedido: solo refresca la pantalla de otros dispositivos del
+    // personal, sin bombardearlos de notificaciones.
+    await notificarPersonalTienda({
+      idTienda: pedido.IdTienda,
+      datos: { tipo: 'PEDIDO_CANCELADO', idTienda: String(pedido.IdTienda), idPedido: String(pedido.IdPedido) },
+    });
 
     return res.status(200).json({ mensaje: 'Pedido cancelado correctamente' });
   } catch (err) {
@@ -647,6 +663,11 @@ async function aprobarPedido(req, res, next) {
       cuerpo: `Tu pedido #${pedido.IdPedido} por S/ ${Number(pedido.Total).toFixed(2)} fue aceptado y ya está en camino a entregarse.`,
       datos: { tipo: 'PEDIDO_APROBADO', idPedido: String(pedido.IdPedido) },
     });
+    // Silencioso — ídem.
+    await notificarPersonalTienda({
+      idTienda: pedido.IdTienda,
+      datos: { tipo: 'PEDIDO_APROBADO', idTienda: String(pedido.IdTienda), idPedido: String(pedido.IdPedido) },
+    });
 
     return res.status(200).json({ mensaje: 'Pedido confirmado correctamente' });
   } catch (err) {
@@ -681,6 +702,11 @@ async function rechazarPedido(req, res, next) {
       titulo: 'Tu pedido fue rechazado',
       cuerpo: `Tu pedido #${pedido.IdPedido} no pudo confirmarse por falta de stock. Intenta nuevamente más tarde.`,
       datos: { tipo: 'PEDIDO_RECHAZADO', idPedido: String(pedido.IdPedido) },
+    });
+    // Silencioso — ídem.
+    await notificarPersonalTienda({
+      idTienda: pedido.IdTienda,
+      datos: { tipo: 'PEDIDO_RECHAZADO', idTienda: String(pedido.IdTienda), idPedido: String(pedido.IdPedido) },
     });
 
     return res.status(200).json({ mensaje: 'Pedido rechazado correctamente' });
@@ -760,6 +786,11 @@ async function marcarDeudaPagada(req, res, next) {
       cuerpo: `Tu deuda del pedido #${pedido.IdPedido} por S/ ${Number(pedido.Total).toFixed(2)} quedó registrada como pagada. ¡Gracias!`,
       datos: { tipo: 'DEUDA_PAGADA', idPedido: String(pedido.IdPedido) },
     });
+    // Silencioso — ver comentario en notificarPersonalTienda de crearPedido.
+    await notificarPersonalTienda({
+      idTienda: pedido.IdTienda,
+      datos: { tipo: 'DEUDA_PAGADA', idTienda: String(pedido.IdTienda), idPedido: String(pedido.IdPedido) },
+    });
 
     return res.status(200).json({ mensaje: 'Deuda marcada como pagada' });
   } catch (err) {
@@ -812,6 +843,11 @@ async function entregarPedido(req, res, next) {
         ? `Tu pedido #${pedido.IdPedido} fue entregado y pagado. ¡Gracias por tu compra!`
         : `Tu pedido #${pedido.IdPedido} fue entregado. Queda una deuda pendiente de S/ ${Number(pedido.Total).toFixed(2)}.`,
       datos: { tipo: 'PEDIDO_ENTREGADO', idPedido: String(pedido.IdPedido) },
+    });
+    // Silencioso — ídem.
+    await notificarPersonalTienda({
+      idTienda: pedido.IdTienda,
+      datos: { tipo: 'PEDIDO_ENTREGADO', idTienda: String(pedido.IdTienda), idPedido: String(pedido.IdPedido) },
     });
 
     return res.status(200).json({ mensaje: 'Pedido marcado como entregado' });

@@ -23,6 +23,14 @@ function obtenerApp() {
  * inválidos/expirados (dispositivo desinstaló la app, etc.) se devuelven
  * en `tokensInvalidos` para que el llamador los borre de
  * DispositivosNotificacion — Firebase no los limpia solo.
+ *
+ * Si no se manda `titulo`, el mensaje sale sin bloque `notification` —
+ * queda "silencioso": no aparece ningún banner en el dispositivo, pero la
+ * app (si está en primer plano) igual recibe el `data` y puede reaccionar
+ * (ej. refrescar una lista sola). Se usa para sincronizar pantallas entre
+ * el personal sin bombardearlos de notificaciones por cada acción de
+ * otro — a diferencia de los avisos al cliente, que sí deben ser
+ * visibles.
  */
 async function enviarPush({ tokens, titulo, cuerpo, datos }) {
   if (!tokens || tokens.length === 0) return { enviados: 0, tokensInvalidos: [] };
@@ -30,7 +38,7 @@ async function enviarPush({ tokens, titulo, cuerpo, datos }) {
   obtenerApp();
 
   const mensaje = {
-    notification: { title: titulo, body: cuerpo },
+    ...(titulo ? { notification: { title: titulo, body: cuerpo } } : {}),
     data: datos ? Object.fromEntries(Object.entries(datos).map(([k, v]) => [k, String(v)])) : undefined,
     tokens,
   };
