@@ -18,9 +18,10 @@ class AdBanner extends StatefulWidget {
   State<AdBanner> createState() => _AdBannerState();
 }
 
-class _AdBannerState extends State<AdBanner> {
+class _AdBannerState extends State<AdBanner> with WidgetsBindingObserver {
   BannerAd? _bannerAd;
   bool _fallo = false;
+  bool _bloquearToques = false;
 
   bool get _plataformaSoportada =>
       !kIsWeb && (Platform.isAndroid || Platform.isIOS);
@@ -29,7 +30,26 @@ class _AdBannerState extends State<AdBanner> {
   void initState() {
     super.initState();
     if (_plataformaSoportada) {
+      WidgetsBinding.instance.addObserver(this);
       WidgetsBinding.instance.addPostFrameCallback((_) => _cargarAnuncio());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Al tocar el anuncio, Android abre el navegador externo consumiendo el
+    // toque; pero al presionar "Atrás" para volver, la Activity se reanuda y
+    // el sistema a veces reenvía ese mismo toque (fantasma) a la vista
+    // nativa del anuncio, reabriendo el navegador de inmediato — y así en
+    // bucle mientras se siga presionando "Atrás" o se use el gesto. Por eso
+    // se absorben los toques del anuncio un instante cada vez que la app
+    // vuelve a primer plano, para descartar ese toque fantasma sin afectar
+    // toques reales posteriores.
+    if (state == AppLifecycleState.resumed && _plataformaSoportada) {
+      setState(() => _bloquearToques = true);
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        if (mounted) setState(() => _bloquearToques = false);
+      });
     }
   }
 
@@ -71,6 +91,9 @@ class _AdBannerState extends State<AdBanner> {
 
   @override
   void dispose() {
+    if (_plataformaSoportada) {
+      WidgetsBinding.instance.removeObserver(this);
+    }
     _bannerAd?.dispose();
     super.dispose();
   }
@@ -103,10 +126,13 @@ class _AdBannerState extends State<AdBanner> {
             width: double.infinity,
             height: altoTotal,
             child: Center(
-              child: SizedBox(
-                width: anuncio.size.width.toDouble(),
-                height: anuncio.size.height.toDouble(),
-                child: AdWidget(ad: anuncio),
+              child: IgnorePointer(
+                ignoring: _bloquearToques,
+                child: SizedBox(
+                  width: anuncio.size.width.toDouble(),
+                  height: anuncio.size.height.toDouble(),
+                  child: AdWidget(ad: anuncio),
+                ),
               ),
             ),
           ),
