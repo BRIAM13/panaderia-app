@@ -71,8 +71,12 @@ function rolesQuePuedeVer(rolDelQueLlama) {
 /**
  * Busca una Persona por DNI en NUESTRA base (nunca RENIEC — eso lo sigue
  * haciendo el frontend contra /external/dni/:dni, igual que en Clientes).
- * Si ya es trabajador, incluye sus tiendas asignadas para que el admin que
- * está registrando sepa que esta persona ya trabaja en otro lado.
+ * Si ya es trabajador (activo O dado de baja anteriormente), incluye sus
+ * tiendas asignadas para que el admin que está registrando sepa que esta
+ * persona ya trabajó ahí antes — el JOIN a propósito NO filtra por Estado:
+ * si se hiciera, alguien dado de baja aparecería como si nunca hubiera sido
+ * trabajador, ocultando justo la información (tienda anterior) que más le
+ * sirve al admin para volver a registrarlo.
  */
 async function buscarPorDni(req, res, next) {
   const { dni } = req.params;
@@ -93,7 +97,7 @@ async function buscarPorDni(req, res, next) {
                trab.IdTrabajador, trab.Cargo, trab.Salario,
                CASE WHEN EXISTS (SELECT 1 FROM Clientes c WHERE c.IdPersona = p.IdPersona AND c.Estado = 1) THEN 1 ELSE 0 END AS EsCliente
         FROM Personas p
-        LEFT JOIN Trabajadores trab ON trab.IdPersona = p.IdPersona AND trab.Estado = 1
+        LEFT JOIN Trabajadores trab ON trab.IdPersona = p.IdPersona
         WHERE p.DNI = @DNI
       `);
 

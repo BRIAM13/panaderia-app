@@ -48,6 +48,11 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
   List<Tienda> _misTiendas = [];
   final Set<int> _tiendasSeleccionadas = {};
   final Set<int> _tiendasYaAsignadas = {};
+  // Tiendas donde ya tuvo acceso antes pero ya no (ej. fue dado de baja) —
+  // se pre-marcan como conveniencia (lo más común es reactivarlo justo
+  // ahí), pero a diferencia de _tiendasYaAsignadas quedan editables: el
+  // admin puede desmarcarla si esta vez no quiere reactivarlo ahí.
+  final Set<int> _tiendasReactivando = {};
 
   bool _cargandoRoles = true;
   List<RolAsignable> _rolesAsignables = [];
@@ -141,6 +146,7 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
         _yaEsTrabajador = false;
         _tiendasAsignadasOtras = [];
         _tiendasYaAsignadas.clear();
+        _tiendasReactivando.clear();
         _nombresController.clear();
         _apellidoPaternoController.clear();
         _apellidoMaternoController.clear();
@@ -193,9 +199,17 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
                   .where((t) => t.activo)
                   .map((t) => t.idTienda),
             );
+          _tiendasReactivando
+            ..clear()
+            ..addAll(
+              resultado.tiendasAsignadas
+                  .where((t) => !t.activo)
+                  .map((t) => t.idTienda),
+            );
           _tiendasSeleccionadas
             ..clear()
-            ..addAll(_tiendasYaAsignadas);
+            ..addAll(_tiendasYaAsignadas)
+            ..addAll(_tiendasReactivando);
           _camposExpandidos = true;
           _ultimoDniConsultado = dni;
         });
@@ -539,6 +553,8 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
                                 final yaAsignado = _tiendasYaAsignadas.contains(
                                   tienda.idTienda,
                                 );
+                                final reactivando = _tiendasReactivando
+                                    .contains(tienda.idTienda);
                                 return CheckboxListTile(
                                   contentPadding: EdgeInsets.zero,
                                   value: _tiendasSeleccionadas.contains(
@@ -547,6 +563,8 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
                                   title: Text(tienda.nombre),
                                   subtitle: yaAsignado
                                       ? const Text('Ya tiene acceso')
+                                      : reactivando
+                                      ? const Text('Tuvo acceso antes — se reactivará')
                                       : null,
                                   onChanged: yaAsignado
                                       ? null
