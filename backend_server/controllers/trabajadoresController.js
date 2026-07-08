@@ -2,8 +2,54 @@ const bcrypt = require('bcryptjs');
 const { sql, getPool } = require('../config/db');
 const { registrarAuditoria } = require('../utils/auditLog');
 const { obtenerIdTrabajador, tieneAccesoATienda } = require('../utils/tiendaAcceso');
+const { enviarPush } = require('../services/pushService');
 
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
+
+const MENSAJE_ROL_CAMBIADO =
+  'Tu cuenta fue actualizada con nuevos permisos. Vuelve a iniciar sesión para continuar.';
+
+/**
+ * Avisa por push (todos los dispositivos registrados de ese usuario) que su
+ * rol cambió — así la app puede reaccionar al instante (forzar volver al
+ * login) aunque el usuario no esté tocando nada en ese momento. Es un
+ * "empujón" adicional para que se entere más rápido: el chequeo real y
+ * garantizado sigue viviendo en el backend (authMiddleware.js /
+ * authController.refrescarToken), que rechaza la sesión vieja igual aunque
+ * este push nunca llegue (dispositivo sin conexión, token FCM vencido,
+ * etc.) — por eso nunca debe romper el flujo si falla.
+ */
+async function notificarCambioRol(idUsuario) {
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input('IdUsuario', sql.Int, idUsuario)
+      .query('SELECT FcmToken FROM DispositivosNotificacion WHERE IdUsuario = @IdUsuario');
+
+    const tokens = result.recordset.map((f) => f.FcmToken);
+    if (tokens.length === 0) return;
+
+    const { tokensInvalidos } = await enviarPush({
+      tokens,
+      titulo: 'Tu cuenta fue actualizada',
+      cuerpo: MENSAJE_ROL_CAMBIADO,
+      datos: { tipo: 'ROL_CAMBIADO' },
+    });
+
+    if (tokensInvalidos.length > 0) {
+      await pool
+        .request()
+        .query(
+          `DELETE FROM DispositivosNotificacion WHERE FcmToken IN (${tokensInvalidos
+            .map((t) => `'${t.replace(/'/g, "''")}'`)
+            .join(',')})`,
+        );
+    }
+  } catch (_) {
+    // Silencioso a propósito — ver comentario de la función.
+  }
+}
 
 function mayuscula(valor) {
   return valor ? valor.trim().toUpperCase() : valor;
@@ -255,9 +301,10 @@ async function crearTrabajador(req, res, next) {
     // su próximo inicio de sesión refleja el nuevo permiso, sin duplicar
     // su cuenta ni perder su historial de cliente.
     let cuentaCreada = false;
+    let idUsuarioParaNotificar = null;
     const cuentaExistente = await new sql.Request(transaction)
       .input('IdPersona', sql.Int, idPersona)
-      .query('SELECT IdUsuario FROM Usuarios WHERE IdPersona = @IdPersona');
+      .query('SELECT IdUsuario, IdRol FROM Usuarios WHERE IdPersona = @IdPersona');
 
     if (cuentaExistente.recordset.length === 0) {
       const usuarioTomado = await new sql.Request(transaction)
@@ -279,13 +326,24 @@ async function crearTrabajador(req, res, next) {
         cuentaCreada = true;
       }
     } else {
+      const { IdUsuario: idUsuarioExistente, IdRol: idRolAnterior } = cuentaExistente.recordset[0];
+      // Solo hace falta avisar/forzar re-login si el rol de acceso
+      // realmente cambia — reasignar la misma persona a otra tienda sin
+      // cambiarle el rol no debe expulsarla de su sesión.
+      if (idRolAnterior !== idRolAsignado) {
+        idUsuarioParaNotificar = idUsuarioExistente;
+      }
       await new sql.Request(transaction)
-        .input('IdUsuario', sql.Int, cuentaExistente.recordset[0].IdUsuario)
+        .input('IdUsuario', sql.Int, idUsuarioExistente)
         .input('IdRol', sql.Int, idRolAsignado)
         .query('UPDATE Usuarios SET IdRol = @IdRol WHERE IdUsuario = @IdUsuario');
     }
 
     await transaction.commit();
+
+    if (idUsuarioParaNotificar) {
+      await notificarCambioRol(idUsuarioParaNotificar);
+    }
 
     await registrarAuditoria({
       idUsuario: req.usuario.idUsuario,
@@ -403,21 +461,26 @@ async function cambiarRolTrabajador(req, res, next) {
     const usuario = await pool
       .request()
       .input('IdPersona', sql.Int, idPersona)
-      .query('SELECT IdUsuario FROM Usuarios WHERE IdPersona = @IdPersona');
+      .query('SELECT IdUsuario, IdRol FROM Usuarios WHERE IdPersona = @IdPersona');
     if (usuario.recordset.length === 0) {
       return res.status(404).json({ mensaje: 'Esta persona todavía no tiene una cuenta de acceso.' });
     }
+    const { IdUsuario: idUsuarioTrabajador, IdRol: idRolAnterior } = usuario.recordset[0];
 
     const rolResult = await pool.request().input('NombreRol', sql.VarChar(50), rol).query('SELECT IdRol FROM Roles WHERE NombreRol = @NombreRol');
     const idRolAsignado = rolResult.recordset[0].IdRol;
 
     await pool
       .request()
-      .input('IdUsuario', sql.Int, usuario.recordset[0].IdUsuario)
+      .input('IdUsuario', sql.Int, idUsuarioTrabajador)
       .input('IdRol', sql.Int, idRolAsignado)
       .query('UPDATE Usuarios SET IdRol = @IdRol WHERE IdUsuario = @IdUsuario');
 
     await pool.request().input('IdTrabajador', sql.Int, id).input('Cargo', sql.NVarChar(100), rol).query('UPDATE Trabajadores SET Cargo = @Cargo WHERE IdTrabajador = @IdTrabajador');
+
+    if (idRolAnterior !== idRolAsignado) {
+      await notificarCambioRol(idUsuarioTrabajador);
+    }
 
     await registrarAuditoria({
       idUsuario: req.usuario.idUsuario,

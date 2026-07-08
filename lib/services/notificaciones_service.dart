@@ -74,6 +74,22 @@ class NotificacionesService {
     }
   }
 
+  /// Cuando el backend cambia el rol de este usuario (ver
+  /// trabajadoresController.js → notificarCambioRol), manda este push para
+  /// que la app reaccione AL INSTANTE, sin esperar a que el usuario toque
+  /// algo que dispare una petición al servidor (que es el respaldo
+  /// garantizado, pero solo reactivo — ver ApiClient.onRolCambiado). Un
+  /// push puede fallar o demorarse (sin conexión, token FCM vencido, Doze
+  /// de Android en segundo plano), por eso este es un "empujón" extra, no
+  /// el único mecanismo.
+  static void _reaccionarSiEsCambioDeRol(RemoteMessage mensaje) {
+    if (mensaje.data['tipo'] != 'ROL_CAMBIADO') return;
+    ApiClient.onRolCambiado?.call(
+      mensaje.notification?.body ??
+          'Tu cuenta fue actualizada con nuevos permisos. Vuelve a iniciar sesión para continuar.',
+    );
+  }
+
   Future<void> inicializarYRegistrar() async {
     if (kIsWeb || !Platform.isAndroid) return;
 
@@ -86,12 +102,19 @@ class NotificacionesService {
       FirebaseMessaging.onMessage.listen((mensaje) {
         _mostrarNotificacionLocal(mensaje);
         _emitirSiEsEventoDePedido(mensaje);
+        _reaccionarSiEsCambioDeRol(mensaje);
       });
-      FirebaseMessaging.onMessageOpenedApp.listen(_emitirSiEsEventoDePedido);
+      FirebaseMessaging.onMessageOpenedApp.listen((mensaje) {
+        _emitirSiEsEventoDePedido(mensaje);
+        _reaccionarSiEsCambioDeRol(mensaje);
+      });
 
       // App abierta desde cero (estaba cerrada) tocando la notificación.
       final mensajeInicial = await mensajeria.getInitialMessage();
-      if (mensajeInicial != null) _emitirSiEsEventoDePedido(mensajeInicial);
+      if (mensajeInicial != null) {
+        _emitirSiEsEventoDePedido(mensajeInicial);
+        _reaccionarSiEsCambioDeRol(mensajeInicial);
+      }
 
       final token = await mensajeria.getToken();
       if (token == null) return;
