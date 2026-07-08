@@ -12,6 +12,7 @@ import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/contador_animado.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/tarjeta_3d.dart';
@@ -42,12 +43,6 @@ class _DashboardPageState extends State<DashboardPage> {
   List<Tienda> _tiendas = [];
   Tienda? _tiendaSeleccionada;
   TiendaResumen? _resumen;
-
-  /// Día que se muestra arriba (cobrado/deuda del día) — hoy por defecto.
-  /// Solo se puede cambiar a un día con datos reales (ver
-  /// [_fechasConDatos]), nunca a uno vacío.
-  DateTime _fechaSeleccionada = DateTime.now();
-  List<DateTime> _fechasConDatos = [];
 
   @override
   void initState() {
@@ -96,30 +91,14 @@ class _DashboardPageState extends State<DashboardPage> {
       setState(() {
         _tiendas = tiendas;
         _tiendaSeleccionada = tiendas.isNotEmpty ? tiendas.first : null;
-        _fechaSeleccionada = DateTime.now();
       });
-      if (_tiendaSeleccionada != null) {
-        await Future.wait([_cargarResumen(), _cargarFechasConDatos()]);
-      }
+      if (_tiendaSeleccionada != null) await _cargarResumen();
     } on ApiException catch (e) {
       setState(() => _error = e.mensaje);
     } catch (_) {
       setState(() => _error = 'No se pudieron cargar tus tiendas.');
     } finally {
       if (mounted) setState(() => _cargando = false);
-    }
-  }
-
-  Future<void> _cargarFechasConDatos() async {
-    if (_tiendaSeleccionada == null) return;
-    try {
-      final fechas = await _tiendasService.fechasConVentas(
-        _tiendaSeleccionada!.idTienda,
-      );
-      if (mounted) setState(() => _fechasConDatos = fechas);
-    } catch (_) {
-      // Silencioso: si falla, el selector de fecha simplemente no deja
-      // elegir ningún día distinto a hoy hasta que se pueda recargar.
     }
   }
 
@@ -132,9 +111,10 @@ class _DashboardPageState extends State<DashboardPage> {
       });
     }
     try {
+      // Sin `fecha`: el backend usa hoy — el detalle día por día (con
+      // selector de fecha) vive en Historial de ventas, no acá.
       final resumen = await _tiendasService.resumen(
         _tiendaSeleccionada!.idTienda,
-        fecha: _fechaSeleccionada,
       );
       if (mounted) setState(() => _resumen = resumen);
     } on ApiException catch (e) {
@@ -146,31 +126,6 @@ class _DashboardPageState extends State<DashboardPage> {
     } finally {
       if (mounted && !silencioso) setState(() => _cargando = false);
     }
-  }
-
-  bool _mismoDia(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  Future<void> _seleccionarFecha() async {
-    if (_fechasConDatos.isEmpty) return;
-    final primero = _fechasConDatos.reduce((a, b) => a.isBefore(b) ? a : b);
-    final ultimo = _fechasConDatos.reduce((a, b) => a.isAfter(b) ? a : b);
-
-    final elegida = await showDatePicker(
-      context: context,
-      initialDate: _fechaSeleccionada,
-      firstDate: primero,
-      lastDate: ultimo.isAfter(DateTime.now()) ? ultimo : DateTime.now(),
-      // Solo se puede elegir un día con al menos una venta registrada —
-      // el resto del calendario queda deshabilitado.
-      selectableDayPredicate: (dia) =>
-          _fechasConDatos.any((f) => _mismoDia(f, dia)),
-      helpText: 'Elige un día con ventas registradas',
-    );
-    if (elegida == null || _mismoDia(elegida, _fechaSeleccionada)) return;
-
-    setState(() => _fechaSeleccionada = elegida);
-    await _cargarResumen();
   }
 
   @override
@@ -240,12 +195,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   .map((t) => DropdownMenuItem(value: t, child: Text(t.nombre)))
                   .toList(),
               onChanged: (t) {
-                setState(() {
-                  _tiendaSeleccionada = t;
-                  _fechaSeleccionada = DateTime.now();
-                });
+                setState(() => _tiendaSeleccionada = t);
                 _cargarResumen();
-                _cargarFechasConDatos();
               },
               decoration: const InputDecoration(
                 labelText: 'Tienda',
@@ -255,75 +206,24 @@ class _DashboardPageState extends State<DashboardPage> {
             const SizedBox(height: 16),
           ],
           if (resumen != null) ...[
-            _SelectorFecha(
-                  fecha: _fechaSeleccionada,
-                  habilitado: _fechasConDatos.isNotEmpty,
-                  onTap: _seleccionarFecha,
+            // Solo lo cobrado (pagado) de hoy — la deuda no cuenta acá. Al
+            // tocarla (Admin/Superadmin) se abre Historial de ventas, que
+            // trae el detalle completo: cobrado/deuda por día con selector
+            // de fecha, y el historial jerárquico de pedidos resueltos.
+            _TarjetaCobradoHoy(
+                  cantidad: resumen.cobradoDiaCantidad,
+                  total: resumen.cobradoDiaTotal,
+                  onTap: _esGestorDeVentas ? _abrirHistorialVentas : null,
                 )
                 .animate()
-                .fadeIn(delay: 80.ms, duration: 300.ms)
-                .moveX(begin: -12, end: 0),
-            const SizedBox(height: 10),
-            // AnimatedSwitcher hace que las dos tarjetas de dinero entren
-            // con una transición cada vez que cambia el día elegido, no
-            // solo la primera vez que carga la pantalla.
-            AnimatedSwitcher(
-              duration: 420.ms,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position:
-                      Tween<Offset>(
-                        begin: const Offset(0, 0.08),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutCubic,
-                        ),
-                      ),
-                  child: child,
-                ),
-              ),
-              child: Row(
-                key: ValueKey(_fechaSeleccionada.toIso8601String().split('T').first),
-                children: [
-                  Expanded(
-                    child: _TarjetaMontoDia(
-                      titulo: 'Cobrado',
-                      icono: Icons.trending_up_rounded,
-                      colores: const [
-                        AppColors.primary,
-                        AppColors.secondary,
-                      ],
-                      cantidad: resumen.cobradoDiaCantidad,
-                      total: resumen.cobradoDiaTotal,
-                      etiquetaCantidad: 'cobrado(s)',
-                      onTap: _esGestorDeVentas
-                          ? _abrirHistorialVentas
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _TarjetaMontoDia(
-                      titulo: 'Deuda del día',
-                      icono: Icons.account_balance_wallet_rounded,
-                      colores: const [
-                        Color(0xFFC62828),
-                        Color(0xFFE57373),
-                      ],
-                      cantidad: resumen.deudaDiaCantidad,
-                      total: resumen.deudaDiaTotal,
-                      etiquetaCantidad: 'con deuda',
-                      onTap: _esGestorDeVentas
-                          ? _abrirHistorialVentas
-                          : null,
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fadeIn(delay: 120.ms, duration: 450.ms),
+                .fadeIn(delay: 100.ms, duration: 450.ms)
+                .moveY(begin: 18, end: 0, curve: Curves.easeOutCubic)
+                .scale(
+                  begin: const Offset(0.94, 0.94),
+                  end: const Offset(1, 1),
+                  curve: Curves.easeOutCubic,
+                )
+                .flipH(begin: 0.15, end: 0, duration: 400.ms),
             const SizedBox(height: 16),
             GridView.count(
               crossAxisCount: 2,
@@ -401,131 +301,19 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-/// Cuenta hacia arriba desde 0 hasta [valor] con una animación suave —
-/// parte del "moderno y animado" que se pidió para este dashboard.
-class _ContadorAnimado extends StatelessWidget {
-  const _ContadorAnimado({
-    required this.valor,
-    required this.formatear,
-    required this.estilo,
-  });
-
-  final double valor;
-  final String Function(double) formatear;
-  final TextStyle? estilo;
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: valor),
-      duration: const Duration(milliseconds: 900),
-      curve: Curves.easeOutCubic,
-      builder: (context, valorActual, _) => FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Text(formatear(valorActual), style: estilo, maxLines: 1),
-      ),
-    );
-  }
-}
-
-/// Chip que muestra el día elegido para "Cobrado"/"Deuda del día" y abre el
-/// selector de fecha al tocarlo — solo permite elegir días con ventas
-/// registradas (ver [_DashboardPageState._seleccionarFecha]).
-class _SelectorFecha extends StatelessWidget {
-  const _SelectorFecha({
-    required this.fecha,
-    required this.habilitado,
-    required this.onTap,
-  });
-
-  final DateTime fecha;
-  final bool habilitado;
-  final VoidCallback onTap;
-
-  bool get _esHoy {
-    final hoy = DateTime.now();
-    return fecha.year == hoy.year &&
-        fecha.month == hoy.month &&
-        fecha.day == hoy.day;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final etiqueta = _esHoy
-        ? 'Hoy, ${DateFormat('d \'de\' MMMM', 'es').format(fecha)}'
-        : DateFormat('EEEE d \'de\' MMMM', 'es').format(fecha);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: habilitado ? onTap : null,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: AppColors.secondary.withValues(alpha: 0.25),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.calendar_month_rounded,
-                size: 16,
-                color: AppColors.secondary,
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  etiqueta[0].toUpperCase() + etiqueta.substring(1),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (habilitado) ...[
-                const SizedBox(width: 4),
-                const Icon(
-                  Icons.expand_more_rounded,
-                  size: 18,
-                  color: AppColors.textSecondary,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Tarjeta compacta de dinero para el día elegido (cobrado o deuda) — dos
-/// de estas van lado a lado arriba del Dashboard. El brillo diagonal y el
-/// ícono con pulso continuo son a propósito: le dan ese aire "vivo" que se
-/// pidió, sin exagerar (nada se mueve tan rápido como para distraer).
-class _TarjetaMontoDia extends StatelessWidget {
-  const _TarjetaMontoDia({
-    required this.titulo,
-    required this.icono,
-    required this.colores,
+/// Tarjeta única "Cobrado hoy" — solo pedidos ENTREGADO+PAGADO, la deuda no
+/// se cuenta acá. Al tocarla (Admin/Superadmin) se abre Historial de
+/// ventas, que trae el desglose completo (cobrado/deuda por día, con
+/// selector de fecha) y el historial jerárquico de pedidos resueltos.
+class _TarjetaCobradoHoy extends StatelessWidget {
+  const _TarjetaCobradoHoy({
     required this.cantidad,
     required this.total,
-    required this.etiquetaCantidad,
     this.onTap,
   });
 
-  final String titulo;
-  final IconData icono;
-  final List<Color> colores;
   final int cantidad;
   final double total;
-  final String etiquetaCantidad;
 
   /// Solo presente para Admin/Superadmin — un Trabajador raso ve esta
   /// misma tarjeta pero no puede entrar al historial completo de ventas.
@@ -534,16 +322,16 @@ class _TarjetaMontoDia extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tarjeta3D(
-      borderRadius: 22,
-      profundidad: 0.002,
+      borderRadius: 24,
+      profundidad: 0.0022,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
+        padding: const EdgeInsets.all(22),
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: colores,
+            colors: [AppColors.primary, AppColors.secondary],
           ),
         ),
         child: Column(
@@ -551,7 +339,7 @@ class _TarjetaMontoDia extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icono, color: Colors.white, size: 17)
+                Icon(Icons.trending_up_rounded, color: Colors.white, size: 20)
                     .animate(onPlay: (c) => c.repeat(reverse: true))
                     .scale(
                       begin: const Offset(1, 1),
@@ -559,42 +347,36 @@ class _TarjetaMontoDia extends StatelessWidget {
                       duration: 1400.ms,
                       curve: Curves.easeInOut,
                     ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    titulo,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    'Cobrado hoy',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: Colors.white),
                   ),
                 ),
                 if (onTap != null)
                   const Icon(
                     Icons.chevron_right_rounded,
                     color: Colors.white70,
-                    size: 18,
                   ),
               ],
             ),
             const SizedBox(height: 10),
-            _ContadorAnimado(
+            ContadorAnimado(
               valor: total,
               formatear: (v) => 'S/ ${v.toStringAsFixed(2)}',
               estilo: const TextStyle(
                 color: Colors.white,
-                fontSize: 22,
+                fontSize: 34,
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
             Text(
-              '$cantidad $etiquetaCantidad',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              '$cantidad pedido(s) cobrado(s) hoy',
+              style: const TextStyle(color: Colors.white70),
             ),
           ],
         ),
@@ -656,7 +438,7 @@ class _TarjetaEstadistica extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     esNumero != null
-                        ? _ContadorAnimado(
+                        ? ContadorAnimado(
                             valor: esNumero,
                             formatear: (v) => valor.startsWith('S/')
                                 ? 'S/ ${v.toStringAsFixed(2)}'
