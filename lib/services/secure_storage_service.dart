@@ -49,6 +49,10 @@ class SecureStorageService {
 
   Future<bool> obtenerRecordarme() async {
     final valor = await _storage.read(key: _keyRecordarme);
+    // Si nunca se guardó la preferencia (primer inicio de sesión de todos),
+    // se asume "recordarme" activado, igual que el valor por defecto del
+    // switch en la pantalla de login.
+    if (valor == null) return true;
     return valor == 'true';
   }
 

@@ -4,6 +4,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
+import 'secure_storage_service.dart';
+
 /// Excepción con el mensaje ya listo para mostrar al usuario, tal como lo
 /// entrega el backend (`{ mensaje, errores? }`).
 class ApiException implements Exception {
@@ -47,6 +49,13 @@ class ApiConfig {
 class ApiClient {
   const ApiClient();
 
+  // Azure SQL (oferta gratuita) pausa la base de datos sola tras un rato de
+  // inactividad, y la primera consulta tras eso puede tardar bastante en
+  // "despertarla" — 15s no alcanzaba y la app mostraba "no se pudo conectar"
+  // aunque el servidor sí estaba respondiendo, solo que lento. Se amplía
+  // para dar tiempo a ese primer despertar sin fallar de más.
+  static const _timeoutHttp = Duration(seconds: 45);
+
   Uri _uri(String path) => Uri.parse('${ApiConfig.baseUrl}$path');
 
   Map<String, String> _headers({String? token}) => {
@@ -58,72 +67,104 @@ class ApiClient {
     String path,
     Map<String, dynamic> body, {
     String? token,
-  }) async {
-    final http.Response respuesta;
-    try {
-      respuesta = await http
-          .post(
-            _uri(path),
-            headers: _headers(token: token),
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 15));
-    } catch (_) {
-      throw ApiException(
-        'No se pudo conectar con el servidor. Verifica tu conexión.',
-      );
-    }
-    return _procesarRespuesta(respuesta);
-  }
+  }) => _conRenovacionDeToken(
+    token,
+    (t) => http
+        .post(_uri(path), headers: _headers(token: t), body: jsonEncode(body))
+        .timeout(_timeoutHttp),
+  );
 
-  Future<Map<String, dynamic>> get(String path, {String? token}) async {
-    final http.Response respuesta;
-    try {
-      respuesta = await http
-          .get(_uri(path), headers: _headers(token: token))
-          .timeout(const Duration(seconds: 15));
-    } catch (_) {
-      throw ApiException(
-        'No se pudo conectar con el servidor. Verifica tu conexión.',
+  Future<Map<String, dynamic>> get(String path, {String? token}) =>
+      _conRenovacionDeToken(
+        token,
+        (t) => http
+            .get(_uri(path), headers: _headers(token: t))
+            .timeout(_timeoutHttp),
       );
-    }
-    return _procesarRespuesta(respuesta);
-  }
 
   Future<Map<String, dynamic>> put(
     String path,
     Map<String, dynamic> body, {
     String? token,
-  }) async {
-    final http.Response respuesta;
-    try {
-      respuesta = await http
-          .put(
-            _uri(path),
-            headers: _headers(token: token),
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 15));
-    } catch (_) {
-      throw ApiException(
-        'No se pudo conectar con el servidor. Verifica tu conexión.',
+  }) => _conRenovacionDeToken(
+    token,
+    (t) => http
+        .put(_uri(path), headers: _headers(token: t), body: jsonEncode(body))
+        .timeout(_timeoutHttp),
+  );
+
+  Future<Map<String, dynamic>> delete(String path, {String? token}) =>
+      _conRenovacionDeToken(
+        token,
+        (t) => http
+            .delete(_uri(path), headers: _headers(token: t))
+            .timeout(_timeoutHttp),
       );
+
+  /// Ejecuta la petición y, si el backend responde 401 (el middleware de
+  /// auth solo usa 401 para "token ausente/inválido/vencido" — los permisos
+  /// insuficientes son 403, ver authMiddleware.js), intenta renovar el
+  /// access token con el refresh token guardado y reintenta UNA vez con el
+  /// token nuevo. Así el usuario nunca ve un error ni tiene que volver a
+  /// loguearse mientras el refresh token (7 días) siga vigente — antes de
+  /// esto, un access token vencido (1h) rompía silenciosamente cualquier
+  /// pantalla hasta que el usuario cerrara y volviera a iniciar sesión.
+  Future<Map<String, dynamic>> _conRenovacionDeToken(
+    String? token,
+    Future<http.Response> Function(String? token) peticion,
+  ) async {
+    http.Response respuesta = await _ejecutar(() => peticion(token));
+
+    if (respuesta.statusCode == 401 && token != null) {
+      final nuevoToken = await _renovarAccessToken();
+      if (nuevoToken != null) {
+        respuesta = await _ejecutar(() => peticion(nuevoToken));
+      }
     }
+
     return _procesarRespuesta(respuesta);
   }
 
-  Future<Map<String, dynamic>> delete(String path, {String? token}) async {
-    final http.Response respuesta;
+  Future<http.Response> _ejecutar(
+    Future<http.Response> Function() peticion,
+  ) async {
     try {
-      respuesta = await http
-          .delete(_uri(path), headers: _headers(token: token))
-          .timeout(const Duration(seconds: 15));
+      return await peticion();
     } catch (_) {
       throw ApiException(
         'No se pudo conectar con el servidor. Verifica tu conexión.',
       );
     }
-    return _procesarRespuesta(respuesta);
+  }
+
+  /// Instancia propia (no se guarda como campo para que `ApiClient` se
+  /// mantenga `const`, como esperan todos sus constructores en los demás
+  /// servicios) — solo se usa en el camino poco frecuente de renovar token.
+  Future<String?> _renovarAccessToken() async {
+    final storage = SecureStorageService();
+    final refreshToken = await storage.obtenerRefreshToken();
+    if (refreshToken == null) return null;
+
+    try {
+      final respuesta = await http
+          .post(
+            _uri('/auth/refresh-token'),
+            headers: _headers(),
+            body: jsonEncode({'refreshToken': refreshToken}),
+          )
+          .timeout(_timeoutHttp);
+
+      if (respuesta.statusCode != 200) return null;
+
+      final data = jsonDecode(respuesta.body) as Map<String, dynamic>;
+      final nuevoAccessToken = data['accessToken'] as String?;
+      if (nuevoAccessToken == null) return null;
+
+      await storage.actualizarAccessToken(nuevoAccessToken);
+      return nuevoAccessToken;
+    } catch (_) {
+      return null;
+    }
   }
 
   Map<String, dynamic> _procesarRespuesta(http.Response respuesta) {

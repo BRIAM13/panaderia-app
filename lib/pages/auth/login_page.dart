@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -30,12 +32,36 @@ class _LoginPageState extends State<LoginPage> {
   bool _cargando = false;
   bool _cargandoBiometria = false;
   bool _biometriaDisponibleParaAcceso = false;
+  bool _tardandoMasDeLoNormal = false;
+  Timer? _timerTardanza;
   String? _error;
 
   @override
   void initState() {
     super.initState();
     _evaluarAccesoBiometrico();
+    _cargarPreferenciasGuardadas();
+  }
+
+  /// Prellena el usuario y el estado del switch "Recordarme" con lo último
+  /// guardado (el nombre de usuario ya se guardaba en cada login exitoso,
+  /// pero esta pantalla nunca lo volvía a leer). La contraseña nunca se
+  /// guarda en texto plano acá a propósito: para eso está el autocompletado
+  /// nativo (ver AutofillGroup más abajo), que delega ese trabajo al
+  /// gestor de contraseñas del sistema (Samsung Pass, Google, etc.), cifrado
+  /// y fuera del control de la app.
+  Future<void> _cargarPreferenciasGuardadas() async {
+    final recordarme = await _authService.storage.obtenerRecordarme();
+    final nombreGuardado = recordarme
+        ? await _authService.storage.obtenerNombreUsuario()
+        : null;
+    if (!mounted) return;
+    setState(() {
+      _recordarme = recordarme;
+      if (nombreGuardado != null && nombreGuardado.isNotEmpty) {
+        _usuarioController.text = nombreGuardado;
+      }
+    });
   }
 
   Future<void> _evaluarAccesoBiometrico() async {
@@ -54,6 +80,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    _timerTardanza?.cancel();
     _usuarioController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -64,7 +91,16 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() {
       _cargando = true;
+      _tardandoMasDeLoNormal = false;
       _error = null;
+    });
+
+    // El backend está en un plan gratis cuya base de datos se pausa sola
+    // tras un rato sin uso — la primera consulta después de eso puede
+    // tardar bastante en "despertarla". Si el login se demora, se avisa en
+    // vez de dejar el botón girando sin explicación (parecía trabado).
+    _timerTardanza = Timer(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _tardandoMasDeLoNormal = true);
     });
 
     try {
@@ -73,16 +109,29 @@ class _LoginPageState extends State<LoginPage> {
         password: _passwordController.text,
         recordarme: _recordarme,
       );
+      // Avisa al framework de autocompletado que el login fue exitoso, para
+      // que el gestor de contraseñas del sistema (Samsung Pass, Google
+      // Password Manager, etc.) ofrezca guardar las credenciales recién
+      // usadas — sin esto, nunca aparece esa ventanita.
+      TextInput.finishAutofillContext();
       if (!mounted) return;
       await _continuarDespuesDeLogin(usuario);
     } on ApiException catch (e) {
+      TextInput.finishAutofillContext(shouldSave: false);
       setState(() => _error = e.mensaje);
     } catch (_) {
+      TextInput.finishAutofillContext(shouldSave: false);
       setState(
         () => _error = 'Ocurrió un error inesperado. Intenta nuevamente.',
       );
     } finally {
-      if (mounted) setState(() => _cargando = false);
+      _timerTardanza?.cancel();
+      if (mounted) {
+        setState(() {
+          _cargando = false;
+          _tardandoMasDeLoNormal = false;
+        });
+      }
     }
   }
 
@@ -207,50 +256,64 @@ class _LoginPageState extends State<LoginPage> {
                     .fadeIn(delay: 120.ms, duration: 300.ms)
                     .moveY(begin: 8, end: 0),
                 const SizedBox(height: 32),
-                TextFormField(
-                      controller: _usuarioController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Usuario (DNI o RUC)',
-                        prefixIcon: Icon(Icons.person_outline_rounded),
-                      ),
-                      validator: (value) =>
-                          (value == null || value.trim().isEmpty)
-                          ? 'Ingresa tu DNI o RUC'
-                          : null,
-                    )
-                    .animate()
-                    .fadeIn(delay: 160.ms, duration: 300.ms)
-                    .moveY(begin: 8, end: 0),
-                const SizedBox(height: 16),
-                TextFormField(
-                      controller: _passwordController,
-                      obscureText: !_passwordVisible,
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _iniciarSesion(),
-                      decoration: InputDecoration(
-                        labelText: 'Contraseña',
-                        prefixIcon: const Icon(Icons.lock_outline_rounded),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _passwordVisible
-                                ? Icons.visibility_off_rounded
-                                : Icons.visibility_rounded,
-                          ),
-                          onPressed: () => setState(
-                            () => _passwordVisible = !_passwordVisible,
-                          ),
-                        ),
-                      ),
-                      validator: (value) => (value == null || value.isEmpty)
-                          ? 'Ingresa tu contraseña'
-                          : null,
-                    )
-                    .animate()
-                    .fadeIn(delay: 200.ms, duration: 300.ms)
-                    .moveY(begin: 8, end: 0),
+                AutofillGroup(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextFormField(
+                            controller: _usuarioController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            textInputAction: TextInputAction.next,
+                            autofillHints: const [AutofillHints.username],
+                            decoration: const InputDecoration(
+                              labelText: 'Usuario (DNI o RUC)',
+                              prefixIcon: Icon(Icons.person_outline_rounded),
+                            ),
+                            validator: (value) =>
+                                (value == null || value.trim().isEmpty)
+                                ? 'Ingresa tu DNI o RUC'
+                                : null,
+                          )
+                          .animate()
+                          .fadeIn(delay: 160.ms, duration: 300.ms)
+                          .moveY(begin: 8, end: 0),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                            controller: _passwordController,
+                            obscureText: !_passwordVisible,
+                            textInputAction: TextInputAction.done,
+                            autofillHints: const [AutofillHints.password],
+                            onFieldSubmitted: (_) => _iniciarSesion(),
+                            decoration: InputDecoration(
+                              labelText: 'Contraseña',
+                              prefixIcon: const Icon(
+                                Icons.lock_outline_rounded,
+                              ),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _passwordVisible
+                                      ? Icons.visibility_off_rounded
+                                      : Icons.visibility_rounded,
+                                ),
+                                onPressed: () => setState(
+                                  () => _passwordVisible = !_passwordVisible,
+                                ),
+                              ),
+                            ),
+                            validator: (value) =>
+                                (value == null || value.isEmpty)
+                                ? 'Ingresa tu contraseña'
+                                : null,
+                          )
+                          .animate()
+                          .fadeIn(delay: 200.ms, duration: 300.ms)
+                          .moveY(begin: 8, end: 0),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -292,6 +355,17 @@ class _LoginPageState extends State<LoginPage> {
                     .animate()
                     .fadeIn(delay: 280.ms, duration: 300.ms)
                     .moveY(begin: 8, end: 0),
+                if (_tardandoMasDeLoNormal) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Esto puede tardar un poco: el servidor estaba '
+                    'inactivo y se está despertando…',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ).animate().fadeIn(duration: 250.ms),
+                ],
                 if (_biometriaDisponibleParaAcceso) ...[
                   const SizedBox(height: 24),
                   Center(
