@@ -40,10 +40,25 @@ function inicioDeMesPeru() {
   return new Date(primerDiaMesComoUtc - PERU_OFFSET_MS);
 }
 
+/** Instante UTC real que corresponde a la medianoche del día [fechaISO]
+ * ("YYYY-MM-DD"), en hora de Perú — misma idea que inicioDeHoyPeru() pero
+ * para un día cualquiera, no solo hoy (ej. el selector de fecha del
+ * Dashboard). Lanza si el formato no es válido. */
+function inicioDeDiaPeru(fechaISO) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fechaISO);
+  if (!match) throw new Error(`Fecha inválida: ${fechaISO}`);
+  const anio = Number(match[1]);
+  const mes = Number(match[2]);
+  const dia = Number(match[3]);
+  const medianochePeruComoUtc = Date.UTC(anio, mes - 1, dia);
+  return new Date(medianochePeruComoUtc - PERU_OFFSET_MS);
+}
+
 module.exports = {
   PERU_OFFSET_MS,
   diaCalendarioPeru,
   fechaEntregaEsAnteriorAHoy,
   inicioDeHoyPeru,
   inicioDeMesPeru,
+  inicioDeDiaPeru,
 };

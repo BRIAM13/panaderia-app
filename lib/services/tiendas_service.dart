@@ -33,10 +33,34 @@ class TiendasService {
         .toList();
   }
 
-  /// Resumen/dashboard de una tienda (ADMIN/SUPERADMIN de esa tienda).
-  Future<TiendaResumen> resumen(int idTienda) async {
+  /// Resumen/dashboard de una tienda — [fecha] elige qué día mostrar arriba
+  /// (cobrado/deuda del día); por defecto es hoy.
+  Future<TiendaResumen> resumen(int idTienda, {DateTime? fecha}) async {
     final token = await _storage.obtenerAccessToken();
-    final data = await _api.get('/tiendas/$idTienda/resumen', token: token);
+    final query = fecha != null ? '?fecha=${_formatoFecha(fecha)}' : '';
+    final data = await _api.get(
+      '/tiendas/$idTienda/resumen$query',
+      token: token,
+    );
     return TiendaResumen.fromJson(data);
+  }
+
+  /// Días con al menos un pedido entregado en esta tienda — para restringir
+  /// el selector de fecha del Dashboard a días con datos reales.
+  Future<List<DateTime>> fechasConVentas(int idTienda) async {
+    final token = await _storage.obtenerAccessToken();
+    final data = await _api.get(
+      '/tiendas/$idTienda/fechas-con-ventas',
+      token: token,
+    );
+    final lista = data['fechas'] as List<dynamic>? ?? const [];
+    return lista.map((e) => DateTime.parse(e as String)).toList();
+  }
+
+  String _formatoFecha(DateTime fecha) {
+    final anio = fecha.year.toString().padLeft(4, '0');
+    final mes = fecha.month.toString().padLeft(2, '0');
+    final dia = fecha.day.toString().padLeft(2, '0');
+    return '$anio-$mes-$dia';
   }
 }

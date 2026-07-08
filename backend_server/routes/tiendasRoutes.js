@@ -1,5 +1,5 @@
 const express = require('express');
-const { listarTiendas, misTiendas, resumenTienda } = require('../controllers/tiendasController');
+const { listarTiendas, misTiendas, resumenTienda, fechasConVentas } = require('../controllers/tiendasController');
 const { verificarToken, autorizarRoles, autorizarTienda } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
@@ -17,6 +17,12 @@ router.get(
   autorizarRoles('TRABAJADOR', 'ADMIN', 'SUPERADMIN'),
   autorizarTienda((req) => req.params.idTienda),
   resumenTienda,
+);
+router.get(
+  '/:idTienda/fechas-con-ventas',
+  autorizarRoles('TRABAJADOR', 'ADMIN', 'SUPERADMIN'),
+  autorizarTienda((req) => req.params.idTienda),
+  fechasConVentas,
 );
 
 module.exports = router;

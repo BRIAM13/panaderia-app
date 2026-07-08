@@ -1,5 +1,5 @@
 const { sql, getPool } = require('../config/db');
-const { inicioDeHoyPeru } = require('../utils/fechaPeru');
+const { inicioDeHoyPeru, inicioDeDiaPeru, PERU_OFFSET_MS } = require('../utils/fechaPeru');
 
 function mapearTienda(fila) {
   return {
@@ -63,10 +63,12 @@ async function misTiendas(req, res, next) {
 }
 
 /**
- * Resumen/dashboard de una tienda puntual: ventas de hoy, pedidos por
- * estado, deudas y pagos reportados — todo lo que un ADMIN/SUPERADMIN
- * necesita ver de un vistazo al entrar. El candado de acceso a esa tienda
- * específica lo aplica el middleware `autorizarTienda` en la ruta.
+ * Resumen/dashboard de una tienda puntual: cobrado y deuda del día
+ * (seleccionable vía ?fecha=YYYY-MM-DD, hoy por defecto), pedidos por
+ * estado, deuda total acumulada y pagos reportados — todo lo que el
+ * personal necesita ver de un vistazo al entrar. El candado de acceso a
+ * esa tienda específica lo aplica el middleware `autorizarTienda` en la
+ * ruta.
  */
 async function resumenTienda(req, res, next) {
   try {
@@ -74,18 +76,30 @@ async function resumenTienda(req, res, next) {
     const inicioHoy = inicioDeHoyPeru();
     const finHoy = new Date(inicioHoy.getTime() + 24 * 60 * 60 * 1000);
 
+    // El día que se está mostrando arriba (cobrado/deuda del día) puede ser
+    // cualquiera con datos, no solo hoy — pero "pedidos por confirmar" y
+    // "pendientes de entrega" (el backlog operativo) siempre miran el HOY
+    // real, sin importar qué día se esté navegando arriba.
+    const fechaQuery = typeof req.query.fecha === 'string' ? req.query.fecha : null;
+    const inicioDia = fechaQuery ? inicioDeDiaPeru(fechaQuery) : inicioHoy;
+    const finDia = new Date(inicioDia.getTime() + 24 * 60 * 60 * 1000);
+
     const pool = await getPool();
 
-    const ventasHoyResult = await pool
+    const ventasDiaResult = await pool
       .request()
       .input('IdTienda', sql.Int, idTienda)
-      .input('InicioHoy', sql.DateTime2, inicioHoy)
-      .input('FinHoy', sql.DateTime2, finHoy)
+      .input('InicioDia', sql.DateTime2, inicioDia)
+      .input('FinDia', sql.DateTime2, finDia)
       .query(`
-        SELECT COUNT(*) AS Cantidad, ISNULL(SUM(Total), 0) AS Total
+        SELECT
+          ISNULL(SUM(CASE WHEN EstadoPago = 'PAGADO' THEN 1 ELSE 0 END), 0) AS CobradoCantidad,
+          ISNULL(SUM(CASE WHEN EstadoPago = 'PAGADO' THEN Total ELSE 0 END), 0) AS CobradoTotal,
+          ISNULL(SUM(CASE WHEN EstadoPago = 'DEUDA' THEN 1 ELSE 0 END), 0) AS DeudaDiaCantidad,
+          ISNULL(SUM(CASE WHEN EstadoPago = 'DEUDA' THEN Total ELSE 0 END), 0) AS DeudaDiaTotal
         FROM Pedidos
         WHERE IdTienda = @IdTienda AND Estado = 'ENTREGADO'
-          AND FechaEntregaReal >= @InicioHoy AND FechaEntregaReal < @FinHoy
+          AND FechaEntregaReal >= @InicioDia AND FechaEntregaReal < @FinDia
       `);
 
     const inicio7Dias = new Date(inicioHoy.getTime() - 6 * 24 * 60 * 60 * 1000);
@@ -160,11 +174,18 @@ async function resumenTienda(req, res, next) {
       `);
 
     const pendientes = pendientesResult.recordset[0];
+    const ventasDia = ventasDiaResult.recordset[0];
+    const fechaDia = fechaQuery ?? new Date(inicioDia.getTime() + PERU_OFFSET_MS).toISOString().slice(0, 10);
 
     return res.status(200).json({
-      ventasHoy: {
-        cantidad: ventasHoyResult.recordset[0].Cantidad,
-        total: ventasHoyResult.recordset[0].Total,
+      fecha: fechaDia,
+      cobradoDia: {
+        cantidad: ventasDia.CobradoCantidad,
+        total: ventasDia.CobradoTotal,
+      },
+      deudaDia: {
+        cantidad: ventasDia.DeudaDiaCantidad,
+        total: ventasDia.DeudaDiaTotal,
       },
       pedidosPorConfirmar: porConfirmarResult.recordset[0].Cantidad,
       pedidosPendientesEntrega: {
@@ -186,4 +207,32 @@ async function resumenTienda(req, res, next) {
   }
 }
 
-module.exports = { listarTiendas, misTiendas, resumenTienda };
+/**
+ * Días (hora de Perú) que sí tienen al menos un pedido ENTREGADO en esta
+ * tienda — para que el selector de fecha del Dashboard solo deje elegir
+ * días con datos reales, en vez de mostrar un calendario en blanco.
+ */
+async function fechasConVentas(req, res, next) {
+  try {
+    const idTienda = Number(req.params.idTienda);
+    const pool = await getPool();
+
+    const result = await pool
+      .request()
+      .input('IdTienda', sql.Int, idTienda)
+      .query(`
+        SELECT DISTINCT CAST(DATEADD(HOUR, -5, FechaEntregaReal) AS DATE) AS Dia
+        FROM Pedidos
+        WHERE IdTienda = @IdTienda AND Estado = 'ENTREGADO'
+        ORDER BY Dia DESC
+      `);
+
+    return res.status(200).json({
+      fechas: result.recordset.map((f) => f.Dia.toISOString().slice(0, 10)),
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = { listarTiendas, misTiendas, resumenTienda, fechasConVentas };

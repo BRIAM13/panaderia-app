@@ -18,11 +18,18 @@ class VentaDiaria {
 }
 
 /// Resumen/dashboard de una tienda, tal como lo devuelve
-/// `GET /tiendas/:idTienda/resumen`.
+/// `GET /tiendas/:idTienda/resumen` — [cobradoDiaTotal]/[deudaDiaTotal]
+/// corresponden al día pedido (hoy por defecto, o el elegido con
+/// `?fecha=YYYY-MM-DD`); el resto (pendientes de entrega, deuda TOTAL
+/// acumulada) siempre mira el día real de hoy, sin importar qué día se
+/// esté navegando arriba.
 class TiendaResumen {
   const TiendaResumen({
-    required this.ventasHoyCantidad,
-    required this.ventasHoyTotal,
+    required this.fecha,
+    required this.cobradoDiaCantidad,
+    required this.cobradoDiaTotal,
+    required this.deudaDiaCantidad,
+    required this.deudaDiaTotal,
     required this.pedidosPorConfirmar,
     required this.pendientesTotal,
     required this.pendientesSinFecha,
@@ -36,13 +43,17 @@ class TiendaResumen {
   });
 
   factory TiendaResumen.fromJson(Map<String, dynamic> json) {
-    final ventasHoy = json['ventasHoy'] as Map<String, dynamic>;
+    final cobradoDia = json['cobradoDia'] as Map<String, dynamic>;
+    final deudaDia = json['deudaDia'] as Map<String, dynamic>;
     final pendientes = json['pedidosPendientesEntrega'] as Map<String, dynamic>;
     final deuda = json['deudaTotal'] as Map<String, dynamic>;
     final serie = json['ventasUltimos7Dias'] as List<dynamic>? ?? const [];
     return TiendaResumen(
-      ventasHoyCantidad: ventasHoy['cantidad'] as int,
-      ventasHoyTotal: (ventasHoy['total'] as num).toDouble(),
+      fecha: DateTime.parse(json['fecha'] as String),
+      cobradoDiaCantidad: cobradoDia['cantidad'] as int,
+      cobradoDiaTotal: (cobradoDia['total'] as num).toDouble(),
+      deudaDiaCantidad: deudaDia['cantidad'] as int,
+      deudaDiaTotal: (deudaDia['total'] as num).toDouble(),
       pedidosPorConfirmar: json['pedidosPorConfirmar'] as int,
       pendientesTotal: pendientes['total'] as int,
       pendientesSinFecha: pendientes['sinFecha'] as int,
@@ -58,8 +69,11 @@ class TiendaResumen {
     );
   }
 
-  final int ventasHoyCantidad;
-  final double ventasHoyTotal;
+  final DateTime fecha;
+  final int cobradoDiaCantidad;
+  final double cobradoDiaTotal;
+  final int deudaDiaCantidad;
+  final double deudaDiaTotal;
   final int pedidosPorConfirmar;
   final int pendientesTotal;
   final int pendientesSinFecha;
