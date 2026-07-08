@@ -13,15 +13,17 @@ async function crearPedido(req, res, next) {
   try {
     await transaction.begin();
 
+    // La ruta ya exige TRABAJADOR/ADMIN/SUPERADMIN (ver pedidosRoutes.js),
+    // así que cualquiera que llegue hasta acá es personal — no hace falta
+    // que además tenga una ficha de Trabajador (el SUPERADMIN dueño, por
+    // ejemplo, nunca tiene una: tiene acceso implícito global). Si sí
+    // tiene una, se guarda en IdTrabajador aparte (informativo, ej. su
+    // cargo/tiendas); quién lo registró de verdad siempre queda en
+    // IdUsuarioRegistro, sin importar si tiene ficha o no.
     const trabajadorResult = await new sql.Request(transaction)
       .input('IdPersona', sql.Int, idPersona)
       .query('SELECT IdTrabajador FROM Trabajadores WHERE IdPersona = @IdPersona AND Estado = 1');
-
-    if (trabajadorResult.recordset.length === 0) {
-      await transaction.rollback();
-      return res.status(403).json({ mensaje: 'Solo el personal de la panadería puede registrar pedidos' });
-    }
-    const idTrabajador = trabajadorResult.recordset[0].IdTrabajador;
+    const idTrabajador = trabajadorResult.recordset[0]?.IdTrabajador ?? null;
 
     const clienteResult = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, idCliente)
@@ -67,6 +69,7 @@ async function crearPedido(req, res, next) {
       .input('IdTienda', sql.Int, idTienda)
       .input('IdProducto', sql.Int, idProducto)
       .input('IdTrabajador', sql.Int, idTrabajador)
+      .input('IdUsuarioRegistro', sql.Int, idUsuario)
       .input('TipoPedido', sql.VarChar(20), tipoPedido)
       .input('Cantidad', sql.Int, cantidad)
       .input('PrecioUnitario', sql.Decimal(10, 2), precioUnitarioFinal)
@@ -74,9 +77,9 @@ async function crearPedido(req, res, next) {
       .input('FechaEntrega', sql.DateTime2, fechaEntregaFinal)
       .input('Notas', sql.NVarChar(300), notas ? notas.trim().toUpperCase() : null)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, Estado)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, IdUsuarioRegistro, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, Estado)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, @IdProducto, @IdTrabajador, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, 'PENDIENTE')
+        VALUES (@IdCliente, @IdTienda, @IdProducto, @IdTrabajador, @IdUsuarioRegistro, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, 'PENDIENTE')
       `);
     const { IdPedido: idPedido, FechaCreacion: fechaCreacion } = insertResult.recordset[0];
 
@@ -335,8 +338,8 @@ const SELECT_PEDIDOS_BASE = `
          c.DescripcionNegocio AS ClienteDescripcionNegocio,
          t.Nombre AS TiendaNombre,
          prod.Nombre AS ProductoNombre,
-         trabPer.Nombres AS VendedorNombres, trabPer.ApellidoPaterno AS VendedorApellidoPaterno,
-         trabRol.NombreRol AS VendedorRol,
+         registroPer.Nombres AS VendedorNombres, registroPer.ApellidoPaterno AS VendedorApellidoPaterno,
+         registroRol.NombreRol AS VendedorRol,
          aprobPer.Nombres AS AprobadoNombres, aprobPer.ApellidoPaterno AS AprobadoApellidoPaterno,
          cancelPer.Nombres AS CanceladoNombres, cancelPer.ApellidoPaterno AS CanceladoApellidoPaterno,
          entregPer.Nombres AS EntregadoNombres, entregPer.ApellidoPaterno AS EntregadoApellidoPaterno
@@ -345,10 +348,12 @@ const SELECT_PEDIDOS_BASE = `
   INNER JOIN Personas per ON per.IdPersona = c.IdPersona
   LEFT JOIN Tiendas t ON t.IdTienda = pd.IdTienda
   INNER JOIN Productos prod ON prod.IdProducto = pd.IdProducto
-  LEFT JOIN Trabajadores trab ON trab.IdTrabajador = pd.IdTrabajador
-  LEFT JOIN Personas trabPer ON trabPer.IdPersona = trab.IdPersona
-  LEFT JOIN Usuarios trabUsr ON trabUsr.IdPersona = trabPer.IdPersona
-  LEFT JOIN Roles trabRol ON trabRol.IdRol = trabUsr.IdRol
+  -- Quién lo registró: por IdUsuarioRegistro, no por IdTrabajador — así
+  -- funciona igual sin importar si esa persona tiene o no una ficha de
+  -- Trabajador (ej. el SUPERADMIN dueño no tiene una).
+  LEFT JOIN Usuarios registroUsr ON registroUsr.IdUsuario = pd.IdUsuarioRegistro
+  LEFT JOIN Personas registroPer ON registroPer.IdPersona = registroUsr.IdPersona
+  LEFT JOIN Roles registroRol ON registroRol.IdRol = registroUsr.IdRol
   LEFT JOIN Usuarios aprobUsr ON aprobUsr.IdUsuario = pd.IdUsuarioAprobo
   LEFT JOIN Personas aprobPer ON aprobPer.IdPersona = aprobUsr.IdPersona
   LEFT JOIN Usuarios cancelUsr ON cancelUsr.IdUsuario = pd.IdUsuarioCancelo

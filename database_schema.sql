@@ -383,7 +383,13 @@ CREATE TABLE Pedidos (
     IdCliente           INT                 NOT NULL,
     IdTienda            INT                 NULL,   -- a qué tienda pertenece (ver Tiendas)
     IdProducto          INT                 NOT NULL,
-    IdTrabajador        INT                 NULL,   -- vendedor que lo registró; NULL si lo creó el propio cliente
+    IdTrabajador        INT                 NULL,   -- vendedor con ficha de Trabajador que lo registró (si tiene una)
+    -- Quién de personal lo registró en realidad, sin importar si tiene o no
+    -- una ficha de Trabajador (ej. el SUPERADMIN dueño no tiene una, tiene
+    -- acceso implícito) — NULL si lo creó el propio cliente. IdTrabajador
+    -- se conserva aparte solo para casos donde además interese saber su
+    -- ficha de personal (cargo, tiendas), no para saber "quién lo hizo".
+    IdUsuarioRegistro   INT                 NULL,
     TipoPedido          VARCHAR(20)         NOT NULL,   -- 'UNIDADES' | 'PAQUETES' (paquete = 12 unidades)
     Cantidad            INT                 NOT NULL,
     PrecioUnitario      DECIMAL(10,2)       NOT NULL,
@@ -420,6 +426,8 @@ CREATE TABLE Pedidos (
         REFERENCES Productos(IdProducto),
     CONSTRAINT FK_Pedidos_Trabajador FOREIGN KEY (IdTrabajador)
         REFERENCES Trabajadores(IdTrabajador),
+    CONSTRAINT FK_Pedidos_UsuarioRegistro FOREIGN KEY (IdUsuarioRegistro)
+        REFERENCES Usuarios(IdUsuario),
     CONSTRAINT FK_Pedidos_UsuarioAprobo FOREIGN KEY (IdUsuarioAprobo)
         REFERENCES Usuarios(IdUsuario),
     CONSTRAINT FK_Pedidos_UsuarioCancelo FOREIGN KEY (IdUsuarioCancelo)
