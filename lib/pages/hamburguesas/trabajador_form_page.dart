@@ -177,6 +177,20 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
       final resultado = await _trabajadoresService.buscarPorDni(dni);
       if (!mounted || dni != _dniController.text.trim()) return;
 
+      // El backend a propósito no manda ningún dato personal cuando el DNI
+      // pertenece a un SUPERADMIN que quien busca no puede tocar — ni
+      // siquiera se llega a mostrar el formulario, solo el aviso.
+      if (resultado.bloqueado) {
+        setState(() {
+          _error =
+              resultado.mensajeBloqueo ??
+              'Este usuario no puede ser modificado.';
+          _camposExpandidos = false;
+          _ultimoDniConsultado = dni;
+        });
+        return;
+      }
+
       if (resultado.existeEnBd) {
         setState(() {
           _nombresController.text = (resultado.nombres ?? '').toUpperCase();

@@ -26,6 +26,8 @@ class TrabajadorTiendaAsignada {
 class BusquedaDniTrabajador {
   const BusquedaDniTrabajador({
     required this.existeEnBd,
+    this.bloqueado = false,
+    this.mensajeBloqueo,
     this.idPersona,
     this.nombres,
     this.apellidoPaterno,
@@ -45,6 +47,8 @@ class BusquedaDniTrabajador {
     final tiendas = json['tiendasAsignadas'] as List<dynamic>? ?? const [];
     return BusquedaDniTrabajador(
       existeEnBd: json['existeEnBd'] as bool? ?? false,
+      bloqueado: json['bloqueado'] as bool? ?? false,
+      mensajeBloqueo: json['mensaje'] as String?,
       idPersona: json['idPersona'] as int?,
       nombres: json['nombres'] as String?,
       apellidoPaterno: json['apellidoPaterno'] as String?,
@@ -66,6 +70,14 @@ class BusquedaDniTrabajador {
   }
 
   final bool existeEnBd;
+
+  /// true si el DNI pertenece a un SUPERADMIN que quien busca no puede
+  /// tocar (ver trabajadoresController.js → buscarPorDni) — en ese caso el
+  /// backend a propósito NO manda ningún dato personal, solo
+  /// [mensajeBloqueo].
+  final bool bloqueado;
+  final String? mensajeBloqueo;
+
   final int? idPersona;
   final String? nombres;
   final String? apellidoPaterno;

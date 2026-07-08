@@ -215,6 +215,12 @@ CREATE TABLE Usuarios (
     -- a alguien más a SUPERADMIN, ese nuevo usuario nunca puede quitarle
     -- acceso ni adueñarse del sistema por encima del dueño original.
     EsPropietario                BIT                 NOT NULL DEFAULT 0,
+    -- Quién registró esta cuenta como personal (NULL = nunca se registró
+    -- por este mecanismo, ej. el propietario original). Un ADMIN solo
+    -- puede modificar a OTRO ADMIN si él mismo lo creó (ver candado en
+    -- trabajadoresController.js) — evita que administradores se quiten
+    -- poder entre sí, salvo el que ascendió a alguien de su confianza.
+    IdCreadoPor                  INT                 NULL,
     FechaCreacion                DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME(),
     FechaActualizacion           DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_Usuarios PRIMARY KEY (IdUsuario),
@@ -223,7 +229,9 @@ CREATE TABLE Usuarios (
     CONSTRAINT FK_Usuarios_Persona FOREIGN KEY (IdPersona)
         REFERENCES Personas(IdPersona),
     CONSTRAINT FK_Usuarios_Rol FOREIGN KEY (IdRol)
-        REFERENCES Roles(IdRol)
+        REFERENCES Roles(IdRol),
+    CONSTRAINT FK_Usuarios_CreadoPor FOREIGN KEY (IdCreadoPor)
+        REFERENCES Usuarios(IdUsuario)
 );
 GO
 

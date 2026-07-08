@@ -72,6 +72,36 @@ function rolesQuePuedeAsignar(rolDelQueLlama) {
   return rolDelQueLlama === 'SUPERADMIN' ? ['TRABAJADOR', 'ADMIN', 'SUPERADMIN'] : ['TRABAJADOR'];
 }
 
+/**
+ * Además de qué rol se le puede ASIGNAR a alguien (rolesQuePuedeAsignar),
+ * hace falta saber si se puede tocar a alguien que YA TIENE cierto rol —
+ * no es lo mismo: sin este chequeo, un ADMIN podía "reasignar" a otro
+ * ADMIN con rol TRABAJADOR (que sí puede asignar) y de paso degradarlo,
+ * sin que nadie validara su rol ACTUAL antes de pisarlo.
+ *
+ * Reglas:
+ * - SUPERADMIN puede modificar a cualquier TRABAJADOR/ADMIN (la
+ *   protección del propietario se filtra aparte, antes de llegar acá).
+ * - Cualquier ADMIN puede modificar a cualquier TRABAJADOR.
+ * - Un ADMIN solo puede modificar a OTRO ADMIN si fue él mismo quien lo
+ *   registró como tal (idCreadoPorObjetivo === idUsuarioQueLlama) — así,
+ *   si asciende a alguien de su confianza para que lo apoye en su tienda,
+ *   conserva control sobre esa persona, pero nadie más (ni siquiera ese
+ *   mismo ascendido) puede tocar a otros administradores.
+ * - Nadie con rol ADMIN puede modificar a un SUPERADMIN.
+ */
+function puedeModificarA({
+  rolQueLlama,
+  idUsuarioQueLlama,
+  rolActualObjetivo,
+  idCreadoPorObjetivo,
+}) {
+  if (rolQueLlama === 'SUPERADMIN') return true;
+  if (rolActualObjetivo == null || rolActualObjetivo === 'TRABAJADOR') return true;
+  if (rolActualObjetivo === 'ADMIN') return idCreadoPorObjetivo === idUsuarioQueLlama;
+  return false;
+}
+
 /** Un ADMIN puede VER (aunque no necesariamente asignar) hasta su propio
  * nivel — TRABAJADOR y ADMIN — pero nunca a un SUPERADMIN; eso queda fuera
  * de su alcance por completo. SUPERADMIN ve a todos. */
@@ -106,9 +136,12 @@ async function buscarPorDni(req, res, next) {
         SELECT p.IdPersona, p.Nombres, p.ApellidoPaterno, p.ApellidoMaterno, p.Telefono, p.Email,
                p.Direccion, p.OrigenValidacion,
                trab.IdTrabajador, trab.Cargo, trab.Salario,
-               CASE WHEN EXISTS (SELECT 1 FROM Clientes c WHERE c.IdPersona = p.IdPersona AND c.Estado = 1) THEN 1 ELSE 0 END AS EsCliente
+               CASE WHEN EXISTS (SELECT 1 FROM Clientes c WHERE c.IdPersona = p.IdPersona AND c.Estado = 1) THEN 1 ELSE 0 END AS EsCliente,
+               u.EsPropietario, r.NombreRol AS RolActual
         FROM Personas p
         LEFT JOIN Trabajadores trab ON trab.IdPersona = p.IdPersona
+        LEFT JOIN Usuarios u ON u.IdPersona = p.IdPersona
+        LEFT JOIN Roles r ON r.IdRol = u.IdRol
         WHERE p.DNI = @DNI
       `);
 
@@ -117,6 +150,25 @@ async function buscarPorDni(req, res, next) {
     }
 
     const fila = result.recordset[0];
+
+    // Un SUPERADMIN nunca se toca desde este formulario — ni se muestra su
+    // información personal — salvo que quien busca también sea SUPERADMIN
+    // (y aun así, nunca si es el propietario del sistema). Se corta acá
+    // antes de devolver cualquier dato de la persona.
+    if (fila.RolActual === 'SUPERADMIN') {
+      const esPropietario = Boolean(fila.EsPropietario);
+      const puedeVerlo = req.usuario.rol === 'SUPERADMIN' && !esPropietario;
+      if (!puedeVerlo) {
+        return res.status(200).json({
+          existeEnBd: true,
+          bloqueado: true,
+          mensaje: esPropietario
+            ? 'Este usuario es el propietario del sistema y no puede ser modificado.'
+            : 'Este usuario tiene rol de Super Administrador y no puede ser modificado.',
+        });
+      }
+    }
+
     let tiendasAsignadas = [];
     if (fila.IdTrabajador) {
       const tiendas = await pool
@@ -340,7 +392,12 @@ async function crearTrabajador(req, res, next) {
     let idUsuarioParaNotificar = null;
     const cuentaExistente = await new sql.Request(transaction)
       .input('IdPersona', sql.Int, idPersona)
-      .query('SELECT IdUsuario, IdRol FROM Usuarios WHERE IdPersona = @IdPersona');
+      .query(`
+        SELECT u.IdUsuario, u.IdRol, r.NombreRol, u.IdCreadoPor
+        FROM Usuarios u
+        INNER JOIN Roles r ON r.IdRol = u.IdRol
+        WHERE u.IdPersona = @IdPersona
+      `);
 
     if (cuentaExistente.recordset.length === 0) {
       const usuarioTomado = await new sql.Request(transaction)
@@ -355,14 +412,33 @@ async function crearTrabajador(req, res, next) {
           .input('NombreUsuario', sql.VarChar(50), dniLimpio)
           .input('PasswordHash', sql.VarChar(255), passwordHash)
           .input('IdRol', sql.Int, idRolAsignado)
+          .input('IdCreadoPor', sql.Int, req.usuario.idUsuario)
           .query(`
-            INSERT INTO Usuarios (IdPersona, NombreUsuario, PasswordHash, IdRol, RequiereCambioPassword)
-            VALUES (@IdPersona, @NombreUsuario, @PasswordHash, @IdRol, 1)
+            INSERT INTO Usuarios (IdPersona, NombreUsuario, PasswordHash, IdRol, RequiereCambioPassword, IdCreadoPor)
+            VALUES (@IdPersona, @NombreUsuario, @PasswordHash, @IdRol, 1, @IdCreadoPor)
           `);
         cuentaCreada = true;
       }
     } else {
-      const { IdUsuario: idUsuarioExistente, IdRol: idRolAnterior } = cuentaExistente.recordset[0];
+      const {
+        IdUsuario: idUsuarioExistente,
+        IdRol: idRolAnterior,
+        NombreRol: rolActualObjetivo,
+        IdCreadoPor: idCreadoPorObjetivo,
+      } = cuentaExistente.recordset[0];
+
+      if (
+        !puedeModificarA({
+          rolQueLlama: req.usuario.rol,
+          idUsuarioQueLlama: req.usuario.idUsuario,
+          rolActualObjetivo,
+          idCreadoPorObjetivo,
+        })
+      ) {
+        await transaction.rollback();
+        return res.status(403).json({ mensaje: 'No tienes permiso para modificar a este usuario.' });
+      }
+
       // Solo hace falta avisar/forzar re-login si el rol de acceso
       // realmente cambia — reasignar la misma persona a otra tienda sin
       // cambiarle el rol no debe expulsarla de su sesión.
@@ -497,12 +573,27 @@ async function cambiarRolTrabajador(req, res, next) {
     const usuario = await pool
       .request()
       .input('IdPersona', sql.Int, idPersona)
-      .query('SELECT IdUsuario, IdRol, EsPropietario FROM Usuarios WHERE IdPersona = @IdPersona');
+      .query(`
+        SELECT u.IdUsuario, u.IdRol, u.EsPropietario, u.IdCreadoPor, r.NombreRol
+        FROM Usuarios u
+        INNER JOIN Roles r ON r.IdRol = u.IdRol
+        WHERE u.IdPersona = @IdPersona
+      `);
     if (usuario.recordset.length === 0) {
       return res.status(404).json({ mensaje: 'Esta persona todavía no tiene una cuenta de acceso.' });
     }
     if (usuario.recordset[0].EsPropietario) {
       return res.status(403).json({ mensaje: MENSAJE_PROTECCION_PROPIETARIO });
+    }
+    if (
+      !puedeModificarA({
+        rolQueLlama: req.usuario.rol,
+        idUsuarioQueLlama: req.usuario.idUsuario,
+        rolActualObjetivo: usuario.recordset[0].NombreRol,
+        idCreadoPorObjetivo: usuario.recordset[0].IdCreadoPor,
+      })
+    ) {
+      return res.status(403).json({ mensaje: 'No tienes permiso para modificar a este usuario.' });
     }
     const { IdUsuario: idUsuarioTrabajador, IdRol: idRolAnterior } = usuario.recordset[0];
 
@@ -662,7 +753,7 @@ async function darDeBajaTrabajador(req, res, next) {
       .request()
       .input('IdPersona', sql.Int, idPersona)
       .query(`
-        SELECT u.IdUsuario, r.NombreRol, u.EsPropietario
+        SELECT u.IdUsuario, r.NombreRol, u.EsPropietario, u.IdCreadoPor
         FROM Usuarios u INNER JOIN Roles r ON r.IdRol = u.IdRol
         WHERE u.IdPersona = @IdPersona
       `);
@@ -675,9 +766,17 @@ async function darDeBajaTrabajador(req, res, next) {
     const { IdUsuario: idUsuario, NombreRol: rolActual } = usuario.recordset[0];
 
     // Mismo candado que crear/cambiar rol: un ADMIN no puede dar de baja a
-    // otro ADMIN/SUPERADMIN, eso es exclusivo de SUPERADMIN.
-    if (!rolesQuePuedeAsignar(req.usuario.rol).includes(rolActual)) {
-      return res.status(403).json({ mensaje: 'No tienes permiso para dar de baja a alguien con ese rol.' });
+    // otro ADMIN salvo que él mismo lo haya creado, y nunca a un
+    // SUPERADMIN — ver puedeModificarA.
+    if (
+      !puedeModificarA({
+        rolQueLlama: req.usuario.rol,
+        idUsuarioQueLlama: req.usuario.idUsuario,
+        rolActualObjetivo: rolActual,
+        idCreadoPorObjetivo: usuario.recordset[0].IdCreadoPor,
+      })
+    ) {
+      return res.status(403).json({ mensaje: 'No tienes permiso para dar de baja a este usuario.' });
     }
 
     await pool
