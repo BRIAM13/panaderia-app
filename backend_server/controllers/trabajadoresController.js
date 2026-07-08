@@ -497,9 +497,17 @@ async function listarTrabajadores(req, res, next) {
   try {
     const pool = await getPool();
     const rolesVisibles = rolesQuePuedeVer(req.usuario.rol);
+    // Un ADMIN no gana nada viendo en la lista a otros ADMIN que no puede
+    // tocar (no los creó él) — solo estorba, así que directamente no se
+    // los muestra. SUPERADMIN ve a todos sin este filtro extra.
+    const filtroAdminAjeno =
+      req.usuario.rol === 'ADMIN'
+        ? `AND (r.NombreRol <> 'ADMIN' OR u.IdCreadoPor = @IdUsuarioQueConsulta)`
+        : '';
     const result = await pool
       .request()
       .input('IdPersonaQueConsulta', sql.Int, req.usuario.idPersona)
+      .input('IdUsuarioQueConsulta', sql.Int, req.usuario.idUsuario)
       .query(`
         SELECT trab.IdTrabajador, trab.Cargo, trab.Estado AS TrabajadorActivo,
                p.IdPersona, p.DNI, p.Nombres, p.ApellidoPaterno, p.ApellidoMaterno, p.Telefono, p.Email,
@@ -510,6 +518,7 @@ async function listarTrabajadores(req, res, next) {
         LEFT JOIN Roles r ON r.IdRol = u.IdRol
         WHERE p.IdPersona <> @IdPersonaQueConsulta
           AND (r.NombreRol IS NULL OR r.NombreRol IN ('${rolesVisibles.join("','")}'))
+          ${filtroAdminAjeno}
         ORDER BY p.Nombres, p.ApellidoPaterno
       `);
 
