@@ -61,8 +61,15 @@ Widget _envolver(Widget home) {
   return MaterialApp(theme: buildAppTheme(), home: home);
 }
 
-Future<void> _asentar(WidgetTester tester) =>
-    tester.pump(const Duration(milliseconds: 700));
+// Dos pumps en vez de uno: los `.animate(delay: ...)` escalonados (ej. el
+// drawer) arman su Timer de retraso recién cuando el reloj falso avanza —
+// un solo pump no le da chance de completar el ticker que ese Timer
+// arranca a mitad de camino, y el binding revienta con "Timer is still
+// pending" al desmontar. Un segundo pump vacía ese trabajo pendiente.
+Future<void> _asentar(WidgetTester tester) async {
+  await tester.pump(const Duration(milliseconds: 700));
+  await tester.pump(const Duration(milliseconds: 700));
+}
 
 /// Monta [home], fija un viewport alto y garantiza que el árbol se desmonte
 /// al final del test, para no dejar pendiente el temporizador del pulso

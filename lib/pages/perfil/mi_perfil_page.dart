@@ -291,11 +291,12 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
                                         ? null
                                         : _autocompletarConGps,
                                     icon: _obteniendoUbicacion
-                                        ? const SizedBox(
+                                        ? SizedBox(
                                             width: 18,
                                             height: 18,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
+                                              color: scheme.primary,
                                             ),
                                           )
                                         : Icon(
@@ -320,11 +321,12 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
                             ? null
                             : _guardarDireccion,
                         child: _guardandoDireccion
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
+                                  color: scheme.primary,
                                 ),
                               )
                             : const Text('Guardar dirección'),

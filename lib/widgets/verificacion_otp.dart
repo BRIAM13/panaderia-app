@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../services/api_client.dart';
 import '../services/clientes_service.dart';
+import '../theme/app_theme.dart';
 
 class _OpcionCanal extends StatelessWidget {
   const _OpcionCanal({
@@ -19,32 +20,47 @@ class _OpcionCanal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final color = seleccionado
-        ? scheme.primary
-        : scheme.onSurface.withValues(alpha: 0.6);
+        ? AppColors.primary
+        : AppColors.textSecondary;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          children: [
-            Icon(
-              seleccionado
-                  ? Icons.radio_button_checked_rounded
-                  : Icons.radio_button_off_rounded,
-              color: color,
-              size: 20,
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: seleccionado
+                ? AppColors.primary.withValues(alpha: 0.10)
+                : Colors.transparent,
+            border: Border.all(
+              color: seleccionado
+                  ? AppColors.primary.withValues(alpha: 0.35)
+                  : AppColors.textSecondary.withValues(alpha: 0.20),
             ),
-            const SizedBox(width: 10),
-            Icon(icono, color: color, size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(texto, style: TextStyle(color: color)),
-            ),
-          ],
+          ),
+          child: Row(
+            children: [
+              Icon(
+                seleccionado
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_off_rounded,
+                color: color,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Icon(icono, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(texto, style: TextStyle(color: color)),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -88,7 +104,9 @@ class _CampoCodigoOtp extends StatelessWidget {
       decoration: const InputDecoration(
         counterText: '',
         hintText: '000000',
-        border: OutlineInputBorder(),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
       ),
       maxLength: 6,
     );
@@ -212,6 +230,8 @@ class _AutorizacionCambioDialogState extends State<_AutorizacionCambioDialog> {
                 seleccionado: _canalElegido == 'SMS',
                 onTap: () => setState(() => _canalElegido = 'SMS'),
               ),
+            if (widget.telefonoVerificado && widget.emailVerificado)
+              const SizedBox(height: 8),
             if (widget.emailVerificado)
               _OpcionCanal(
                 icono: Icons.email_rounded,
@@ -249,7 +269,7 @@ class _AutorizacionCambioDialogState extends State<_AutorizacionCambioDialog> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
                 : const Text('Enviar código'),
           )
@@ -465,7 +485,7 @@ class _VerificarCanalDialogState extends State<_VerificarCanalDialog> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
                 : const Text('Enviar código'),
           )
@@ -476,7 +496,7 @@ class _VerificarCanalDialogState extends State<_VerificarCanalDialog> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
                 : const Text('Confirmar'),
           ),

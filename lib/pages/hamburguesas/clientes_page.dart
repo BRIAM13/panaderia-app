@@ -7,6 +7,8 @@ import '../../services/clientes_service.dart';
 import '../../utils/texto_utils.dart';
 import '../../widgets/cliente_acciones_sheet.dart';
 import '../../widgets/cliente_card.dart';
+import '../../widgets/estado_error.dart';
+import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/segmented_switch.dart';
@@ -175,8 +177,6 @@ class _ClientesPageState extends State<ClientesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Clientes')),
       floatingActionButton: FloatingActionButton.extended(
@@ -215,39 +215,20 @@ class _ClientesPageState extends State<ClientesPage> {
                 ),
               ),
             ),
-            Expanded(child: _construirCuerpo(theme)),
+            Expanded(child: _construirCuerpo()),
           ],
         ),
       ),
     );
   }
 
-  Widget _construirCuerpo(ThemeData theme) {
+  Widget _construirCuerpo() {
     if (_cargando) {
       return const Center(child: AppLoadingIndicator());
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _cargarClientes,
-                child: const Text('Reintentar'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return EstadoError(mensaje: _error!, onReintentar: _cargarClientes);
     }
 
     final clientes = _clientesFiltrados;
@@ -256,11 +237,17 @@ class _ClientesPageState extends State<ClientesPage> {
       final sinBusqueda = _filtroIndice == 0
           ? 'Aún no hay clientes registrados'
           : 'No hay clientes desactivados';
-      return Center(
-        child: Text(
-          _busqueda.isEmpty ? sinBusqueda : 'No se encontraron clientes',
-          style: theme.textTheme.bodyMedium,
-        ),
+      return EstadoVacio(
+        icono: _busqueda.isEmpty
+            ? Icons.people_outline_rounded
+            : Icons.search_off_rounded,
+        titulo: _busqueda.isEmpty
+            ? sinBusqueda
+            : 'No se encontraron clientes',
+        subtitulo: _busqueda.isEmpty
+            ? 'Los clientes que registres van a aparecer acá.'
+            : 'Prueba con otro nombre, razón social, RUC o DNI.',
+        onRefrescar: _cargarClientes,
       );
     }
 

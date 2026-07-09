@@ -8,6 +8,8 @@ import '../../services/medios_pago_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/text_formatters.dart';
+import '../../widgets/estado_error.dart';
+import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/tarjeta_3d.dart';
 
@@ -123,42 +125,16 @@ class _MediosPagoPageState extends State<MediosPagoPage> {
   }
 
   Widget _construirCuerpo() {
-    final theme = Theme.of(context);
-
     if (_cargando && _tiendas.isEmpty) {
       return const Center(child: AppLoadingIndicator());
     }
     if (_error != null && _tiendas.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _cargarTiendas,
-                child: const Text('Reintentar'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return EstadoError(mensaje: _error!, onReintentar: _cargarTiendas);
     }
     if (_tiendas.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'No tienes tiendas asignadas.',
-            style: theme.textTheme.bodyMedium,
-          ),
-        ),
+      return EstadoVacio(
+        icono: Icons.storefront_outlined,
+        titulo: 'No tienes tiendas asignadas',
       );
     }
 
@@ -190,22 +166,14 @@ class _MediosPagoPageState extends State<MediosPagoPage> {
               child: Center(child: AppLoadingIndicator()),
             )
           else if (_medios.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.account_balance_wallet_outlined,
-                    size: 48,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Aún no configuraste ningún método de pago',
-                    style: theme.textTheme.bodyMedium,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: EstadoVacio(
+                icono: Icons.account_balance_wallet_outlined,
+                titulo: 'Aún no configuraste ningún método de pago',
+                subtitulo:
+                    'Agrega Yape, Plin, transferencia u otro para que tus '
+                    'clientes puedan pagar sus deudas.',
               ),
             )
           else

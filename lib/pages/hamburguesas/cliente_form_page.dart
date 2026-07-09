@@ -10,6 +10,7 @@ import '../../services/clientes_service.dart';
 import '../../services/external_lookup_service.dart';
 import '../../services/geolocation_service.dart';
 import '../../utils/text_formatters.dart';
+import '../../widgets/premium_button.dart';
 import '../../widgets/segmented_switch.dart';
 
 /// Alta o edición de un cliente aplicando el "Estándar Briam":
@@ -941,20 +942,11 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
                         ).animate().fadeIn(duration: 250.ms),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: (_guardando || !_puedeGuardar) ? null : _guardar,
-                  child: _guardando
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          _editando ? 'Guardar cambios' : 'Registrar cliente',
-                        ),
+                PremiumButton(
+                  label: _editando ? 'Guardar cambios' : 'Registrar cliente',
+                  icono: Icons.check_rounded,
+                  cargando: _guardando,
+                  onPressed: _puedeGuardar ? _guardar : null,
                 ),
               ],
             ),

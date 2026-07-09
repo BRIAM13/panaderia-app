@@ -10,7 +10,10 @@ import '../../services/tiendas_service.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../utils/text_formatters.dart';
 import '../../widgets/ad_banner.dart';
+import '../../widgets/estado_error.dart';
+import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/premium_button.dart';
 
 /// Autoservicio (rol CLIENTE): el propio cliente registra su pedido, sin
 /// negociar precio (siempre sale del catálogo) y sin elegir a "qué
@@ -270,32 +273,11 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
         child: _cargandoTiendas
             ? const Center(child: AppLoadingIndicator())
             : _errorCarga != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_errorCarga!, textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
-                      OutlinedButton(
-                        onPressed: _cargarTienda,
-                        child: const Text('Reintentar'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
+            ? EstadoError(mensaje: _errorCarga!, onReintentar: _cargarTienda)
             : _tiendaHamburguesas == null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'Todavía no hay pedidos disponibles para hacer.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
+            ? const EstadoVacio(
+                icono: Icons.storefront_outlined,
+                titulo: 'Todavía no hay pedidos disponibles para hacer.',
               )
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
@@ -406,18 +388,11 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
                         ),
                       ],
                       const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: _enviando ? null : _registrarPedido,
-                        child: _enviando
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Registrar pedido'),
+                      PremiumButton(
+                        label: 'Registrar pedido',
+                        icono: Icons.add_shopping_cart_rounded,
+                        cargando: _enviando,
+                        onPressed: _registrarPedido,
                       ),
                     ],
                   ),

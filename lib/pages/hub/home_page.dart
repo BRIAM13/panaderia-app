@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/usuario_sesion.dart';
 import '../../services/auth_service.dart';
@@ -155,10 +156,17 @@ class _HomePageState extends State<HomePage> {
         floatingActionButton: vistaTrabajador
             ? null
             : FloatingActionButton.extended(
-                onPressed: _hacerPedido,
-                icon: const Icon(Icons.add_shopping_cart_rounded),
-                label: const Text('Hacer pedido'),
-              ),
+                    onPressed: _hacerPedido,
+                    icon: const Icon(Icons.add_shopping_cart_rounded),
+                    label: const Text('Hacer pedido'),
+                  )
+                  .animate()
+                  .fadeIn(delay: 200.ms, duration: 350.ms)
+                  .scale(
+                    begin: const Offset(0.7, 0.7),
+                    end: const Offset(1, 1),
+                    curve: Curves.easeOutBack,
+                  ),
         // El banner va en bottomNavigationBar (no dentro del body) para que
         // el Scaffold acomode el FAB automáticamente encima de él — antes,
         // al estar dentro del body, el FAB flotaba sin saber cuánto espacio

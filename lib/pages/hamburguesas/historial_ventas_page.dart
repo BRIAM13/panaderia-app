@@ -10,6 +10,8 @@ import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../widgets/contador_animado.dart';
+import '../../widgets/estado_error.dart';
+import '../../widgets/estado_vacio.dart';
 import '../../widgets/pedidos_secciones.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../widgets/tarjeta_3d.dart';
@@ -163,29 +165,7 @@ class _HistorialVentasPageState extends State<HistorialVentasPage> {
     if (_cargando) return const _EsqueletoHistorial();
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.error_outline_rounded,
-                size: 44,
-                color: AppColors.error.withValues(alpha: 0.6),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(onPressed: _cargar, child: const Text('Reintentar')),
-            ],
-          ),
-        ),
-      );
+      return EstadoError(mensaje: _error!, onReintentar: _cargar);
     }
 
     final pagados = _filtrarYOrdenar(
@@ -201,7 +181,14 @@ class _HistorialVentasPageState extends State<HistorialVentasPage> {
         deuda.isEmpty &&
         cancelados.isEmpty &&
         rechazados.isEmpty) {
-      return _EstadoVacioHistorial(onRefrescar: _cargar);
+      return EstadoVacio(
+        icono: Icons.receipt_long_rounded,
+        titulo: 'Todavía no hay ventas en el historial',
+        subtitulo:
+            'Los pedidos entregados, cancelados o rechazados de esta '
+            'tienda van a aparecer acá.',
+        onRefrescar: _cargar,
+      );
     }
 
     final resumen = _resumen;
@@ -316,74 +303,6 @@ class _HistorialVentasPageState extends State<HistorialVentasPage> {
             pedidos: rechazados,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _EstadoVacioHistorial extends StatelessWidget {
-  const _EstadoVacioHistorial({required this.onRefrescar});
-
-  final Future<void> Function() onRefrescar;
-
-  @override
-  Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: onRefrescar,
-      child: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                          width: 84,
-                          height: 84,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.primary.withValues(alpha: 0.18),
-                                AppColors.secondary.withValues(alpha: 0.10),
-                              ],
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.receipt_long_rounded,
-                            size: 40,
-                            color: AppColors.primary,
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(duration: 350.ms)
-                        .scale(
-                          begin: const Offset(0.85, 0.85),
-                          end: const Offset(1, 1),
-                        ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Todavía no hay ventas en el historial',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Los pedidos entregados, cancelados o rechazados de '
-                      'esta tienda van a aparecer acá.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ).animate().fadeIn(delay: 140.ms, duration: 300.ms),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

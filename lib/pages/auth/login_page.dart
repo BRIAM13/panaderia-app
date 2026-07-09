@@ -10,6 +10,7 @@ import '../../services/auth_service.dart';
 import '../../services/biometric_service.dart';
 import '../../widgets/biometric_offer_sheet.dart';
 import '../../widgets/page_transitions.dart';
+import '../../widgets/premium_button.dart';
 import '../hub/home_page.dart';
 import 'change_password_page.dart';
 
@@ -377,18 +378,11 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ],
                 const SizedBox(height: 16),
-                ElevatedButton(
-                      onPressed: _cargando ? null : _iniciarSesion,
-                      child: _cargando
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Iniciar sesión'),
+                PremiumButton(
+                      label: 'Iniciar sesión',
+                      icono: Icons.login_rounded,
+                      cargando: _cargando,
+                      onPressed: _iniciarSesion,
                     )
                     .animate()
                     .fadeIn(delay: 280.ms, duration: 300.ms)

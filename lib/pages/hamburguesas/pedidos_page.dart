@@ -6,6 +6,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
+import '../../widgets/estado_error.dart';
+import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/pedidos_secciones.dart';
@@ -242,37 +244,15 @@ class _PedidosPageState extends State<PedidosPage> {
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _cargar,
-                child: const Text('Reintentar'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return EstadoError(mensaje: _error!, onReintentar: _cargar);
     }
 
     if (_pedidos.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'Aún no hay pedidos registrados',
-            style: theme.textTheme.bodyMedium,
-          ),
-        ),
+      return EstadoVacio(
+        icono: Icons.receipt_long_rounded,
+        titulo: 'Aún no hay pedidos registrados',
+        subtitulo: 'Los pedidos de tus tiendas van a aparecer acá.',
+        onRefrescar: _cargar,
       );
     }
 

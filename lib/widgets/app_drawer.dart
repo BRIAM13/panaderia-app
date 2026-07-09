@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../models/usuario_sesion.dart';
+import '../theme/app_theme.dart';
 
 /// Drawer de perfil: sección "GESTIÓN" para el personal (trabajador/admin/
 /// superadmin) y sección "MI CUENTA" con los apartados propios de cliente
@@ -55,21 +57,45 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
     return Drawer(
-      backgroundColor: scheme.surface,
+      backgroundColor: AppColors.background,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.primary, AppColors.secondary],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.28),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: scheme.primary,
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.18),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.4),
+                        width: 1.4,
+                      ),
+                    ),
+                    alignment: Alignment.center,
                     child: Text(
                       usuario.nombreCompleto.isNotEmpty
                           ? usuario.nombreCompleto[0].toUpperCase()
@@ -77,7 +103,7 @@ class AppDrawer extends StatelessWidget {
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
@@ -88,108 +114,212 @@ class AppDrawer extends StatelessWidget {
                       children: [
                         Text(
                           usuario.nombreCompleto,
-                          style: theme.textTheme.titleMedium,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 2),
-                        Chip(
-                          label: Text(_etiquetaRol(usuario.rol)),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.20),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _etiquetaRol(usuario.rol),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-            ),
-            const Divider(height: 1),
+            ).animate().fadeIn(duration: 300.ms).moveY(begin: -10, end: 0),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                 children: [
                   if (usuario.esPersonalDeGestion) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Text(
-                        'GESTIÓN',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+                    const _EncabezadoSeccion(texto: 'GESTIÓN'),
                     if (misSlugsTiendas.contains('hamburguesas'))
-                      ListTile(
-                        leading: const Icon(Icons.lunch_dining_rounded),
-                        title: const Text('Gestionar Hamburguesas'),
+                      _FilaMenu(
+                        icono: Icons.lunch_dining_rounded,
+                        titulo: 'Gestionar Hamburguesas',
                         onTap: onAbrirHamburguesas,
+                        delay: 40,
                       ),
                     if (misSlugsTiendas.contains('horneados'))
-                      ListTile(
-                        leading: const Icon(Icons.bakery_dining_rounded),
-                        title: const Text('Gestionar Horneados'),
+                      _FilaMenu(
+                        icono: Icons.bakery_dining_rounded,
+                        titulo: 'Gestionar Horneados',
                         onTap: () => onAbrirGestion(
                           'Horneados',
                           Icons.bakery_dining_rounded,
                         ),
+                        delay: 70,
                       ),
                     if (usuario.rol == 'ADMIN' || usuario.rol == 'SUPERADMIN')
-                      ListTile(
-                        leading: const Icon(Icons.groups_2_rounded),
-                        title: const Text('Trabajadores'),
+                      _FilaMenu(
+                        icono: Icons.groups_2_rounded,
+                        titulo: 'Trabajadores',
                         onTap: onAbrirTrabajadores,
+                        delay: 100,
                       ),
                   ],
                   if (usuario.esCliente) ...[
-                    if (usuario.esPersonalDeGestion) const Divider(height: 1),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Text(
-                        'MI CUENTA',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+                    if (usuario.esPersonalDeGestion) ...[
+                      const SizedBox(height: 8),
+                      const Divider(height: 1),
+                    ],
+                    const _EncabezadoSeccion(texto: 'MI CUENTA'),
                     if (usuario.esPersonalDeGestion)
-                      ListTile(
-                        leading: const Icon(Icons.add_shopping_cart_rounded),
-                        title: const Text('Hacer pedido'),
+                      _FilaMenu(
+                        icono: Icons.add_shopping_cart_rounded,
+                        titulo: 'Hacer pedido',
                         onTap: onHacerPedido,
+                        delay: 130,
                       ),
-                    ListTile(
-                      leading: const Icon(Icons.receipt_long_rounded),
-                      title: const Text('Mis pedidos'),
+                    _FilaMenu(
+                      icono: Icons.receipt_long_rounded,
+                      titulo: 'Mis pedidos',
                       onTap: onAbrirMisPedidos,
+                      delay: 160,
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.account_balance_wallet_rounded),
-                      title: const Text('Mis deudas'),
+                    _FilaMenu(
+                      icono: Icons.account_balance_wallet_rounded,
+                      titulo: 'Mis deudas',
                       onTap: onAbrirMisDeudas,
+                      delay: 190,
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.badge_outlined),
-                      title: const Text('Mi perfil'),
+                    _FilaMenu(
+                      icono: Icons.badge_outlined,
+                      titulo: 'Mi perfil',
                       onTap: onAbrirMiPerfil,
+                      delay: 220,
                     ),
                   ],
                 ],
               ),
             ),
             const Divider(height: 1),
-            ListTile(
-              leading: Icon(Icons.logout_rounded, color: scheme.error),
-              title: Text(
-                'Cerrar sesión',
-                style: TextStyle(color: scheme.error),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: _FilaMenu(
+                icono: Icons.logout_rounded,
+                titulo: 'Cerrar sesión',
+                onTap: onCerrarSesion,
+                color: AppColors.error,
+                delay: 0,
               ),
-              onTap: onCerrarSesion,
             ),
-            const SizedBox(height: 8),
           ],
         ),
       ),
     );
+  }
+}
+
+class _EncabezadoSeccion extends StatelessWidget {
+  const _EncabezadoSeccion({required this.texto});
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 14, 10, 6),
+      child: Text(
+        texto,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w800,
+          color: AppColors.secondary,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+/// Fila táctil del drawer: ícono en una insignia redondeada de color +
+/// título + flecha, con feedback de presión y entrada escalonada — en vez
+/// del `ListTile` plano por defecto.
+class _FilaMenu extends StatelessWidget {
+  const _FilaMenu({
+    required this.icono,
+    required this.titulo,
+    required this.onTap,
+    required this.delay,
+    this.color = AppColors.primary,
+  });
+
+  final IconData icono;
+  final String titulo;
+  final VoidCallback onTap;
+  final int delay;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(icono, color: color, size: 19),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        titulo,
+                        style: Theme.of(context).textTheme.bodyMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: color == AppColors.error
+                                  ? AppColors.error
+                                  : AppColors.textPrimary,
+                            ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: AppColors.textSecondary.withValues(alpha: 0.6),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        )
+        .animate(delay: delay.ms)
+        .fadeIn(duration: 260.ms)
+        .moveX(begin: -10, end: 0, curve: Curves.easeOutCubic);
   }
 }

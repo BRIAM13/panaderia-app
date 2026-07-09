@@ -11,7 +11,9 @@ import '../../services/pedidos_service.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../utils/text_formatters.dart';
 import '../../utils/texto_utils.dart';
+import '../../widgets/estado_error.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/premium_button.dart';
 import '../../widgets/segmented_switch.dart';
 
 const _tiposPedido = ['UNIDADES', 'PAQUETES'];
@@ -337,22 +339,7 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
         child: _cargandoDatos
             ? const Center(child: AppLoadingIndicator())
             : _errorCarga != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_errorCarga!, textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
-                      OutlinedButton(
-                        onPressed: _cargarDatos,
-                        child: const Text('Reintentar'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
+            ? EstadoError(mensaje: _errorCarga!, onReintentar: _cargarDatos)
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Form(
@@ -543,18 +530,11 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
                         ),
                       ],
                       const SizedBox(height: 20),
-                      ElevatedButton(
-                        onPressed: _enviando ? null : _registrarPedido,
-                        child: _enviando
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Registrar pedido'),
+                      PremiumButton(
+                        label: 'Registrar pedido',
+                        icono: Icons.add_shopping_cart_rounded,
+                        cargando: _enviando,
+                        onPressed: _registrarPedido,
                       ),
                     ],
                   ),

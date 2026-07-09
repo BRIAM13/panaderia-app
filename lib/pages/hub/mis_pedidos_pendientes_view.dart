@@ -7,6 +7,8 @@ import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
 import '../../widgets/ad_banner.dart';
+import '../../widgets/estado_error.dart';
+import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/pedidos_secciones.dart';
@@ -132,26 +134,7 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _cargar,
-                child: const Text('Reintentar'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return EstadoError(mensaje: _error!, onReintentar: _cargar);
     }
 
     return RefreshIndicator(
@@ -173,22 +156,12 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
               .moveY(begin: 6, end: 0),
           const SizedBox(height: 20),
           if (_pedidos.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.receipt_long_outlined,
-                    size: 48,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Aún no tienes pedidos registrados',
-                    style: theme.textTheme.bodyMedium,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: EstadoVacio(
+                icono: Icons.receipt_long_outlined,
+                titulo: 'Aún no tienes pedidos registrados',
+                subtitulo: 'Tu historial con la panadería va a aparecer acá.',
               ),
             )
           else

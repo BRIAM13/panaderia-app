@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../services/api_client.dart';
 import '../../services/configuraciones_service.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/premium_button.dart';
 
 const _claveConfigPrecioPaquete = 'PRECIO_PAQUETE';
 
@@ -180,18 +181,11 @@ class _AjusteCostosPageState extends State<AjusteCostosPage> {
                         ),
                       ],
                       const SizedBox(height: 20),
-                      ElevatedButton(
-                        onPressed: _guardando ? null : _guardar,
-                        child: _guardando
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Guardar cambios'),
+                      PremiumButton(
+                        label: 'Guardar cambios',
+                        icono: Icons.check_rounded,
+                        cargando: _guardando,
+                        onPressed: _guardar,
                       ),
                     ],
                   ),

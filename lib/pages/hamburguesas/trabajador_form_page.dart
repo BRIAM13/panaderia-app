@@ -13,6 +13,8 @@ import '../../services/roles_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../services/trabajadores_service.dart';
 import '../../utils/text_formatters.dart';
+import '../../widgets/premium_button.dart';
+import '../../widgets/skeleton_loader.dart';
 
 /// Alta de un trabajador con el mismo "Estándar Briam" que Clientes: el DNI
 /// es el único campo visible al inicio, la búsqueda es 100% automática (no
@@ -506,12 +508,7 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
                             ),
                             const SizedBox(height: 16),
                             if (_cargandoRoles)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
+                              const SkeletonBox(height: 58, borderRadius: 12)
                             else
                               DropdownButtonFormField<String>(
                                 initialValue: _rolSeleccionado,
@@ -551,10 +548,16 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
                             ),
                             const SizedBox(height: 8),
                             if (_cargandoTiendas)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: Center(
-                                  child: CircularProgressIndicator(),
+                              Column(
+                                children: List.generate(
+                                  2,
+                                  (i) => const Padding(
+                                    padding: EdgeInsets.only(bottom: 8),
+                                    child: SkeletonBox(
+                                      height: 48,
+                                      borderRadius: 12,
+                                    ),
+                                  ),
                                 ),
                               )
                             else if (_misTiendas.isEmpty)
@@ -599,18 +602,11 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
                         ).animate().fadeIn(duration: 250.ms),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: (_guardando || !_puedeGuardar) ? null : _guardar,
-                  child: _guardando
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Registrar trabajador'),
+                PremiumButton(
+                  label: 'Registrar trabajador',
+                  icono: Icons.badge_outlined,
+                  cargando: _guardando,
+                  onPressed: _puedeGuardar ? _guardar : null,
                 ),
               ],
             ),

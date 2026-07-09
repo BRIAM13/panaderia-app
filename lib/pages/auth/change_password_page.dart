@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/biometric_service.dart';
 import '../../widgets/biometric_offer_sheet.dart';
 import '../../widgets/page_transitions.dart';
+import '../../widgets/premium_button.dart';
 import '../hub/home_page.dart';
 
 /// Pantalla obligatoria de cambio de contraseña, mostrada cuando el
@@ -176,18 +177,11 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   ),
                 ],
                 const SizedBox(height: 20),
-                ElevatedButton(
-                      onPressed: _cargando ? null : _cambiarPassword,
-                      child: _cargando
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Guardar y continuar'),
+                PremiumButton(
+                      label: 'Guardar y continuar',
+                      icono: Icons.check_rounded,
+                      cargando: _cargando,
+                      onPressed: _cambiarPassword,
                     )
                     .animate()
                     .fadeIn(delay: 280.ms, duration: 300.ms)

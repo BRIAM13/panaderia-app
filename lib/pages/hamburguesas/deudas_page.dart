@@ -8,6 +8,8 @@ import '../../services/pedidos_service.dart';
 import '../../services/solicitudes_pago_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/fecha_pedido_utils.dart';
+import '../../widgets/estado_error.dart';
+import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/tarjeta_3d.dart';
 
@@ -173,48 +175,15 @@ class _DeudasPageState extends State<DeudasPage> {
     if (_cargando) return const Center(child: AppLoadingIndicator());
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _cargar,
-                child: const Text('Reintentar'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return EstadoError(mensaje: _error!, onReintentar: _cargar);
     }
 
     if (_deudas.isEmpty && _solicitudes.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.check_circle_outline_rounded,
-                size: 48,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'No hay deudas pendientes',
-                style: theme.textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
+      return EstadoVacio(
+        icono: Icons.check_circle_outline_rounded,
+        titulo: 'No hay deudas pendientes',
+        subtitulo: 'Cuando algún pedido quede como deuda, aparece acá.',
+        onRefrescar: _cargar,
       );
     }
 

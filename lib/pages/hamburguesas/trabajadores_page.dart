@@ -9,6 +9,8 @@ import '../../services/roles_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../services/trabajadores_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/estado_error.dart';
+import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/tarjeta_3d.dart';
@@ -206,39 +208,18 @@ class _TrabajadoresPageState extends State<TrabajadoresPage> {
   }
 
   Widget _construirCuerpo() {
-    final theme = Theme.of(context);
-
     if (_cargando) return const Center(child: AppLoadingIndicator());
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _cargar,
-                child: const Text('Reintentar'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return EstadoError(mensaje: _error!, onReintentar: _cargar);
     }
 
     if (_trabajadores.isEmpty) {
-      return Center(
-        child: Text(
-          'Aún no hay trabajadores registrados',
-          style: theme.textTheme.bodyMedium,
-        ),
+      return EstadoVacio(
+        icono: Icons.badge_outlined,
+        titulo: 'Aún no hay trabajadores registrados',
+        subtitulo: 'El personal que agregues va a aparecer acá.',
+        onRefrescar: _cargar,
       );
     }
 

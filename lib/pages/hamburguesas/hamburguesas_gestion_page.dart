@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/usuario_sesion.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/page_transitions.dart';
+import '../../widgets/tarjeta_3d.dart';
 import 'ajuste_costos_page.dart';
 import 'clientes_page.dart';
 import 'deudas_page.dart';
@@ -75,20 +77,25 @@ class HamburguesasGestionPage extends StatelessWidget {
           itemCount: opciones.length,
           itemBuilder: (context, index) {
             final opcion = opciones[index];
-            return Card(
-                  margin: const EdgeInsets.only(bottom: 14),
-                  child: InkWell(
+            return Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Tarjeta3D(
+                    borderRadius: 20,
                     onTap: opcion.onTap,
-                    child: Padding(
+                    child: Container(
+                      color: AppColors.surface,
                       padding: const EdgeInsets.all(18),
                       child: Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: LinearGradient(
-                                colors: [scheme.primary, scheme.secondary],
+                                colors: [
+                                  AppColors.primary,
+                                  AppColors.secondary,
+                                ],
                               ),
                             ),
                             child: Icon(
@@ -125,7 +132,8 @@ class HamburguesasGestionPage extends StatelessWidget {
                 )
                 .animate(delay: (80 * index).ms)
                 .fadeIn(duration: 300.ms)
-                .moveY(begin: 16, end: 0);
+                .moveY(begin: 16, end: 0)
+                .flipH(begin: 0.1, end: 0, duration: 320.ms);
           },
         ),
       ),

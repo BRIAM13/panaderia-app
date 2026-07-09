@@ -3,6 +3,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../services/api_client.dart';
 import '../../services/clientes_service.dart';
+import '../../widgets/loading_indicator.dart';
+import '../../widgets/premium_button.dart';
 import '../../widgets/verificacion_otp.dart';
 
 /// Cambio de contraseña autoservicio (rol CLIENTE), distinto del cambio
@@ -123,7 +125,7 @@ class _CambiarPasswordSeguroPageState extends State<CambiarPasswordSeguroPage> {
       appBar: AppBar(title: const Text('Cambiar contraseña')),
       body: SafeArea(
         child: _cargandoPerfil
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: AppLoadingIndicator())
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: !_tieneCanalVerificado
@@ -244,20 +246,13 @@ class _CambiarPasswordSeguroPageState extends State<CambiarPasswordSeguroPage> {
                               ),
                             ],
                             const SizedBox(height: 20),
-                            ElevatedButton(
-                              onPressed: (_guardando || _autorizacion == null)
+                            PremiumButton(
+                              label: 'Actualizar contraseña',
+                              icono: Icons.lock_reset_rounded,
+                              cargando: _guardando,
+                              onPressed: _autorizacion == null
                                   ? null
                                   : _guardar,
-                              child: _guardando
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text('Actualizar contraseña'),
                             ),
                           ],
                         ),
