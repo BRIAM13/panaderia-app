@@ -14,7 +14,9 @@ import 'pedidos_page.dart';
 
 /// Hub de gestión de la tienda de Hamburguesas para el personal
 /// (Trabajador/Admin/SuperAdmin): acceso a Clientes, Nuevo pedido y, solo
-/// para ADMIN/SUPERADMIN, Ajuste de costos.
+/// para ADMIN/SUPERADMIN, Ajuste de costos. Métodos de pago es aún más
+/// restringido: solo SUPERADMIN, al manejar las cuentas reales (Yape/
+/// Plin/transferencia) donde llega el dinero de la empresa.
 class HamburguesasGestionPage extends StatelessWidget {
   const HamburguesasGestionPage({super.key, required this.usuario});
 
@@ -25,6 +27,7 @@ class HamburguesasGestionPage extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final esAdmin = usuario.rol == 'ADMIN' || usuario.rol == 'SUPERADMIN';
+    final esSuperAdmin = usuario.rol == 'SUPERADMIN';
 
     final opciones = [
       _OpcionGestion(
@@ -51,7 +54,7 @@ class HamburguesasGestionPage extends StatelessWidget {
         icono: Icons.account_balance_wallet_rounded,
         onTap: () => pushSlideUpFade(context, (_) => const DeudasPage()),
       ),
-      if (esAdmin)
+      if (esSuperAdmin)
         _OpcionGestion(
           titulo: 'Métodos de pago',
           subtitulo:

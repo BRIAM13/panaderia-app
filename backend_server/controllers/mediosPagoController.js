@@ -12,6 +12,7 @@ function mapearFila(fila) {
     cci: fila.CCI,
     nombreBanco: fila.NombreBanco,
     notas: fila.Notas,
+    imagenQrBase64: fila.ImagenQrBase64 || null,
     estado: !!fila.Estado,
   };
 }
@@ -66,7 +67,7 @@ async function listarPorTienda(req, res, next) {
 
 async function crear(req, res, next) {
   try {
-    const { idTienda, tipo, titular, numeroDestino, cci, nombreBanco, notas } = req.body;
+    const { idTienda, tipo, titular, numeroDestino, cci, nombreBanco, notas, imagenQrBase64 } = req.body;
 
     const acceso = await tieneAccesoATienda({ rol: req.usuario.rol, idPersona: req.usuario.idPersona, idTienda });
     if (!acceso) {
@@ -83,10 +84,11 @@ async function crear(req, res, next) {
       .input('CCI', sql.VarChar(20), cci ? cci.trim() : null)
       .input('NombreBanco', sql.NVarChar(100), nombreBanco ? nombreBanco.trim().toUpperCase() : null)
       .input('Notas', sql.NVarChar(200), notas ? notas.trim() : null)
+      .input('ImagenQrBase64', sql.NVarChar(sql.MAX), imagenQrBase64 || null)
       .query(`
-        INSERT INTO MediosPagoTienda (IdTienda, Tipo, Titular, NumeroDestino, CCI, NombreBanco, Notas)
+        INSERT INTO MediosPagoTienda (IdTienda, Tipo, Titular, NumeroDestino, CCI, NombreBanco, Notas, ImagenQrBase64)
         OUTPUT INSERTED.*
-        VALUES (@IdTienda, @Tipo, @Titular, @NumeroDestino, @CCI, @NombreBanco, @Notas)
+        VALUES (@IdTienda, @Tipo, @Titular, @NumeroDestino, @CCI, @NombreBanco, @Notas, @ImagenQrBase64)
       `);
 
     await registrarAuditoria({
@@ -108,7 +110,7 @@ async function crear(req, res, next) {
 async function actualizar(req, res, next) {
   try {
     const { id } = req.params;
-    const { titular, numeroDestino, cci, nombreBanco, notas } = req.body;
+    const { titular, numeroDestino, cci, nombreBanco, notas, imagenQrBase64 } = req.body;
 
     const pool = await getPool();
     const existente = await pool.request().input('Id', sql.Int, id).query('SELECT IdTienda FROM MediosPagoTienda WHERE IdMedioPago = @Id');
@@ -133,10 +135,11 @@ async function actualizar(req, res, next) {
       .input('CCI', sql.VarChar(20), cci ? cci.trim() : null)
       .input('NombreBanco', sql.NVarChar(100), nombreBanco ? nombreBanco.trim().toUpperCase() : null)
       .input('Notas', sql.NVarChar(200), notas ? notas.trim() : null)
+      .input('ImagenQrBase64', sql.NVarChar(sql.MAX), imagenQrBase64 || null)
       .query(`
         UPDATE MediosPagoTienda
         SET Titular = @Titular, NumeroDestino = @NumeroDestino, CCI = @CCI, NombreBanco = @NombreBanco,
-            Notas = @Notas, FechaActualizacion = SYSUTCDATETIME()
+            Notas = @Notas, ImagenQrBase64 = @ImagenQrBase64, FechaActualizacion = SYSUTCDATETIME()
         OUTPUT INSERTED.*
         WHERE IdMedioPago = @Id
       `);

@@ -374,9 +374,17 @@ function validateConfiguracion(req, res, next) {
 
 const TIPOS_MEDIO_PAGO = ['YAPE', 'PLIN', 'TRANSFERENCIA', 'OTRO'];
 
+function validateImagenQr(imagenQrBase64, errores) {
+  if (imagenQrBase64 === undefined || imagenQrBase64 === null || imagenQrBase64 === '') return;
+  if (typeof imagenQrBase64 !== 'string' || imagenQrBase64.length > 4_000_000) {
+    errores.push('La imagen del QR no es válida o es demasiado grande.');
+  }
+}
+
 function validateMedioPago(req, res, next) {
-  const { idTienda, tipo, titular, numeroDestino, cci, nombreBanco } = req.body;
+  const { idTienda, tipo, titular, numeroDestino, cci, nombreBanco, imagenQrBase64 } = req.body;
   const errores = [];
+  validateImagenQr(imagenQrBase64, errores);
 
   if (!Number.isInteger(idTienda) || idTienda <= 0) {
     errores.push('Debes indicar una tienda válida.');
@@ -408,8 +416,9 @@ function validateMedioPago(req, res, next) {
 }
 
 function validateActualizarMedioPago(req, res, next) {
-  const { titular, numeroDestino, cci, nombreBanco } = req.body;
+  const { titular, numeroDestino, cci, nombreBanco, imagenQrBase64 } = req.body;
   const errores = [];
+  validateImagenQr(imagenQrBase64, errores);
 
   if (!isNonEmptyString(titular) || titular.trim().length > 150) {
     errores.push('El nombre del titular es requerido (máx. 150 caracteres).');

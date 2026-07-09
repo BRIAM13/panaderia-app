@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../models/medio_pago_model.dart';
 import '../../models/tienda_model.dart';
@@ -255,6 +258,34 @@ class _TarjetaMedioPago extends StatelessWidget {
                           fontSize: 12,
                         ),
                       ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          medio.imagenQrBase64 != null
+                              ? Icons.qr_code_2_rounded
+                              : Icons.qr_code_2_outlined,
+                          size: 14,
+                          color: medio.imagenQrBase64 != null
+                              ? const Color(0xFF2E7D32)
+                              : AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          medio.imagenQrBase64 != null
+                              ? 'QR real subido'
+                              : 'Sin QR real — solo informativo',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: medio.imagenQrBase64 != null
+                                ? const Color(0xFF2E7D32)
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -294,9 +325,15 @@ class _FormularioMedioPagoState extends State<_FormularioMedioPago> {
   final _cciController = TextEditingController();
   final _bancoController = TextEditingController();
   final _notasController = TextEditingController();
+  final _imagePicker = ImagePicker();
 
   bool _guardando = false;
   String? _error;
+
+  /// QR real (descargado de la propia app de Yape/Plin) que se va a
+  /// guardar — precargado con el que ya tenía el medio de pago, si se está
+  /// editando uno que ya tiene uno subido.
+  String? _imagenQrBase64;
 
   bool get _esEdicion => widget.medioExistente != null;
 
@@ -310,6 +347,53 @@ class _FormularioMedioPagoState extends State<_FormularioMedioPago> {
     _cciController.text = medio?.cci ?? '';
     _bancoController.text = medio?.nombreBanco ?? '';
     _notasController.text = medio?.notas ?? '';
+    _imagenQrBase64 = medio?.imagenQrBase64;
+  }
+
+  Future<void> _elegirImagenQr(ImageSource origen) async {
+    try {
+      final archivo = await _imagePicker.pickImage(
+        source: origen,
+        // Un QR no necesita alta resolución — esto mantiene el archivo
+        // liviano para no acercarse al límite del body del backend.
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+      if (archivo == null) return;
+      final bytes = await archivo.readAsBytes();
+      if (!mounted) return;
+      setState(() => _imagenQrBase64 = base64Encode(bytes));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo cargar la imagen.')),
+      );
+    }
+  }
+
+  Future<void> _elegirOrigenImagen() async {
+    final origen = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Elegir de la galería'),
+              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Tomar una foto'),
+              onTap: () => Navigator.of(context).pop(ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (origen != null) await _elegirImagenQr(origen);
   }
 
   @override
@@ -354,6 +438,7 @@ class _FormularioMedioPagoState extends State<_FormularioMedioPago> {
       notas: _notasController.text.trim().isEmpty
           ? null
           : _notasController.text.trim(),
+      imagenQrBase64: _imagenQrBase64,
     );
 
     try {
@@ -453,6 +538,71 @@ class _FormularioMedioPagoState extends State<_FormularioMedioPago> {
                 ),
                 maxLines: 2,
               ),
+              const SizedBox(height: 16),
+              Text(
+                'QR real de Yape/Plin (opcional, pero recomendado)',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Descárgalo desde la propia app (Mi QR → Descargar) y '
+                'súbelo aquí — es el único que Yape/Plin reconocen al '
+                'escanear. Sin esto, el cliente solo ve un QR informativo.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: _elegirOrigenImagen,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  height: _imagenQrBase64 != null ? 160 : 90,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.secondary.withValues(alpha: 0.35),
+                    ),
+                    color: AppColors.surfaceMuted,
+                  ),
+                  alignment: Alignment.center,
+                  child: _imagenQrBase64 != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(13),
+                          child: Image.memory(
+                            base64Decode(_imagenQrBase64!),
+                            height: 160,
+                            fit: BoxFit.contain,
+                          ),
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.add_a_photo_outlined,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Subir imagen del QR',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+              if (_imagenQrBase64 != null)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _imagenQrBase64 = null),
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                    label: const Text('Quitar imagen'),
+                  ),
+                ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(

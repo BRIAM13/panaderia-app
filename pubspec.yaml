@@ -80,6 +80,10 @@ dependencies:
   # Gráficos animados (barras, etc.) para el dashboard de administración.
   fl_chart: ^0.69.2
 
+  # Elegir de galería/cámara el QR real (descargado de la app de Yape/Plin)
+  # al registrar un método de pago.
+  image_picker: ^1.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

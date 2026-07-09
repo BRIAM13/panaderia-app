@@ -10,6 +10,7 @@ class MedioPago {
     required this.cci,
     required this.nombreBanco,
     required this.notas,
+    required this.imagenQrBase64,
     required this.estado,
   });
 
@@ -22,6 +23,7 @@ class MedioPago {
     cci: json['cci'] as String?,
     nombreBanco: json['nombreBanco'] as String?,
     notas: json['notas'] as String?,
+    imagenQrBase64: json['imagenQrBase64'] as String?,
     estado: json['estado'] as bool,
   );
 
@@ -34,6 +36,12 @@ class MedioPago {
   final String? cci;
   final String? nombreBanco;
   final String? notas;
+
+  /// QR real (descargado de la propia app de Yape/Plin), en base64 — si
+  /// está presente, es el que hay que mostrarle al cliente para escanear
+  /// (el único que esas apps reconocen de verdad). Si es null, el cliente
+  /// solo ve el QR informativo generado por la app.
+  final String? imagenQrBase64;
   final bool estado;
 
   String get etiquetaTipo {

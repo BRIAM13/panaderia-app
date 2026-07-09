@@ -474,6 +474,10 @@ CREATE TABLE MediosPagoTienda (
     CCI                 VARCHAR(20)         NULL,       -- solo TRANSFERENCIA
     NombreBanco         NVARCHAR(100)       NULL,       -- solo TRANSFERENCIA
     Notas               NVARCHAR(200)       NULL,
+    ImagenQrBase64      NVARCHAR(MAX)       NULL,       -- QR real (descargado
+        -- de la propia app de Yape/Plin) en base64, editable solo por
+        -- SUPERADMIN. Sin esto, el cliente ve el QR informativo generado
+        -- (no reconocido por Yape/Plin, ver mensaje que lo aclara).
     Estado              BIT                 NOT NULL DEFAULT 1,
     FechaCreacion       DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME(),
     FechaActualizacion  DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME(),

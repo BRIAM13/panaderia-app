@@ -73,6 +73,7 @@ class MedioPagoResumen {
     required this.cci,
     required this.nombreBanco,
     required this.notas,
+    required this.imagenQrBase64,
   });
 
   factory MedioPagoResumen.fromJson(Map<String, dynamic> json) =>
@@ -84,6 +85,7 @@ class MedioPagoResumen {
         cci: json['cci'] as String?,
         nombreBanco: json['nombreBanco'] as String?,
         notas: json['notas'] as String?,
+        imagenQrBase64: json['imagenQrBase64'] as String?,
       );
 
   final int idMedioPago;
@@ -93,6 +95,10 @@ class MedioPagoResumen {
   final String? cci;
   final String? nombreBanco;
   final String? notas;
+
+  /// QR real (descargado de la app de Yape/Plin) — si está presente, es el
+  /// que hay que mostrarle al cliente en vez del QR informativo generado.
+  final String? imagenQrBase64;
 
   String get etiquetaTipo {
     switch (tipo) {

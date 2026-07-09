@@ -10,6 +10,10 @@
     <!-- Requerido por firebase_messaging (Android 13+) para poder mostrar
          notificaciones push. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Requerido por image_picker para fotografiar el QR real de Yape/Plin
+         como alternativa a elegirlo de la galería. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="Corporación Ronceros"
         android:name="${applicationName}"

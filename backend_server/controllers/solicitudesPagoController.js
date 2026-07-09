@@ -194,6 +194,7 @@ async function crear(req, res, next) {
         cci: medioPago.CCI,
         nombreBanco: medioPago.NombreBanco,
         notas: medioPago.Notas,
+        imagenQrBase64: medioPago.ImagenQrBase64 || null,
       },
     });
   } catch (err) {

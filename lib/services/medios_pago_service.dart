@@ -10,6 +10,7 @@ class MedioPagoInput {
     this.cci,
     this.nombreBanco,
     this.notas,
+    this.imagenQrBase64,
   });
 
   final String tipo;
@@ -19,6 +20,10 @@ class MedioPagoInput {
   final String? nombreBanco;
   final String? notas;
 
+  /// QR real (descargado de la app de Yape/Plin) en base64 — null si no se
+  /// cambió/subió ninguno.
+  final String? imagenQrBase64;
+
   Map<String, dynamic> toJson() => {
     'tipo': tipo,
     'titular': titular,
@@ -26,6 +31,7 @@ class MedioPagoInput {
     'cci': cci,
     'nombreBanco': nombreBanco,
     'notas': notas,
+    'imagenQrBase64': imagenQrBase64,
   };
 }
 

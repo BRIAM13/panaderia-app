@@ -22,7 +22,10 @@ const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 const app = express();
 
 app.use(cors());
-app.use(express.json({ limit: '10kb' }));
+// 3mb (no 10kb): el registro de medios de pago admite subir la imagen real
+// del QR de Yape/Plin en base64 — un PNG de esos, ya comprimido en el
+// cliente, ronda unos cientos de KB.
+app.use(express.json({ limit: '3mb' }));
 app.use(morgan('dev'));
 
 app.get('/api/health', (req, res) => {
