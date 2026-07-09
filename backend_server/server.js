@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 
+const { getPool } = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const externalRoutes = require('./routes/externalRoutes');
 const clientesRoutes = require('./routes/clientesRoutes');
@@ -26,6 +27,23 @@ app.use(morgan('dev'));
 
 app.get('/api/health', (req, res) => {
   res.json({ estado: 'ok', fecha: new Date().toISOString() });
+});
+
+// Distinto de /api/health: este SÍ toca la base de datos (Azure SQL, oferta
+// gratuita) con una consulta trivial. Pensado para que un ping externo
+// periódico (ver .github/workflows/keep-alive.yml) evite que Render duerma
+// el servicio Y que Azure pause la base de datos por inactividad — ninguno
+// de los dos se puede desactivar directamente en el nivel gratuito.
+app.get('/api/keep-alive', async (req, res) => {
+  try {
+    const pool = await getPool();
+    await pool.request().query('SELECT 1 AS Ping');
+    res.json({ estado: 'ok', bd: 'activa', fecha: new Date().toISOString() });
+  } catch (err) {
+    res
+      .status(503)
+      .json({ estado: 'error', bd: 'inactiva', mensaje: err.message });
+  }
 });
 
 app.use('/api/auth', authRoutes);

@@ -1,0 +1,21 @@
+name: Keep-alive backend + base de datos
+
+# Evita el "arranque en frío" de ~2 minutos al loguearse: Render duerme el
+# servicio gratuito tras 15 min sin tráfico, y Azure SQL (oferta gratuita)
+# pausa la base de datos por su cuenta tras un rato de inactividad — ninguno
+# de los dos se puede desactivar directamente en el nivel gratuito. Este
+# ping cada 10 minutos, 24/7, mantiene ambos despiertos sin depender de que
+# nadie tenga la app abierta.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/keep-alive
+        run: |
+          curl -sS --max-time 90 --retry 2 --retry-delay 5 \
+            "https://panaderia-backend-2xvd.onrender.com/api/keep-alive"
