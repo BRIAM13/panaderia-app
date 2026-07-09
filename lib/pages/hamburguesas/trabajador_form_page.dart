@@ -327,9 +327,6 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
     return Scaffold(
       appBar: AppBar(title: const Text('Nuevo trabajador')),
       body: SafeArea(
@@ -340,90 +337,21 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'Ingresa el DNI del trabajador — el resto se completa solo.',
-                  style: theme.textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _dniController,
-                        enabled: !_buscando,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        maxLength: 8,
-                        decoration: const InputDecoration(
-                          labelText: 'DNI',
-                          counterText: '',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: FilledButton.icon(
-                        // Siempre inactivo a propósito: la búsqueda es
-                        // automática, este botón solo muestra el estado.
-                        onPressed: null,
-                        icon: _buscando
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.search_rounded, size: 18),
-                        label: const Text('Buscar'),
-                      ),
-                    ),
-                  ],
+                _SeccionBusquedaDni(
+                  dniController: _dniController,
+                  buscando: _buscando,
+                  esCliente: _esCliente,
+                  yaEsTrabajador: _yaEsTrabajador,
+                  tiendasAsignadasOtras: _tiendasAsignadasOtras,
+                  origenValidacion: _origenValidacion,
+                  camposExpandidos: _camposExpandidos,
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   Text(
                     _error!,
                     style: TextStyle(
-                      color: scheme.error,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-                if (_esCliente) ...[
-                  const SizedBox(height: 10),
-                  _AvisoInfo(
-                    icono: Icons.badge_outlined,
-                    texto:
-                        'Esta persona ya es cliente registrado — seguirá siéndolo, solo se le agrega el acceso como trabajador.',
-                    color: scheme.primary,
-                  ),
-                ],
-                if (_yaEsTrabajador && _tiendasAsignadasOtras.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  _AvisoInfo(
-                    icono: Icons.storefront_outlined,
-                    texto:
-                        'Ya es trabajador en: ${_tiendasAsignadasOtras.map((t) => t.activo ? t.nombre : '${t.nombre} (inactivo)').join(', ')}.',
-                    color: const Color(0xFFEA8C1B),
-                  ),
-                ],
-                if (_origenValidacion == 'RENIEC' && _camposExpandidos) ...[
-                  const SizedBox(height: 10),
-                  Chip(
-                    avatar: const Icon(
-                      Icons.verified_rounded,
-                      size: 16,
-                      color: Colors.white,
-                    ),
-                    label: const Text('Validado por RENIEC'),
-                    backgroundColor: const Color(0xFF2563EB),
-                    labelStyle: const TextStyle(
-                      color: Colors.white,
+                      color: Theme.of(context).colorScheme.error,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -434,172 +362,35 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
                   alignment: Alignment.topCenter,
                   child: !_camposExpandidos
                       ? const SizedBox(width: double.infinity)
-                      : Column(
-                          key: const ValueKey('campos-expandidos'),
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const SizedBox(height: 20),
-                            TextFormField(
-                              controller: _nombresController,
-                              readOnly: _soloLectura,
-                              textCapitalization: TextCapitalization.characters,
-                              inputFormatters: const [UpperCaseTextFormatter()],
-                              decoration: const InputDecoration(
-                                labelText: 'Nombres',
-                                prefixIcon: Icon(Icons.person_outline_rounded),
-                              ),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'Ingresa los nombres'
-                                  : null,
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _apellidoPaternoController,
-                              readOnly: _soloLectura,
-                              textCapitalization: TextCapitalization.characters,
-                              inputFormatters: const [UpperCaseTextFormatter()],
-                              decoration: const InputDecoration(
-                                labelText: 'Apellido paterno',
-                              ),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'Ingresa el apellido paterno'
-                                  : null,
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _apellidoMaternoController,
-                              readOnly: _soloLectura,
-                              textCapitalization: TextCapitalization.characters,
-                              inputFormatters: const [UpperCaseTextFormatter()],
-                              decoration: const InputDecoration(
-                                labelText: 'Apellido materno',
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _telefonoController,
-                              keyboardType: TextInputType.phone,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              decoration: const InputDecoration(
-                                labelText: 'Teléfono',
-                                prefixIcon: Icon(Icons.phone_outlined),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                              decoration: const InputDecoration(
-                                labelText: 'Email',
-                                prefixIcon: Icon(Icons.email_outlined),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _direccionController,
-                              textCapitalization: TextCapitalization.characters,
-                              inputFormatters: const [UpperCaseTextFormatter()],
-                              decoration: const InputDecoration(
-                                labelText: 'Dirección',
-                                prefixIcon: Icon(Icons.place_outlined),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            if (_cargandoRoles)
-                              const SkeletonBox(height: 58, borderRadius: 12)
-                            else
-                              DropdownButtonFormField<String>(
-                                initialValue: _rolSeleccionado,
-                                items: _rolesAsignables
-                                    .map(
-                                      (r) => DropdownMenuItem(
-                                        value: r.nombreRol,
-                                        child: Text(r.etiqueta),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (v) =>
-                                    setState(() => _rolSeleccionado = v),
-                                decoration: const InputDecoration(
-                                  labelText: 'Rol',
-                                  prefixIcon: Icon(Icons.work_outline_rounded),
-                                ),
-                                validator: (v) =>
-                                    v == null ? 'Selecciona un rol' : null,
-                              ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _salarioController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              decoration: const InputDecoration(
-                                labelText: 'Salario (S/, opcional)',
-                                prefixIcon: Icon(Icons.payments_outlined),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              'Acceso a tiendas',
-                              style: theme.textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            if (_cargandoTiendas)
-                              Column(
-                                children: List.generate(
-                                  2,
-                                  (i) => const Padding(
-                                    padding: EdgeInsets.only(bottom: 8),
-                                    child: SkeletonBox(
-                                      height: 48,
-                                      borderRadius: 12,
-                                    ),
-                                  ),
-                                ),
-                              )
-                            else if (_misTiendas.isEmpty)
-                              Text(
-                                'No administras ninguna tienda todavía.',
-                                style: theme.textTheme.bodyMedium,
-                              )
-                            else
-                              ..._misTiendas.map((tienda) {
-                                final yaAsignado = _tiendasYaAsignadas.contains(
-                                  tienda.idTienda,
-                                );
-                                final reactivando = _tiendasReactivando
-                                    .contains(tienda.idTienda);
-                                return CheckboxListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  value: _tiendasSeleccionadas.contains(
-                                    tienda.idTienda,
-                                  ),
-                                  title: Text(tienda.nombre),
-                                  subtitle: yaAsignado
-                                      ? const Text('Ya tiene acceso')
-                                      : reactivando
-                                      ? const Text('Tuvo acceso antes — se reactivará')
-                                      : null,
-                                  onChanged: yaAsignado
-                                      ? null
-                                      : (marcado) => setState(() {
-                                          if (marcado == true) {
-                                            _tiendasSeleccionadas.add(
-                                              tienda.idTienda,
-                                            );
-                                          } else {
-                                            _tiendasSeleccionadas.remove(
-                                              tienda.idTienda,
-                                            );
-                                          }
-                                        }),
-                                );
-                              }),
-                          ],
-                        ).animate().fadeIn(duration: 250.ms),
+                      : _CamposSecundariosTrabajador(
+                          soloLectura: _soloLectura,
+                          nombresController: _nombresController,
+                          apellidoPaternoController:
+                              _apellidoPaternoController,
+                          apellidoMaternoController:
+                              _apellidoMaternoController,
+                          telefonoController: _telefonoController,
+                          emailController: _emailController,
+                          direccionController: _direccionController,
+                          salarioController: _salarioController,
+                          cargandoRoles: _cargandoRoles,
+                          rolesAsignables: _rolesAsignables,
+                          rolSeleccionado: _rolSeleccionado,
+                          onRolCambiado: (v) =>
+                              setState(() => _rolSeleccionado = v),
+                          cargandoTiendas: _cargandoTiendas,
+                          misTiendas: _misTiendas,
+                          tiendasYaAsignadas: _tiendasYaAsignadas,
+                          tiendasReactivando: _tiendasReactivando,
+                          tiendasSeleccionadas: _tiendasSeleccionadas,
+                          onTiendaCambiada: (idTienda, marcado) => setState(() {
+                            if (marcado) {
+                              _tiendasSeleccionadas.add(idTienda);
+                            } else {
+                              _tiendasSeleccionadas.remove(idTienda);
+                            }
+                          }),
+                        ),
                 ),
                 const SizedBox(height: 24),
                 PremiumButton(
@@ -614,6 +405,300 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
         ),
       ),
     );
+  }
+}
+
+/// Campo de DNI + botón "Buscar" (siempre inactivo, solo indica estado —
+/// la búsqueda es 100% automática) + avisos de cliente/trabajador
+/// existente + chip de validación RENIEC.
+class _SeccionBusquedaDni extends StatelessWidget {
+  const _SeccionBusquedaDni({
+    required this.dniController,
+    required this.buscando,
+    required this.esCliente,
+    required this.yaEsTrabajador,
+    required this.tiendasAsignadasOtras,
+    required this.origenValidacion,
+    required this.camposExpandidos,
+  });
+
+  final TextEditingController dniController;
+  final bool buscando;
+  final bool esCliente;
+  final bool yaEsTrabajador;
+  final List<TrabajadorTiendaAsignada> tiendasAsignadasOtras;
+  final String origenValidacion;
+  final bool camposExpandidos;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Ingresa el DNI del trabajador — el resto se completa solo.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: dniController,
+                enabled: !buscando,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: 8,
+                decoration: const InputDecoration(
+                  labelText: 'DNI',
+                  counterText: '',
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: FilledButton.icon(
+                // Siempre inactivo a propósito: la búsqueda es automática,
+                // este botón solo muestra el estado.
+                onPressed: null,
+                icon: buscando
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.search_rounded, size: 18),
+                label: const Text('Buscar'),
+              ),
+            ),
+          ],
+        ),
+        if (esCliente) ...[
+          const SizedBox(height: 10),
+          _AvisoInfo(
+            icono: Icons.badge_outlined,
+            texto:
+                'Esta persona ya es cliente registrado — seguirá siéndolo, solo se le agrega el acceso como trabajador.',
+            color: scheme.primary,
+          ),
+        ],
+        if (yaEsTrabajador && tiendasAsignadasOtras.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _AvisoInfo(
+            icono: Icons.storefront_outlined,
+            texto:
+                'Ya es trabajador en: ${tiendasAsignadasOtras.map((t) => t.activo ? t.nombre : '${t.nombre} (inactivo)').join(', ')}.',
+            color: const Color(0xFFEA8C1B),
+          ),
+        ],
+        if (origenValidacion == 'RENIEC' && camposExpandidos) ...[
+          const SizedBox(height: 10),
+          Chip(
+            avatar: const Icon(
+              Icons.verified_rounded,
+              size: 16,
+              color: Colors.white,
+            ),
+            label: const Text('Validado por RENIEC'),
+            backgroundColor: const Color(0xFF2563EB),
+            labelStyle: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Nombres/apellidos/contacto/dirección, rol (con skeleton mientras carga)
+/// y la lista de tiendas a las que darle acceso (también con skeleton) —
+/// todo lo que se revela tras encontrar o completar el DNI.
+class _CamposSecundariosTrabajador extends StatelessWidget {
+  const _CamposSecundariosTrabajador({
+    required this.soloLectura,
+    required this.nombresController,
+    required this.apellidoPaternoController,
+    required this.apellidoMaternoController,
+    required this.telefonoController,
+    required this.emailController,
+    required this.direccionController,
+    required this.salarioController,
+    required this.cargandoRoles,
+    required this.rolesAsignables,
+    required this.rolSeleccionado,
+    required this.onRolCambiado,
+    required this.cargandoTiendas,
+    required this.misTiendas,
+    required this.tiendasYaAsignadas,
+    required this.tiendasReactivando,
+    required this.tiendasSeleccionadas,
+    required this.onTiendaCambiada,
+  });
+
+  final bool soloLectura;
+  final TextEditingController nombresController;
+  final TextEditingController apellidoPaternoController;
+  final TextEditingController apellidoMaternoController;
+  final TextEditingController telefonoController;
+  final TextEditingController emailController;
+  final TextEditingController direccionController;
+  final TextEditingController salarioController;
+  final bool cargandoRoles;
+  final List<RolAsignable> rolesAsignables;
+  final String? rolSeleccionado;
+  final ValueChanged<String?> onRolCambiado;
+  final bool cargandoTiendas;
+  final List<Tienda> misTiendas;
+  final Set<int> tiendasYaAsignadas;
+  final Set<int> tiendasReactivando;
+  final Set<int> tiendasSeleccionadas;
+  final void Function(int idTienda, bool marcado) onTiendaCambiada;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      key: const ValueKey('campos-expandidos'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 20),
+        TextFormField(
+          controller: nombresController,
+          readOnly: soloLectura,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: const [UpperCaseTextFormatter()],
+          decoration: const InputDecoration(
+            labelText: 'Nombres',
+            prefixIcon: Icon(Icons.person_outline_rounded),
+          ),
+          validator: (v) =>
+              (v == null || v.trim().isEmpty) ? 'Ingresa los nombres' : null,
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: apellidoPaternoController,
+          readOnly: soloLectura,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: const [UpperCaseTextFormatter()],
+          decoration: const InputDecoration(labelText: 'Apellido paterno'),
+          validator: (v) => (v == null || v.trim().isEmpty)
+              ? 'Ingresa el apellido paterno'
+              : null,
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: apellidoMaternoController,
+          readOnly: soloLectura,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: const [UpperCaseTextFormatter()],
+          decoration: const InputDecoration(labelText: 'Apellido materno'),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: telefonoController,
+          keyboardType: TextInputType.phone,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: const InputDecoration(
+            labelText: 'Teléfono',
+            prefixIcon: Icon(Icons.phone_outlined),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: emailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            prefixIcon: Icon(Icons.email_outlined),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: direccionController,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: const [UpperCaseTextFormatter()],
+          decoration: const InputDecoration(
+            labelText: 'Dirección',
+            prefixIcon: Icon(Icons.place_outlined),
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (cargandoRoles)
+          const SkeletonBox(height: 58, borderRadius: 12)
+        else
+          DropdownButtonFormField<String>(
+            initialValue: rolSeleccionado,
+            items: rolesAsignables
+                .map(
+                  (r) => DropdownMenuItem(
+                    value: r.nombreRol,
+                    child: Text(r.etiqueta),
+                  ),
+                )
+                .toList(),
+            onChanged: onRolCambiado,
+            decoration: const InputDecoration(
+              labelText: 'Rol',
+              prefixIcon: Icon(Icons.work_outline_rounded),
+            ),
+            validator: (v) => v == null ? 'Selecciona un rol' : null,
+          ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: salarioController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Salario (S/, opcional)',
+            prefixIcon: Icon(Icons.payments_outlined),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text('Acceso a tiendas', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (cargandoTiendas)
+          Column(
+            children: List.generate(
+              2,
+              (i) => const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: SkeletonBox(height: 48, borderRadius: 12),
+              ),
+            ),
+          )
+        else if (misTiendas.isEmpty)
+          Text(
+            'No administras ninguna tienda todavía.',
+            style: theme.textTheme.bodyMedium,
+          )
+        else
+          ...misTiendas.map((tienda) {
+            final yaAsignado = tiendasYaAsignadas.contains(tienda.idTienda);
+            final reactivando = tiendasReactivando.contains(tienda.idTienda);
+            return CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: tiendasSeleccionadas.contains(tienda.idTienda),
+              title: Text(tienda.nombre),
+              subtitle: yaAsignado
+                  ? const Text('Ya tiene acceso')
+                  : reactivando
+                  ? const Text('Tuvo acceso antes — se reactivará')
+                  : null,
+              onChanged: yaAsignado
+                  ? null
+                  : (marcado) =>
+                        onTiendaCambiada(tienda.idTienda, marcado == true),
+            );
+          }),
+      ],
+    ).animate().fadeIn(duration: 250.ms);
   }
 }
 

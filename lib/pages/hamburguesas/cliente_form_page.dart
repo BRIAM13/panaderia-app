@@ -539,29 +539,13 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
     }
   }
 
-  Widget _badgeChip(String label, Color color) {
-    return Chip(
-      label: Text(label),
-      backgroundColor: color,
-      labelStyle: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-        fontSize: 12,
-      ),
-      visualDensity: VisualDensity.compact,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final esRuc = _tipoDocumento == _TipoDocumento.ruc;
     // En modo RUC nada de "Razón social" en adelante se muestra hasta que
     // la búsqueda tenga éxito; en modo DNI, "Nombres" siempre es visible.
     final mostrarNombres = _editando || !esRuc || _camposExpandidos;
     final mostrarBotonExpandir = !_editando && !esRuc && !_camposExpandidos;
-    final permiteReverificar = _permiteReverificar;
 
     return Scaffold(
       appBar: AppBar(
@@ -575,175 +559,31 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (permiteReverificar) ...[
-                  Text(
-                    _editando
-                        ? 'Este cliente aún no tiene un documento verificado. Puedes buscarlo para validar sus datos oficiales.'
-                        : 'Elige el documento y búscalo para autocompletar y validar los datos',
-                    style: theme.textTheme.bodyMedium,
+                if (_permiteReverificar)
+                  _SeccionBusquedaDocumento(
+                    editando: _editando,
+                    esRuc: esRuc,
+                    tipoDocumento: _tipoDocumento,
+                    documentoController: _documentoController,
+                    buscando: _buscando,
+                    documentoVerificado: _documentoVerificado,
+                    documentoYaRegistrado: _documentoYaRegistrado,
+                    verificandoDocumento: _verificandoDocumento,
+                    origenValidacion: _origenValidacion,
+                    camposExpandidos: _camposExpandidos,
+                    documentoVerificadoApiReal: _documentoVerificadoApiReal,
+                    estadoRuc: _estadoRuc,
+                    condicionRuc: _condicionRuc,
+                    tipoContribuyenteRuc: _tipoContribuyenteRuc,
+                    onCambiarTipoDocumento: _cambiarTipoDocumento,
+                    onBuscar: _buscarDocumento,
                   ),
-                  const SizedBox(height: 12),
-                  SegmentedSwitch(
-                    opciones: const ['DNI', 'RUC'],
-                    indiceSeleccionado: esRuc ? 1 : 0,
-                    onChanged: _cambiarTipoDocumento,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          key: ValueKey(_tipoDocumento),
-                          controller: _documentoController,
-                          enabled: !_buscando,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          maxLength: esRuc ? 11 : 8,
-                          decoration: InputDecoration(
-                            labelText: esRuc ? 'RUC' : 'DNI',
-                            counterText: '',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: FilledButton.icon(
-                          onPressed: (_buscando || !_documentoVerificado)
-                              ? null
-                              : _buscarDocumento,
-                          icon: _buscando
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.search_rounded, size: 18),
-                          label: const Text('Buscar'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_verificandoDocumento) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: scheme.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Verificando si ya está registrado...',
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ],
-                  if (_documentoYaRegistrado) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.person_search_rounded,
-                          size: 16,
-                          color: scheme.error,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Este documento ya está registrado en el sistema.',
-                            style: TextStyle(
-                              color: scheme.error,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  if (_origenValidacion == 'RENIEC' && _camposExpandidos) ...[
-                    const SizedBox(height: 8),
-                    Chip(
-                      avatar: Icon(
-                        _documentoVerificadoApiReal
-                            ? Icons.verified_rounded
-                            : Icons.wifi_off_rounded,
-                        size: 16,
-                        color: Colors.white,
-                      ),
-                      label: Text(
-                        _documentoVerificadoApiReal
-                            ? 'Validado por ${esRuc ? 'SUNAT' : 'RENIEC'} (API real)'
-                            : 'Validado por ${esRuc ? 'SUNAT' : 'RENIEC'} (simulado)',
-                      ),
-                      backgroundColor: const Color(0xFF2563EB),
-                      labelStyle: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (_documentoVerificadoApiReal) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        'Se creará automáticamente una cuenta de acceso para este cliente.',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ],
-                    if (esRuc) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          if (_tipoContribuyenteRuc ==
-                              TipoContribuyenteRuc.personaNatural)
-                            _badgeChip(
-                              'Persona Natural con Negocio',
-                              const Color(0xFFB08D57),
-                            ),
-                          if (_tipoContribuyenteRuc ==
-                              TipoContribuyenteRuc.personaJuridica)
-                            _badgeChip(
-                              'Persona Jurídica / Empresa',
-                              const Color(0xFF3E2723),
-                            ),
-                          if (_estadoRuc != null)
-                            _badgeChip(
-                              'Estado: $_estadoRuc',
-                              _estadoRuc == 'ACTIVO'
-                                  ? const Color(0xFF2E7D32)
-                                  : const Color(0xFFC62828),
-                            ),
-                          if (_condicionRuc != null)
-                            _badgeChip(
-                              'Condición: $_condicionRuc',
-                              _condicionRuc == 'HABIDO'
-                                  ? const Color(0xFF2E7D32)
-                                  : const Color(0xFFC62828),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ],
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   Text(
                     _error!,
                     style: TextStyle(
-                      color: scheme.error,
+                      color: Theme.of(context).colorScheme.error,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -768,178 +608,32 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
                         : null,
                   ),
                 ],
-                if (mostrarBotonExpandir) ...[
-                  const SizedBox(height: 12),
-                  Center(
-                    child:
-                        Material(
-                              color: scheme.secondaryContainer,
-                              shape: const CircleBorder(),
-                              child: InkWell(
-                                customBorder: const CircleBorder(),
-                                onTap: _expandirCampos,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Icon(
-                                    Icons.keyboard_double_arrow_down_rounded,
-                                    color: scheme.primary,
-                                    size: 26,
-                                  ),
-                                ),
-                              ),
-                            )
-                            .animate(onPlay: (c) => c.repeat(reverse: true))
-                            .moveY(
-                              begin: 0,
-                              end: 6,
-                              duration: 700.ms,
-                              curve: Curves.easeInOut,
-                            ),
-                  ),
-                  Center(
-                    child: Text('Más datos', style: theme.textTheme.bodyMedium),
-                  ),
-                ],
+                if (mostrarBotonExpandir)
+                  _BotonExpandirCampos(onTap: _expandirCampos),
                 AnimatedSize(
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeInOut,
                   alignment: Alignment.topCenter,
                   child: !_camposExpandidos
                       ? const SizedBox(width: double.infinity)
-                      : Column(
-                          key: const ValueKey('campos-expandidos'),
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (!esRuc) ...[
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                controller: _apellidoPaternoController,
-                                readOnly: _soloLectura,
-                                textCapitalization:
-                                    TextCapitalization.characters,
-                                inputFormatters: const [
-                                  UpperCaseTextFormatter(),
-                                ],
-                                decoration: const InputDecoration(
-                                  labelText: 'Apellido paterno',
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                controller: _apellidoMaternoController,
-                                readOnly: _soloLectura,
-                                textCapitalization:
-                                    TextCapitalization.characters,
-                                inputFormatters: const [
-                                  UpperCaseTextFormatter(),
-                                ],
-                                decoration: const InputDecoration(
-                                  labelText: 'Apellido materno',
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _telefonoController,
-                              keyboardType: TextInputType.phone,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              decoration: const InputDecoration(
-                                labelText: 'Teléfono',
-                                prefixIcon: Icon(Icons.phone_outlined),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                              decoration: const InputDecoration(
-                                labelText: 'Email',
-                                prefixIcon: Icon(Icons.email_outlined),
-                              ),
-                            ),
-                            if (esRuc &&
-                                _domicilioFiscalController.text.isNotEmpty) ...[
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                controller: _domicilioFiscalController,
-                                readOnly: true,
-                                decoration: const InputDecoration(
-                                  labelText: 'Domicilio Fiscal (SUNAT)',
-                                  prefixIcon: Icon(
-                                    Icons.account_balance_outlined,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _direccionController,
-                              textCapitalization: TextCapitalization.characters,
-                              inputFormatters: const [UpperCaseTextFormatter()],
-                              decoration: InputDecoration(
-                                labelText: 'Dirección de Entrega',
-                                prefixIcon: const Icon(Icons.place_outlined),
-                                suffixIcon:
-                                    IconButton(
-                                          tooltip: 'Usar mi ubicación GPS',
-                                          onPressed: _obteniendoUbicacion
-                                              ? null
-                                              : _autocompletarConGps,
-                                          icon: _obteniendoUbicacion
-                                              ? const SizedBox(
-                                                  width: 18,
-                                                  height: 18,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                      ),
-                                                )
-                                              : Icon(
-                                                  Icons.my_location_rounded,
-                                                  color: scheme.primary,
-                                                ),
-                                        )
-                                        .animate(
-                                          onPlay: (c) =>
-                                              c.repeat(reverse: true),
-                                        )
-                                        .scale(
-                                          begin: const Offset(1, 1),
-                                          end: const Offset(1.12, 1.12),
-                                          duration: 900.ms,
-                                          curve: Curves.easeInOut,
-                                        ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _descripcionNegocioController,
-                              // En DNI siempre se escribe a mano. En RUC se
-                              // bloquea SOLO si el nombre comercial vino de
-                              // una búsqueda exitosa contra SUNAT — si SUNAT
-                              // no tenía uno registrado, sigue editable.
-                              readOnly: esRuc && _nombreComercialBloqueado,
-                              textCapitalization: TextCapitalization.characters,
-                              inputFormatters: const [UpperCaseTextFormatter()],
-                              decoration: InputDecoration(
-                                labelText: 'Nombre comercial / Puesto',
-                                prefixIcon: const Icon(
-                                  Icons.storefront_outlined,
-                                ),
-                                suffixIcon: esRuc && _nombreComercialBloqueado
-                                    ? Icon(
-                                        Icons.lock_outline_rounded,
-                                        color: scheme.primary,
-                                        size: 18,
-                                      )
-                                    : null,
-                              ),
-                              maxLines: 2,
-                            ),
-                          ],
-                        ).animate().fadeIn(duration: 250.ms),
+                      : _CamposSecundariosCliente(
+                          esRuc: esRuc,
+                          soloLectura: _soloLectura,
+                          obteniendoUbicacion: _obteniendoUbicacion,
+                          nombreComercialBloqueado: _nombreComercialBloqueado,
+                          apellidoPaternoController:
+                              _apellidoPaternoController,
+                          apellidoMaternoController:
+                              _apellidoMaternoController,
+                          telefonoController: _telefonoController,
+                          emailController: _emailController,
+                          domicilioFiscalController:
+                              _domicilioFiscalController,
+                          direccionController: _direccionController,
+                          descripcionNegocioController:
+                              _descripcionNegocioController,
+                          onAutocompletarGps: _autocompletarConGps,
+                        ),
                 ),
                 const SizedBox(height: 24),
                 PremiumButton(
@@ -954,5 +648,427 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
         ),
       ),
     );
+  }
+}
+
+Widget _badgeChip(String label, Color color) {
+  return Chip(
+    label: Text(label),
+    backgroundColor: color,
+    labelStyle: const TextStyle(
+      color: Colors.white,
+      fontWeight: FontWeight.w600,
+      fontSize: 12,
+    ),
+    visualDensity: VisualDensity.compact,
+  );
+}
+
+/// Selector DNI/RUC + campo de documento + botón "Buscar" + estados de
+/// verificación (local y contra RENIEC/SUNAT) — todo lo que aparece antes
+/// de que el formulario se despliegue. Puramente presentacional: todo el
+/// estado sigue viviendo en [_ClienteFormPageState].
+class _SeccionBusquedaDocumento extends StatelessWidget {
+  const _SeccionBusquedaDocumento({
+    required this.editando,
+    required this.esRuc,
+    required this.tipoDocumento,
+    required this.documentoController,
+    required this.buscando,
+    required this.documentoVerificado,
+    required this.documentoYaRegistrado,
+    required this.verificandoDocumento,
+    required this.origenValidacion,
+    required this.camposExpandidos,
+    required this.documentoVerificadoApiReal,
+    required this.estadoRuc,
+    required this.condicionRuc,
+    required this.tipoContribuyenteRuc,
+    required this.onCambiarTipoDocumento,
+    required this.onBuscar,
+  });
+
+  final bool editando;
+  final bool esRuc;
+  final _TipoDocumento tipoDocumento;
+  final TextEditingController documentoController;
+  final bool buscando;
+  final bool documentoVerificado;
+  final bool documentoYaRegistrado;
+  final bool verificandoDocumento;
+  final String origenValidacion;
+  final bool camposExpandidos;
+  final bool documentoVerificadoApiReal;
+  final String? estadoRuc;
+  final String? condicionRuc;
+  final TipoContribuyenteRuc? tipoContribuyenteRuc;
+  final ValueChanged<int> onCambiarTipoDocumento;
+  final VoidCallback onBuscar;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          editando
+              ? 'Este cliente aún no tiene un documento verificado. Puedes buscarlo para validar sus datos oficiales.'
+              : 'Elige el documento y búscalo para autocompletar y validar los datos',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        SegmentedSwitch(
+          opciones: const ['DNI', 'RUC'],
+          indiceSeleccionado: esRuc ? 1 : 0,
+          onChanged: onCambiarTipoDocumento,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                key: ValueKey(tipoDocumento),
+                controller: documentoController,
+                enabled: !buscando,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: esRuc ? 11 : 8,
+                decoration: InputDecoration(
+                  labelText: esRuc ? 'RUC' : 'DNI',
+                  counterText: '',
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: FilledButton.icon(
+                onPressed: (buscando || !documentoVerificado)
+                    ? null
+                    : onBuscar,
+                icon: buscando
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.search_rounded, size: 18),
+                label: const Text('Buscar'),
+              ),
+            ),
+          ],
+        ),
+        if (verificandoDocumento) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: scheme.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Verificando si ya está registrado...',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ],
+        if (documentoYaRegistrado) ...[
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.person_search_rounded, size: 16, color: scheme.error),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Este documento ya está registrado en el sistema.',
+                  style: TextStyle(
+                    color: scheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (origenValidacion == 'RENIEC' && camposExpandidos) ...[
+          const SizedBox(height: 8),
+          Chip(
+            avatar: Icon(
+              documentoVerificadoApiReal
+                  ? Icons.verified_rounded
+                  : Icons.wifi_off_rounded,
+              size: 16,
+              color: Colors.white,
+            ),
+            label: Text(
+              documentoVerificadoApiReal
+                  ? 'Validado por ${esRuc ? 'SUNAT' : 'RENIEC'} (API real)'
+                  : 'Validado por ${esRuc ? 'SUNAT' : 'RENIEC'} (simulado)',
+            ),
+            backgroundColor: const Color(0xFF2563EB),
+            labelStyle: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (documentoVerificadoApiReal) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Se creará automáticamente una cuenta de acceso para este cliente.',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+          if (esRuc) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (tipoContribuyenteRuc == TipoContribuyenteRuc.personaNatural)
+                  _badgeChip(
+                    'Persona Natural con Negocio',
+                    const Color(0xFFB08D57),
+                  ),
+                if (tipoContribuyenteRuc ==
+                    TipoContribuyenteRuc.personaJuridica)
+                  _badgeChip(
+                    'Persona Jurídica / Empresa',
+                    const Color(0xFF3E2723),
+                  ),
+                if (estadoRuc != null)
+                  _badgeChip(
+                    'Estado: $estadoRuc',
+                    estadoRuc == 'ACTIVO'
+                        ? const Color(0xFF2E7D32)
+                        : const Color(0xFFC62828),
+                  ),
+                if (condicionRuc != null)
+                  _badgeChip(
+                    'Condición: $condicionRuc',
+                    condicionRuc == 'HABIDO'
+                        ? const Color(0xFF2E7D32)
+                        : const Color(0xFFC62828),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+}
+
+/// Flecha animada "Más datos" que despliega los campos secundarios — solo
+/// aparece para un cliente NUEVO en modo DNI, antes de tocar "Buscar".
+class _BotonExpandirCampos extends StatelessWidget {
+  const _BotonExpandirCampos({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        const SizedBox(height: 12),
+        Center(
+          child:
+              Material(
+                    color: scheme.secondaryContainer,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: onTap,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Icon(
+                          Icons.keyboard_double_arrow_down_rounded,
+                          color: scheme.primary,
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                  )
+                  .animate(onPlay: (c) => c.repeat(reverse: true))
+                  .moveY(
+                    begin: 0,
+                    end: 6,
+                    duration: 700.ms,
+                    curve: Curves.easeInOut,
+                  ),
+        ),
+        Center(
+          child: Text(
+            'Más datos',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Apellidos (solo DNI), contacto, domicilio fiscal (solo lectura, si
+/// SUNAT lo trajo), dirección de entrega con autocompletado GPS, y nombre
+/// comercial/puesto — todo lo que se revela al desplegar "Más datos".
+class _CamposSecundariosCliente extends StatelessWidget {
+  const _CamposSecundariosCliente({
+    required this.esRuc,
+    required this.soloLectura,
+    required this.obteniendoUbicacion,
+    required this.nombreComercialBloqueado,
+    required this.apellidoPaternoController,
+    required this.apellidoMaternoController,
+    required this.telefonoController,
+    required this.emailController,
+    required this.domicilioFiscalController,
+    required this.direccionController,
+    required this.descripcionNegocioController,
+    required this.onAutocompletarGps,
+  });
+
+  final bool esRuc;
+  final bool soloLectura;
+  final bool obteniendoUbicacion;
+  final bool nombreComercialBloqueado;
+  final TextEditingController apellidoPaternoController;
+  final TextEditingController apellidoMaternoController;
+  final TextEditingController telefonoController;
+  final TextEditingController emailController;
+  final TextEditingController domicilioFiscalController;
+  final TextEditingController direccionController;
+  final TextEditingController descripcionNegocioController;
+  final VoidCallback onAutocompletarGps;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Column(
+      key: const ValueKey('campos-expandidos'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!esRuc) ...[
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: apellidoPaternoController,
+            readOnly: soloLectura,
+            textCapitalization: TextCapitalization.characters,
+            inputFormatters: const [UpperCaseTextFormatter()],
+            decoration: const InputDecoration(labelText: 'Apellido paterno'),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: apellidoMaternoController,
+            readOnly: soloLectura,
+            textCapitalization: TextCapitalization.characters,
+            inputFormatters: const [UpperCaseTextFormatter()],
+            decoration: const InputDecoration(labelText: 'Apellido materno'),
+          ),
+        ],
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: telefonoController,
+          keyboardType: TextInputType.phone,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: const InputDecoration(
+            labelText: 'Teléfono',
+            prefixIcon: Icon(Icons.phone_outlined),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: emailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            prefixIcon: Icon(Icons.email_outlined),
+          ),
+        ),
+        if (esRuc && domicilioFiscalController.text.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: domicilioFiscalController,
+            readOnly: true,
+            decoration: const InputDecoration(
+              labelText: 'Domicilio Fiscal (SUNAT)',
+              prefixIcon: Icon(Icons.account_balance_outlined),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: direccionController,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: const [UpperCaseTextFormatter()],
+          decoration: InputDecoration(
+            labelText: 'Dirección de Entrega',
+            prefixIcon: const Icon(Icons.place_outlined),
+            suffixIcon:
+                IconButton(
+                      tooltip: 'Usar mi ubicación GPS',
+                      onPressed: obteniendoUbicacion
+                          ? null
+                          : onAutocompletarGps,
+                      icon: obteniendoUbicacion
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Icon(
+                              Icons.my_location_rounded,
+                              color: scheme.primary,
+                            ),
+                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .scale(
+                      begin: const Offset(1, 1),
+                      end: const Offset(1.12, 1.12),
+                      duration: 900.ms,
+                      curve: Curves.easeInOut,
+                    ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: descripcionNegocioController,
+          // En DNI siempre se escribe a mano. En RUC se bloquea SOLO si el
+          // nombre comercial vino de una búsqueda exitosa contra SUNAT — si
+          // SUNAT no tenía uno registrado, sigue editable.
+          readOnly: esRuc && nombreComercialBloqueado,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: const [UpperCaseTextFormatter()],
+          decoration: InputDecoration(
+            labelText: 'Nombre comercial / Puesto',
+            prefixIcon: const Icon(Icons.storefront_outlined),
+            suffixIcon: esRuc && nombreComercialBloqueado
+                ? Icon(
+                    Icons.lock_outline_rounded,
+                    color: scheme.primary,
+                    size: 18,
+                  )
+                : null,
+          ),
+          maxLines: 2,
+        ),
+      ],
+    ).animate().fadeIn(duration: 250.ms);
   }
 }
