@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -363,14 +364,34 @@ class _QrPagoPageState extends State<_QrPagoPage> {
   /// BCP, Interbank, BBVA, Scotiabank, etc., así que no hay un paquete
   /// único al cual apuntar). Para los demás medios solo mostramos el
   /// recordatorio de abrir su app correspondiente.
-  static const _paqueteYape = 'com.bcp.innovacxion.yapeapp';
+  static const _paqueteYapeAndroid = 'com.bcp.innovacxion.yapeapp';
+
+  /// Ficha real de Yape en el App Store (id verificado). En iOS no existe
+  /// un esquema `intent:` (eso es exclusivo de Android) y Apple no
+  /// documenta públicamente un esquema propio de Yape para "reabrir la
+  /// app ya instalada" — inventarlo sería adivinar y podría no abrir nada.
+  /// Por eso en iOS el atajo más honesto es llevar a esta ficha: si Yape
+  /// ya está instalado, el App Store muestra "Abrir" en un toque más; si
+  /// no, deja instalarlo directo.
+  static const _fichaYapeIOS = 'https://apps.apple.com/us/app/yape/id1147249919';
 
   Future<void> _irAPagar() async {
     final tipo = widget.solicitud.medioPago.tipo;
-    if (tipo == 'YAPE') {
-      final abierto = await _intentarAbrirApp(_paqueteYape);
+    if (tipo == 'YAPE' && Platform.isAndroid) {
+      final abierto = await _intentarAbrirApp(_paqueteYapeAndroid);
       if (!abierto && mounted) {
         _mostrarRecordatorio('No encontramos Yape instalado en tu celular.');
+      }
+    } else if (tipo == 'YAPE' && Platform.isIOS) {
+      try {
+        await launchUrl(
+          Uri.parse(_fichaYapeIOS),
+          mode: LaunchMode.externalApplication,
+        );
+      } catch (_) {
+        if (mounted) {
+          _mostrarRecordatorio('Abre tu app de Yape y escanea el código de esta pantalla.');
+        }
       }
     } else if (mounted) {
       _mostrarRecordatorio(

@@ -30,6 +30,17 @@
 	<string>Usamos tu ubicación para autocompletar la dirección de entrega con precisión GPS.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Usamos tu ubicación para autocompletar la dirección de entrega con precisión GPS.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Usamos la cámara para fotografiar el QR real de Yape/Plin al registrar un método de pago.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Usamos tu galería para elegir la imagen del QR real de Yape/Plin al registrar un método de pago.</string>
+	<key>GADApplicationIdentifier</key>
+	<!-- TODO: reemplazar por el App ID real de iOS creado en tu cuenta de
+	     AdMob (Apps > Agregar app > iOS) — este es el ID de PRUEBA público
+	     de Google, evita que la app crashee al iniciar mientras tanto, pero
+	     no muestra anuncios reales. Ver Android en AndroidManifest.xml para
+	     la referencia del ID real ya usado ahí. -->
+	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
