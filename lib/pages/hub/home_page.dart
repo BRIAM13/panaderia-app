@@ -13,6 +13,7 @@ import '../hamburguesas/dashboard_page.dart';
 import '../hamburguesas/hamburguesas_gestion_page.dart';
 import '../hamburguesas/trabajadores_page.dart';
 import '../perfil/mi_perfil_page.dart';
+import '../sistema/token_api_peru_page.dart';
 import '../tiendas/tienda_placeholder_page.dart';
 import 'hacer_pedido_page.dart';
 import 'mis_deudas_page.dart';
@@ -93,6 +94,10 @@ class _HomePageState extends State<HomePage> {
     pushSlideUpFade(context, (context) => const TrabajadoresPage());
   }
 
+  void _abrirTokenApiPeru() {
+    pushSlideUpFade(context, (context) => const TokenApiPeruPage());
+  }
+
   Future<void> _hacerPedido() async {
     final registrado = await pushSlideUpFade<bool>(
       context,
@@ -151,6 +156,7 @@ class _HomePageState extends State<HomePage> {
           onAbrirMisDeudas: _abrirMisDeudas,
           onHacerPedido: _hacerPedido,
           onAbrirTrabajadores: _abrirTrabajadores,
+          onAbrirTokenApiPeru: _abrirTokenApiPeru,
           onCerrarSesion: _cerrarSesion,
         ),
         floatingActionButton: vistaTrabajador

@@ -566,5 +566,10 @@ FROM Categorias WHERE Nombre = 'Horneados';
 GO
 
 INSERT INTO Configuraciones (Clave, Valor, Descripcion) VALUES
-    ('PRECIO_PAQUETE', '3.50', 'Precio por defecto del paquete de 12 panes de hamburguesa (PEN)');
+    ('PRECIO_PAQUETE', '3.50', 'Precio por defecto del paquete de 12 panes de hamburguesa (PEN)'),
+    -- Placeholder a propósito: el token real NUNCA se comitea. Se carga a
+    -- mano (o desde la app, ver ConfiguracionSistemaPage) tras crear la BD.
+    -- Lectura/escritura restringidas a SUPERADMIN (ver CLAVES_SOLO_SUPERADMIN
+    -- en configuracionesController.js).
+    ('API_PERU_TOKEN', 'PENDIENTE_CONFIGURAR', 'Token de apiperu.dev para consulta real de DNI/RUC — editable solo por SUPERADMIN desde la app');
 GO

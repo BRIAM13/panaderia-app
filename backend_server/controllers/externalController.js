@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { sql, getPool } = require('../config/db');
 
 /**
  * Consulta real de DNI/RUC contra apiperu.dev (RENIEC/SUNAT). Si la API de
@@ -12,13 +13,36 @@ const axios = require('axios');
  */
 
 const API_PERU_BASE_URL = process.env.API_PERU_BASE_URL || 'https://apiperu.dev/api';
-const API_PERU_TOKEN = process.env.API_PERU_TOKEN;
 
-const apiPeruClient = axios.create({
-  baseURL: API_PERU_BASE_URL,
-  timeout: 6000,
-  headers: API_PERU_TOKEN ? { Authorization: `Bearer ${API_PERU_TOKEN}` } : {},
-});
+/**
+ * El token vive en Configuraciones (editable por el SUPERADMIN desde la
+ * app, ver configuracionesController.js) — se relee de la BD en cada
+ * consulta, así un cambio hecho desde la app surte efecto de inmediato, sin
+ * reiniciar el servidor. Si la fila todavía no existe (o la BD no
+ * responde), cae a la variable de entorno como red de seguridad.
+ */
+async function obtenerTokenApiPeru() {
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input('Clave', sql.VarChar(50), 'API_PERU_TOKEN')
+      .query('SELECT Valor FROM Configuraciones WHERE Clave = @Clave');
+    const valor = result.recordset[0]?.Valor?.trim();
+    if (valor) return valor;
+  } catch (err) {
+    console.warn('No se pudo leer API_PERU_TOKEN de la BD, usando variable de entorno:', err.message);
+  }
+  return process.env.API_PERU_TOKEN || null;
+}
+
+function crearClienteApiPeru(token) {
+  return axios.create({
+    baseURL: API_PERU_BASE_URL,
+    timeout: 6000,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+}
 
 const NOMBRES = [
   'Carlos', 'María', 'José', 'Ana', 'Luis', 'Rosa', 'Jorge', 'Carmen', 'Miguel', 'Lucía',
@@ -72,9 +96,9 @@ function limpiarValorSunat(valor) {
  *                      token vencido, error 5xx). Aquí sí es razonable caer
  *                      al simulador para no bloquear la operación diaria.
  */
-async function consultarApiPeru(endpoint, body, tieneExito) {
+async function consultarApiPeru(client, endpoint, body, tieneExito) {
   try {
-    const { data } = await apiPeruClient.post(endpoint, body);
+    const { data } = await client.post(endpoint, body);
     if (tieneExito(data)) return { estado: 'ENCONTRADO', data };
     return { estado: 'NO_ENCONTRADO' };
   } catch (err) {
@@ -144,8 +168,10 @@ async function consultarDni(req, res) {
     return res.status(400).json({ mensaje: 'El DNI debe tener 8 dígitos numéricos' });
   }
 
-  if (API_PERU_TOKEN) {
-    const resultado = await consultarApiPeru('/dni', { dni }, (data) => Boolean(data?.success && data.data?.nombres));
+  const tokenApiPeru = await obtenerTokenApiPeru();
+  if (tokenApiPeru) {
+    const cliente = crearClienteApiPeru(tokenApiPeru);
+    const resultado = await consultarApiPeru(cliente, '/dni', { dni }, (data) => Boolean(data?.success && data.data?.nombres));
 
     if (resultado.estado === 'ENCONTRADO') {
       const { data } = resultado;
@@ -183,8 +209,10 @@ async function consultarRuc(req, res) {
     return res.status(400).json({ mensaje: 'El RUC debe tener 11 dígitos numéricos' });
   }
 
-  if (API_PERU_TOKEN) {
-    const resultado = await consultarApiPeru('/ruc', { ruc }, (data) => Boolean(data?.success && data.data?.nombre_o_razon_social));
+  const tokenApiPeru = await obtenerTokenApiPeru();
+  if (tokenApiPeru) {
+    const cliente = crearClienteApiPeru(tokenApiPeru);
+    const resultado = await consultarApiPeru(cliente, '/ruc', { ruc }, (data) => Boolean(data?.success && data.data?.nombre_o_razon_social));
 
     if (resultado.estado === 'ENCONTRADO') {
       const { data } = resultado;

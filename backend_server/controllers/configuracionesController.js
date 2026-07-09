@@ -1,8 +1,17 @@
 const { sql, getPool } = require('../config/db');
 const { registrarAuditoria } = require('../utils/auditLog');
 
+// Configuraciones que guardan un secreto/credencial, no un ajuste operativo
+// (como el precio del paquete) — ni su lectura ni su edición deben quedar
+// abiertas a cualquier ADMIN/personal autenticado, solo al SUPERADMIN.
+const CLAVES_SOLO_SUPERADMIN = ['API_PERU_TOKEN'];
+
 async function obtenerConfiguracion(req, res, next) {
   const { clave } = req.params;
+
+  if (CLAVES_SOLO_SUPERADMIN.includes(clave) && req.usuario.rol !== 'SUPERADMIN') {
+    return res.status(403).json({ mensaje: 'No tienes permiso para ver esta configuración.' });
+  }
 
   try {
     const pool = await getPool();
@@ -30,6 +39,10 @@ async function obtenerConfiguracion(req, res, next) {
 async function actualizarConfiguracion(req, res, next) {
   const { clave } = req.params;
   const { valor } = req.body;
+
+  if (CLAVES_SOLO_SUPERADMIN.includes(clave) && req.usuario.rol !== 'SUPERADMIN') {
+    return res.status(403).json({ mensaje: 'No tienes permiso para modificar esta configuración.' });
+  }
 
   try {
     const pool = await getPool();

@@ -23,6 +23,7 @@ class AppDrawer extends StatelessWidget {
     required this.onAbrirMisDeudas,
     required this.onHacerPedido,
     required this.onAbrirTrabajadores,
+    required this.onAbrirTokenApiPeru,
     required this.onCerrarSesion,
     this.misSlugsTiendas = const {},
   });
@@ -35,6 +36,7 @@ class AppDrawer extends StatelessWidget {
   final VoidCallback onAbrirMisDeudas;
   final VoidCallback onHacerPedido;
   final VoidCallback onAbrirTrabajadores;
+  final VoidCallback onAbrirTokenApiPeru;
   final VoidCallback onCerrarSesion;
 
   /// Slugs de tiendas donde este trabajador/admin tiene acceso vigente —
@@ -176,6 +178,17 @@ class AppDrawer extends StatelessWidget {
                         delay: 100,
                       ),
                   ],
+                  if (usuario.rol == 'SUPERADMIN') ...[
+                    const SizedBox(height: 8),
+                    const Divider(height: 1),
+                    const _EncabezadoSeccion(texto: 'SISTEMA'),
+                    _FilaMenu(
+                      icono: Icons.vpn_key_rounded,
+                      titulo: 'Token API Perú',
+                      onTap: onAbrirTokenApiPeru,
+                      delay: 130,
+                    ),
+                  ],
                   if (usuario.esCliente) ...[
                     if (usuario.esPersonalDeGestion) ...[
                       const SizedBox(height: 8),
@@ -187,25 +200,25 @@ class AppDrawer extends StatelessWidget {
                         icono: Icons.add_shopping_cart_rounded,
                         titulo: 'Hacer pedido',
                         onTap: onHacerPedido,
-                        delay: 130,
+                        delay: 160,
                       ),
                     _FilaMenu(
                       icono: Icons.receipt_long_rounded,
                       titulo: 'Mis pedidos',
                       onTap: onAbrirMisPedidos,
-                      delay: 160,
+                      delay: 190,
                     ),
                     _FilaMenu(
                       icono: Icons.account_balance_wallet_rounded,
                       titulo: 'Mis deudas',
                       onTap: onAbrirMisDeudas,
-                      delay: 190,
+                      delay: 220,
                     ),
                     _FilaMenu(
                       icono: Icons.badge_outlined,
                       titulo: 'Mi perfil',
                       onTap: onAbrirMiPerfil,
-                      delay: 220,
+                      delay: 250,
                     ),
                   ],
                 ],
