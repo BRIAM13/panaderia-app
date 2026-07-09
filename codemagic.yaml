@@ -1,0 +1,34 @@
+workflows:
+  ios-release:
+    name: iOS Release (Corporación Ronceros)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        API_BASE_URL: "https://panaderia-backend-2xvd.onrender.com/api"
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.corporacionronceros.panaderiaApp
+    triggering:
+      events: []
+    scripts:
+      - name: Instalar dependencias de Flutter
+        script: flutter packages pull
+      - name: Configurar firma de código automática
+        script: |
+          xcode-project use-profiles
+      - name: Compilar IPA
+        script: |
+          flutter build ipa --release \
+            --dart-define=API_BASE_URL=$API_BASE_URL \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

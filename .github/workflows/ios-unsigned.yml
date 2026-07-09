@@ -1,0 +1,41 @@
+name: Compilar iOS (sin firmar)
+
+# Manual a propósito: un build de iOS en runner macOS consume minutos de la
+# cuota gratuita mucho más rápido que uno de Android (factor 10x en GitHub
+# Actions), así que no se dispara solo en cada push.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build-ios-unsigned:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Instalar dependencias
+        run: flutter pub get
+
+      - name: Compilar iOS sin firma de código
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=API_BASE_URL=https://panaderia-backend-2xvd.onrender.com/api
+
+      - name: Empaquetar como .ipa sin firmar
+        # Un .ipa es, literalmente, un .zip con esta estructura interna
+        # (Payload/NombreApp.app) — Sideloadly se encarga de firmarlo de
+        # verdad con el Apple ID gratuito del usuario antes de instalarlo.
+        run: |
+          mkdir -p build/ios/ipa_sin_firmar/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/ipa_sin_firmar/Payload/
+          cd build/ios/ipa_sin_firmar
+          zip -r ../CorporacionRonceros-sin-firmar.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CorporacionRonceros-ios-sin-firmar
+          path: build/ios/CorporacionRonceros-sin-firmar.ipa
+          retention-days: 14

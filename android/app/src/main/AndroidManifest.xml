@@ -81,5 +81,8 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="tel"/>
         </intent>
+        <!-- Requerido (Android 11+) para poder detectar/abrir la app de
+             Yape desde el botón "Ir a pagar" al cobrar una deuda. -->
+        <package android:name="com.bcp.innovacxion.yapeapp"/>
     </queries>
 </manifest>

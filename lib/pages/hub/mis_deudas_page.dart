@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/medio_pago_model.dart';
 import '../../models/solicitud_pago_model.dart';
@@ -21,9 +22,11 @@ import '../../widgets/loading_indicator.dart';
 /// agrupadas por tienda — solo se pueden pagar juntas las de una misma
 /// tienda a la vez, porque cada tienda tiene sus propios métodos de pago.
 /// El cliente selecciona 1+, elige un medio de pago y se genera un QR
-/// informativo de un solo uso con el monto total y un código de
-/// referencia — el pago real se hace a mano en su Yape/Plin/banco, y
-/// luego reporta "Ya pagué" para que el personal lo confirme.
+/// de un solo uso con el monto total y un código de referencia. Toca
+/// "Ir a pagar" (abre Yape si aplica), hace el pago a mano en su
+/// Yape/Plin/banco y al volver reporta "Ya pagué" — eso avisa al
+/// personal de la tienda (y al SUPERADMIN) para que lo confirme; la
+/// deuda solo se marca como pagada cuando el personal confirma.
 class MisDeudasPage extends StatefulWidget {
   const MisDeudasPage({super.key, this.mostrarAnuncio = false});
 
@@ -351,6 +354,64 @@ class _QrPagoPageState extends State<_QrPagoPage> {
   final _solicitudesPagoService = SolicitudesPagoService();
   bool _reportando = false;
   bool _reportado = false;
+  // Se activa al tocar "Ir a pagar" — recién ahí aparece "Ya pagué", para
+  // que el cliente no pueda saltarse el paso de ir a su app de billetera.
+  bool _fueAPagar = false;
+
+  /// Paquete oficial de Yape en Play Store — es la única billetera peruana
+  /// con un solo app nacional (Plin vive dentro del app de cada banco:
+  /// BCP, Interbank, BBVA, Scotiabank, etc., así que no hay un paquete
+  /// único al cual apuntar). Para los demás medios solo mostramos el
+  /// recordatorio de abrir su app correspondiente.
+  static const _paqueteYape = 'com.bcp.innovacxion.yapeapp';
+
+  Future<void> _irAPagar() async {
+    final tipo = widget.solicitud.medioPago.tipo;
+    if (tipo == 'YAPE') {
+      final abierto = await _intentarAbrirApp(_paqueteYape);
+      if (!abierto && mounted) {
+        _mostrarRecordatorio('No encontramos Yape instalado en tu celular.');
+      }
+    } else if (mounted) {
+      _mostrarRecordatorio(
+        'Abre tu app de ${widget.solicitud.medioPago.etiquetaTipo} y '
+        'escanea el código de esta pantalla.',
+      );
+    }
+    if (mounted) setState(() => _fueAPagar = true);
+  }
+
+  void _mostrarRecordatorio(String mensaje) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(mensaje)));
+  }
+
+  /// Intenta lanzar la app instalada de [paquete] (esquema `intent:` — solo
+  /// funciona en Android). Si no está instalada, ofrece su ficha en Play
+  /// Store como respaldo. Devuelve si se logró abrir algo.
+  Future<bool> _intentarAbrirApp(String paquete) async {
+    final uriApp = Uri.parse(
+      'intent:#Intent;action=android.intent.action.MAIN;'
+      'category=android.intent.category.LAUNCHER;'
+      'package=$paquete;end',
+    );
+    try {
+      if (await launchUrl(uriApp, mode: LaunchMode.externalApplication)) {
+        return true;
+      }
+    } catch (_) {
+      // Sigue al respaldo de abajo.
+    }
+    final uriTienda = Uri.parse(
+      'https://play.google.com/store/apps/details?id=$paquete',
+    );
+    try {
+      return await launchUrl(uriTienda, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> _reportarPago() async {
     setState(() => _reportando = true);
@@ -531,16 +592,29 @@ class _QrPagoPageState extends State<_QrPagoPage> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: _reportando ? null : _reportarPago,
-                  child: _reportando
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Ya pagué'),
-                ),
+                if (!_fueAPagar)
+                  FilledButton.icon(
+                    onPressed: _irAPagar,
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    label: const Text('Ir a pagar'),
+                  )
+                else ...[
+                  FilledButton(
+                    onPressed: _reportando ? null : _reportarPago,
+                    child: _reportando
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Ya pagué'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _irAPagar,
+                    child: const Text('Volver a abrir mi app de pago'),
+                  ),
+                ],
               ],
             ],
           ),
