@@ -7,6 +7,9 @@ name: Keep-alive backend + base de datos
 # ping cada 10 minutos, 24/7, mantiene ambos despiertos sin depender de que
 # nadie tenga la app abierta.
 on:
+  # Reescrito para forzar a GitHub a re-registrar el cron: la primera
+  # versión no arrancó sola pasados ~100 min (más allá del margen normal
+  # de activación documentado).
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch: {}
