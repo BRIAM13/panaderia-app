@@ -289,7 +289,11 @@ class _DashboardPageState extends State<DashboardPage> {
                       physics: const NeverScrollableScrollPhysics(),
                       mainAxisSpacing: 12,
                       crossAxisSpacing: 12,
-                      childAspectRatio: esEscritorio ? 1.3 : 1.05,
+                      // Con 4 columnas cada tarjeta queda más angosta que
+                      // con 2 — necesita quedar más alta (ratio más chico)
+                      // para no cortar el subtítulo de "Deuda total"/"Por
+                      // entregar atrasado", no más achatada.
+                      childAspectRatio: esEscritorio ? 0.95 : 1.05,
                       children: [
                         _TarjetaEstadistica(
                           icono: Icons.hourglass_top_rounded,

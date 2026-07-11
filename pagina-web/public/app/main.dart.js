@@ -108857,7 +108857,7 @@ l=r.c
 k=f.a.c.d
 s=A.np(A.hG(A.cW(A.bm(A.b2(new A.a84(s,l,k==="ADMIN"||k==="SUPERADMIN"?f.gagh():e,e),e,e,e),A.a_(1e5,0),A.a_(45e4,0)),18,B.d3,e,0),B.Iz,B.d3,e,B.cn),0.15,A.a_(c,0),0)
 l=q?4:2
-k=q?1.3:1.05
+k=q?0.95:1.05
 j=f.gagq()
 i=A.aQ0(B.bx,140,B.iO,j,e,e,"Por confirmar",""+r.f)
 h=r.r
