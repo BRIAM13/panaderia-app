@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
@@ -377,12 +378,14 @@ class _QrPagoPageState extends State<_QrPagoPage> {
 
   Future<void> _irAPagar() async {
     final tipo = widget.solicitud.medioPago.tipo;
-    if (tipo == 'YAPE' && Platform.isAndroid) {
+    // kIsWeb primero y con cortocircuito: en Web, dart:io Platform.* lanza
+    // una excepción apenas se lo toca, así que nunca debe evaluarse ahí.
+    if (!kIsWeb && tipo == 'YAPE' && Platform.isAndroid) {
       final abierto = await _intentarAbrirApp(_paqueteYapeAndroid);
       if (!abierto && mounted) {
         _mostrarRecordatorio('No encontramos Yape instalado en tu celular.');
       }
-    } else if (tipo == 'YAPE' && Platform.isIOS) {
+    } else if (!kIsWeb && tipo == 'YAPE' && Platform.isIOS) {
       try {
         await launchUrl(
           Uri.parse(_fichaYapeIOS),

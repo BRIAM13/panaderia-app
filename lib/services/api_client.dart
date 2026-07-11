@@ -71,10 +71,13 @@ class ApiClient {
 
   // Azure SQL (oferta gratuita) pausa la base de datos sola tras un rato de
   // inactividad, y la primera consulta tras eso puede tardar bastante en
-  // "despertarla" — 15s no alcanzaba y la app mostraba "no se pudo conectar"
-  // aunque el servidor sí estaba respondiendo, solo que lento. Se amplía
-  // para dar tiempo a ese primer despertar sin fallar de más.
-  static const _timeoutHttp = Duration(seconds: 45);
+  // "despertarla" — medido en producción, hasta ~90-120s en el peor caso.
+  // 15s y luego 45s no alcanzaban y la app mostraba "no se pudo conectar"
+  // aunque el servidor sí estaba respondiendo, solo que lento. Se amplía a
+  // 150s (con margen) para cubrir ese primer despertar sin fallar de más —
+  // relevante sobre todo ahora que se dejó de forzar el servidor despierto
+  // 24/7 (ver decisión de no mantener el keep-alive por su costo real).
+  static const _timeoutHttp = Duration(seconds: 150);
 
   Uri _uri(String path) => Uri.parse('${ApiConfig.baseUrl}$path');
 

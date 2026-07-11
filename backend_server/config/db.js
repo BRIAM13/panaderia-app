@@ -10,11 +10,13 @@ const dbConfig = {
   // inactividad, y no deja configurar ese retraso de pausa (el control ni
   // aparece en el portal con la oferta gratuita activada). La primera
   // conexión tras una pausa puede tardar bastante en "despertar" la base de
-  // datos — el valor por defecto de mssql (15s) no alcanza, así que se
-  // amplía para que esa primera conexión no falle antes de que Azure
-  // termine de reanudarla.
-  connectionTimeout: 60000,
-  requestTimeout: 60000,
+  // datos — medido hasta ~90-120s en el peor caso. El valor por defecto de
+  // mssql (15s) no alcanza; 60s tampoco alcanzaba siempre. Se deja con
+  // margen por debajo del timeout del cliente Flutter (150s, ver
+  // api_client.dart) para que el error, si lo hay, se origine acá con un
+  // mensaje claro, no como un timeout genérico del lado del cliente.
+  connectionTimeout: 120000,
+  requestTimeout: 120000,
   options: {
     encrypt: process.env.DB_ENCRYPT === 'true',
     trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true',
