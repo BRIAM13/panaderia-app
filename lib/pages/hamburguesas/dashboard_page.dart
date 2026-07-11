@@ -13,6 +13,7 @@ import '../../services/notificaciones_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/desktop_theme.dart';
 import '../../widgets/contador_animado.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
@@ -267,6 +268,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     _TarjetaCobradoHoy(
                           cantidad: resumen.cobradoDiaCantidad,
                           total: resumen.cobradoDiaTotal,
+                          esEscritorio: esEscritorio,
                           onTap: _esGestorDeVentas
                               ? _abrirHistorialVentas
                               : null,
@@ -301,6 +303,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           titulo: 'Por confirmar',
                           valor: '${resumen.pedidosPorConfirmar}',
                           delay: 140,
+                          esEscritorio: esEscritorio,
                           onTap: _abrirPedidos,
                         ),
                         _TarjetaEstadistica(
@@ -313,6 +316,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               : null,
                           subtituloColor: const Color(0xFFC62828),
                           delay: 180,
+                          esEscritorio: esEscritorio,
                           onTap: _abrirPedidos,
                         ),
                         _TarjetaEstadistica(
@@ -322,6 +326,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           valor: 'S/ ${resumen.deudaTotal.toStringAsFixed(2)}',
                           subtitulo: '${resumen.deudaCantidad} pedido(s)',
                           delay: 220,
+                          esEscritorio: esEscritorio,
                           onTap: _abrirDeudas,
                         ),
                         _TarjetaEstadistica(
@@ -330,6 +335,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           titulo: 'Pagos reportados',
                           valor: '${resumen.pagosReportados}',
                           delay: 260,
+                          esEscritorio: esEscritorio,
                           onTap: _abrirDeudas,
                         ),
                       ],
@@ -371,11 +377,13 @@ class _TarjetaCobradoHoy extends StatelessWidget {
   const _TarjetaCobradoHoy({
     required this.cantidad,
     required this.total,
+    this.esEscritorio = false,
     this.onTap,
   });
 
   final int cantidad;
   final double total;
+  final bool esEscritorio;
 
   /// Solo presente para Admin/Superadmin — un Trabajador raso ve esta
   /// misma tarjeta pero no puede entrar al historial completo de ventas.
@@ -383,6 +391,74 @@ class _TarjetaCobradoHoy extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // En escritorio, una tarjeta blanca con acento de color en vez del
+    // degradado a todo color — el degradado se siente "de app móvil" al
+    // lado del resto del panel, ya neutro.
+    if (esEscritorio) {
+      return Material(
+        color: DesktopColors.superficie,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: const Border(
+                top: BorderSide(color: DesktopColors.borde),
+                right: BorderSide(color: DesktopColors.borde),
+                bottom: BorderSide(color: DesktopColors.borde),
+                left: BorderSide(color: AppColors.primary, width: 3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Cobrado hoy',
+                        style: TextStyle(
+                          color: DesktopColors.textoSecundario,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      ContadorAnimado(
+                        valor: total,
+                        formatear: (v) => 'S/ ${v.toStringAsFixed(2)}',
+                        estilo: const TextStyle(
+                          color: DesktopColors.textoPrimario,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$cantidad pedido(s) cobrado(s) hoy',
+                        style: const TextStyle(
+                          color: DesktopColors.textoSecundario,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (onTap != null)
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: DesktopColors.textoSecundario,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Tarjeta3D(
       borderRadius: 24,
       profundidad: 0.0022,
@@ -456,6 +532,7 @@ class _TarjetaEstadistica extends StatelessWidget {
     this.subtitulo,
     this.subtituloColor,
     required this.delay,
+    this.esEscritorio = false,
     this.onTap,
   });
 
@@ -466,12 +543,99 @@ class _TarjetaEstadistica extends StatelessWidget {
   final String? subtitulo;
   final Color? subtituloColor;
   final int delay;
+  final bool esEscritorio;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final esNumero = double.tryParse(valor.replaceAll(RegExp('[^0-9.]'), ''));
+
+    // En escritorio: tarjeta blanca plana con borde y un acento de color a
+    // la izquierda, sin la insignia circular de ícono — más en línea con
+    // el resto del panel neutro, sin la animación de tilt 3D pensada para
+    // tocar con el dedo.
+    if (esEscritorio) {
+      return Material(
+        color: DesktopColors.superficie,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border(
+                top: const BorderSide(color: DesktopColors.borde),
+                right: const BorderSide(color: DesktopColors.borde),
+                bottom: const BorderSide(color: DesktopColors.borde),
+                left: BorderSide(color: color, width: 3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Icon(icono, color: color, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        titulo,
+                        style: const TextStyle(
+                          color: DesktopColors.textoSecundario,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                esNumero != null
+                    ? ContadorAnimado(
+                        valor: esNumero,
+                        formatear: (v) => valor.startsWith('S/')
+                            ? 'S/ ${v.toStringAsFixed(2)}'
+                            : v.toStringAsFixed(0),
+                        estilo: const TextStyle(
+                          color: DesktopColors.textoPrimario,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      )
+                    : Text(
+                        valor,
+                        style: const TextStyle(
+                          color: DesktopColors.textoPrimario,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                if (subtitulo != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitulo!,
+                    style: TextStyle(
+                      color: subtituloColor ?? DesktopColors.textoSecundario,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Tarjeta3D(
           onTap: onTap,
