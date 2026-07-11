@@ -109,6 +109,14 @@ flutter_launcher_icons:
   image_path: "assets/icon/app_icon.png"
   adaptive_icon_background: "#B5451B"
   adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  # Antes solo se generaba para Android/iOS — la versión Web se quedó con
+  # el favicon y los íconos de PWA por defecto de Flutter (se notaba en la
+  # pestaña del navegador).
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    background_color: "#B5451B"
+    theme_color: "#B5451B"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
