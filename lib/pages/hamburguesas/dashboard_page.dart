@@ -12,6 +12,7 @@ import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../widgets/contador_animado.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
@@ -172,129 +173,186 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     final resumen = _resumen;
+    final esEscritorio = MediaQuery.sizeOf(context).width >= Breakpoints.escritorio;
+
+    final graficoVentas = resumen == null
+        ? const SizedBox.shrink()
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Ventas de los últimos 7 días',
+                style: theme.textTheme.titleMedium,
+              ).animate().fadeIn(delay: 300.ms, duration: 300.ms),
+              const SizedBox(height: 12),
+              _GraficoVentas7Dias(serie: resumen.ventasUltimos7Dias)
+                  .animate()
+                  .fadeIn(delay: 340.ms, duration: 400.ms)
+                  .moveY(begin: 16, end: 0)
+                  .flipH(begin: 0.1, end: 0, duration: 350.ms),
+            ],
+          );
+
+    final graficoUrgencia = resumen == null
+        ? const SizedBox.shrink()
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pedidos por entregar, según urgencia',
+                style: theme.textTheme.titleMedium,
+              ).animate().fadeIn(delay: 380.ms, duration: 300.ms),
+              const SizedBox(height: 12),
+              _GraficoPendientesPorUrgencia(resumen: resumen)
+                  .animate()
+                  .fadeIn(delay: 420.ms, duration: 400.ms)
+                  .moveY(begin: 16, end: 0)
+                  .flipH(begin: 0.1, end: 0, duration: 350.ms),
+            ],
+          );
 
     return RefreshIndicator(
       onRefresh: _cargarResumen,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
         children: [
-          Text(
-            'Bienvenido, ${widget.usuario.nombreCompleto}',
-            style: theme.textTheme.bodyMedium,
-          ).animate().fadeIn(duration: 300.ms).moveY(begin: 6, end: 0),
-          const SizedBox(height: 4),
-          Text('Panel de tu negocio', style: theme.textTheme.titleLarge)
-              .animate()
-              .fadeIn(delay: 60.ms, duration: 300.ms)
-              .moveY(begin: 6, end: 0),
-          const SizedBox(height: 16),
-          if (_tiendas.length > 1) ...[
-            DropdownButtonFormField<Tienda>(
-              initialValue: _tiendaSeleccionada,
-              items: _tiendas
-                  .map((t) => DropdownMenuItem(value: t, child: Text(t.nombre)))
-                  .toList(),
-              onChanged: (t) {
-                setState(() => _tiendaSeleccionada = t);
-                _cargarResumen();
-              },
-              decoration: const InputDecoration(
-                labelText: 'Tienda',
-                prefixIcon: Icon(Icons.storefront_rounded),
+          Center(
+            child: ConstrainedBox(
+              // En monitores muy anchos, 1400px de contenido se lee mejor
+              // que gráficos estirados de punta a punta de la pantalla.
+              constraints: const BoxConstraints(maxWidth: 1400),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Bienvenido, ${widget.usuario.nombreCompleto}',
+                    style: theme.textTheme.bodyMedium,
+                  ).animate().fadeIn(duration: 300.ms).moveY(begin: 6, end: 0),
+                  const SizedBox(height: 4),
+                  Text('Panel de tu negocio', style: theme.textTheme.titleLarge)
+                      .animate()
+                      .fadeIn(delay: 60.ms, duration: 300.ms)
+                      .moveY(begin: 6, end: 0),
+                  const SizedBox(height: 16),
+                  if (_tiendas.length > 1) ...[
+                    SizedBox(
+                      width: esEscritorio ? 320 : double.infinity,
+                      child: DropdownButtonFormField<Tienda>(
+                        initialValue: _tiendaSeleccionada,
+                        items: _tiendas
+                            .map(
+                              (t) => DropdownMenuItem(
+                                value: t,
+                                child: Text(t.nombre),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (t) {
+                          setState(() => _tiendaSeleccionada = t);
+                          _cargarResumen();
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Tienda',
+                          prefixIcon: Icon(Icons.storefront_rounded),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (resumen != null) ...[
+                    // Solo lo cobrado (pagado) de hoy — la deuda no cuenta
+                    // acá. Al tocarla (Admin/Superadmin) se abre Historial
+                    // de ventas, con el detalle completo por día y el
+                    // historial jerárquico de pedidos resueltos.
+                    _TarjetaCobradoHoy(
+                          cantidad: resumen.cobradoDiaCantidad,
+                          total: resumen.cobradoDiaTotal,
+                          onTap: _esGestorDeVentas
+                              ? _abrirHistorialVentas
+                              : null,
+                        )
+                        .animate()
+                        .fadeIn(delay: 100.ms, duration: 450.ms)
+                        .moveY(begin: 18, end: 0, curve: Curves.easeOutCubic)
+                        .scale(
+                          begin: const Offset(0.94, 0.94),
+                          end: const Offset(1, 1),
+                          curve: Curves.easeOutCubic,
+                        )
+                        .flipH(begin: 0.15, end: 0, duration: 400.ms),
+                    const SizedBox(height: 16),
+                    GridView.count(
+                      // 4 en una sola fila cuando sobra ancho, en vez de la
+                      // grilla 2x2 pensada para un celular angosto.
+                      crossAxisCount: esEscritorio ? 4 : 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: esEscritorio ? 1.3 : 1.05,
+                      children: [
+                        _TarjetaEstadistica(
+                          icono: Icons.hourglass_top_rounded,
+                          color: const Color(0xFFEA8C1B),
+                          titulo: 'Por confirmar',
+                          valor: '${resumen.pedidosPorConfirmar}',
+                          delay: 140,
+                          onTap: _abrirPedidos,
+                        ),
+                        _TarjetaEstadistica(
+                          icono: Icons.local_shipping_rounded,
+                          color: const Color(0xFF2563EB),
+                          titulo: 'Por entregar',
+                          valor: '${resumen.pendientesTotal}',
+                          subtitulo: resumen.pendientesAtrasados > 0
+                              ? '${resumen.pendientesAtrasados} atrasado(s)'
+                              : null,
+                          subtituloColor: const Color(0xFFC62828),
+                          delay: 180,
+                          onTap: _abrirPedidos,
+                        ),
+                        _TarjetaEstadistica(
+                          icono: Icons.account_balance_wallet_rounded,
+                          color: const Color(0xFFC62828),
+                          titulo: 'Deuda total',
+                          valor: 'S/ ${resumen.deudaTotal.toStringAsFixed(2)}',
+                          subtitulo: '${resumen.deudaCantidad} pedido(s)',
+                          delay: 220,
+                          onTap: _abrirDeudas,
+                        ),
+                        _TarjetaEstadistica(
+                          icono: Icons.qr_code_2_rounded,
+                          color: const Color(0xFF6D4C41),
+                          titulo: 'Pagos reportados',
+                          valor: '${resumen.pagosReportados}',
+                          delay: 260,
+                          onTap: _abrirDeudas,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    // En escritorio, los dos gráficos van uno al lado del
+                    // otro — hay ancho de sobra y se comparan más fácil así
+                    // que uno debajo del otro.
+                    if (esEscritorio)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: graficoVentas),
+                          const SizedBox(width: 24),
+                          Expanded(child: graficoUrgencia),
+                        ],
+                      )
+                    else ...[
+                      graficoVentas,
+                      const SizedBox(height: 24),
+                      graficoUrgencia,
+                    ],
+                  ],
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-          ],
-          if (resumen != null) ...[
-            // Solo lo cobrado (pagado) de hoy — la deuda no cuenta acá. Al
-            // tocarla (Admin/Superadmin) se abre Historial de ventas, que
-            // trae el detalle completo: cobrado/deuda por día con selector
-            // de fecha, y el historial jerárquico de pedidos resueltos.
-            _TarjetaCobradoHoy(
-                  cantidad: resumen.cobradoDiaCantidad,
-                  total: resumen.cobradoDiaTotal,
-                  onTap: _esGestorDeVentas ? _abrirHistorialVentas : null,
-                )
-                .animate()
-                .fadeIn(delay: 100.ms, duration: 450.ms)
-                .moveY(begin: 18, end: 0, curve: Curves.easeOutCubic)
-                .scale(
-                  begin: const Offset(0.94, 0.94),
-                  end: const Offset(1, 1),
-                  curve: Curves.easeOutCubic,
-                )
-                .flipH(begin: 0.15, end: 0, duration: 400.ms),
-            const SizedBox(height: 16),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.05,
-              children: [
-                _TarjetaEstadistica(
-                  icono: Icons.hourglass_top_rounded,
-                  color: const Color(0xFFEA8C1B),
-                  titulo: 'Por confirmar',
-                  valor: '${resumen.pedidosPorConfirmar}',
-                  delay: 140,
-                  onTap: _abrirPedidos,
-                ),
-                _TarjetaEstadistica(
-                  icono: Icons.local_shipping_rounded,
-                  color: const Color(0xFF2563EB),
-                  titulo: 'Por entregar',
-                  valor: '${resumen.pendientesTotal}',
-                  subtitulo: resumen.pendientesAtrasados > 0
-                      ? '${resumen.pendientesAtrasados} atrasado(s)'
-                      : null,
-                  subtituloColor: const Color(0xFFC62828),
-                  delay: 180,
-                  onTap: _abrirPedidos,
-                ),
-                _TarjetaEstadistica(
-                  icono: Icons.account_balance_wallet_rounded,
-                  color: const Color(0xFFC62828),
-                  titulo: 'Deuda total',
-                  valor: 'S/ ${resumen.deudaTotal.toStringAsFixed(2)}',
-                  subtitulo: '${resumen.deudaCantidad} pedido(s)',
-                  delay: 220,
-                  onTap: _abrirDeudas,
-                ),
-                _TarjetaEstadistica(
-                  icono: Icons.qr_code_2_rounded,
-                  color: const Color(0xFF6D4C41),
-                  titulo: 'Pagos reportados',
-                  valor: '${resumen.pagosReportados}',
-                  delay: 260,
-                  onTap: _abrirDeudas,
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Ventas de los últimos 7 días',
-              style: theme.textTheme.titleMedium,
-            ).animate().fadeIn(delay: 300.ms, duration: 300.ms),
-            const SizedBox(height: 12),
-            _GraficoVentas7Dias(serie: resumen.ventasUltimos7Dias)
-                .animate()
-                .fadeIn(delay: 340.ms, duration: 400.ms)
-                .moveY(begin: 16, end: 0)
-                .flipH(begin: 0.1, end: 0, duration: 350.ms),
-            const SizedBox(height: 24),
-            Text(
-              'Pedidos por entregar, según urgencia',
-              style: theme.textTheme.titleMedium,
-            ).animate().fadeIn(delay: 380.ms, duration: 300.ms),
-            const SizedBox(height: 12),
-            _GraficoPendientesPorUrgencia(resumen: resumen)
-                .animate()
-                .fadeIn(delay: 420.ms, duration: 400.ms)
-                .moveY(begin: 16, end: 0)
-                .flipH(begin: 0.1, end: 0, duration: 350.ms),
-          ],
+          ),
         ],
       ),
     );

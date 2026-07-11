@@ -142,34 +142,45 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
         children: [
-          Text(
-            'Tus pedidos',
-            style: theme.textTheme.titleLarge,
-          ).animate().fadeIn(duration: 300.ms).moveY(begin: 6, end: 0),
-          const SizedBox(height: 4),
-          Text(
-                'Así va tu historial con la panadería.',
-                style: theme.textTheme.bodyMedium,
-              )
-              .animate()
-              .fadeIn(delay: 60.ms, duration: 300.ms)
-              .moveY(begin: 6, end: 0),
-          const SizedBox(height: 20),
-          if (_pedidos.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: EstadoVacio(
-                icono: Icons.receipt_long_outlined,
-                titulo: 'Aún no tienes pedidos registrados',
-                subtitulo: 'Tu historial con la panadería va a aparecer acá.',
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1400),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tus pedidos',
+                    style: theme.textTheme.titleLarge,
+                  ).animate().fadeIn(duration: 300.ms).moveY(begin: 6, end: 0),
+                  const SizedBox(height: 4),
+                  Text(
+                        'Así va tu historial con la panadería.',
+                        style: theme.textTheme.bodyMedium,
+                      )
+                      .animate()
+                      .fadeIn(delay: 60.ms, duration: 300.ms)
+                      .moveY(begin: 6, end: 0),
+                  const SizedBox(height: 20),
+                  if (_pedidos.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: EstadoVacio(
+                        icono: Icons.receipt_long_outlined,
+                        titulo: 'Aún no tienes pedidos registrados',
+                        subtitulo:
+                            'Tu historial con la panadería va a aparecer acá.',
+                      ),
+                    )
+                  else
+                    ListaPedidosPorSeccion(
+                      pedidos: _pedidos,
+                      mostrarNombreCliente: false,
+                      onCancelar: _cancelar,
+                    ),
+                ],
               ),
-            )
-          else
-            ListaPedidosPorSeccion(
-              pedidos: _pedidos,
-              mostrarNombreCliente: false,
-              onCancelar: _cancelar,
             ),
+          ),
         ],
       ),
     );

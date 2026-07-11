@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../widgets/ad_banner.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/page_transitions.dart';
@@ -130,12 +131,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// A partir de este ancho, el drawer deja de ser un overlay deslizante y
-  /// pasa a mostrarse siempre visible como panel lateral — en una ventana
-  /// de escritorio ancha, un menú que hay que "abrir" con un ícono se ve
-  /// fuera de lugar cuando sobra espacio de sobra para tenerlo siempre ahí.
-  static const _anchoEscritorio = 900.0;
-
   @override
   Widget build(BuildContext context) {
     final usuario = widget.usuario;
@@ -145,8 +140,13 @@ class _HomePageState extends State<HomePage> {
     // de cliente (Mis pedidos, Mis deudas, Hacer pedido) quedan en el
     // drawer, no reemplazando el Dashboard/hub de tiendas.
     final vistaTrabajador = usuario.esPersonalDeGestion;
+    // A partir de este ancho, el drawer deja de ser un overlay deslizante
+    // y pasa a mostrarse siempre visible como panel lateral — en una
+    // ventana de escritorio ancha, un menú que hay que "abrir" con un
+    // ícono se ve fuera de lugar cuando sobra espacio de sobra para
+    // tenerlo siempre ahí.
     final esEscritorio =
-        MediaQuery.sizeOf(context).width >= _anchoEscritorio;
+        MediaQuery.sizeOf(context).width >= Breakpoints.escritorio;
 
     final contenidoMenu = AppDrawerContenido(
       usuario: usuario,

@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/usuario_sesion.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/tarjeta_3d.dart';
 import 'ajuste_costos_page.dart';
@@ -72,71 +73,90 @@ class HamburguesasGestionPage extends StatelessWidget {
         ),
     ];
 
+    Widget construirTarjeta(_OpcionGestion opcion, int index) {
+      return Tarjeta3D(
+            borderRadius: 20,
+            onTap: opcion.onTap,
+            child: Container(
+              color: AppColors.surface,
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [AppColors.primary, AppColors.secondary],
+                      ),
+                    ),
+                    child: Icon(opcion.icono, color: Colors.white, size: 26),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(opcion.titulo, style: theme.textTheme.titleMedium),
+                        const SizedBox(height: 2),
+                        Text(opcion.subtitulo, style: theme.textTheme.bodyMedium),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: scheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .animate(delay: (80 * index).ms)
+          .fadeIn(duration: 300.ms)
+          .moveY(begin: 16, end: 0)
+          .flipH(begin: 0.1, end: 0, duration: 320.ms);
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Gestión de Hamburguesas')),
       body: SafeArea(
-        child: ListView.builder(
-          padding: const EdgeInsets.all(20),
-          itemCount: opciones.length,
-          itemBuilder: (context, index) {
-            final opcion = opciones[index];
-            return Padding(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // En pantallas anchas, las opciones se acomodan en una grilla
+            // de 2-3 columnas en vez de una lista larga de una sola
+            // columna — se aprovecha mejor el ancho y se ve todo de un
+            // vistazo, sin scrollear tanto.
+            final esEscritorio = constraints.maxWidth >= Breakpoints.tablet;
+            if (!esEscritorio) {
+              return ListView.builder(
+                padding: const EdgeInsets.all(20),
+                itemCount: opciones.length,
+                itemBuilder: (context, index) => Padding(
                   padding: const EdgeInsets.only(bottom: 14),
-                  child: Tarjeta3D(
-                    borderRadius: 20,
-                    onTap: opcion.onTap,
-                    child: Container(
-                      color: AppColors.surface,
-                      padding: const EdgeInsets.all(18),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [
-                                  AppColors.primary,
-                                  AppColors.secondary,
-                                ],
-                              ),
-                            ),
-                            child: Icon(
-                              opcion.icono,
-                              color: Colors.white,
-                              size: 26,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  opcion.titulo,
-                                  style: theme.textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  opcion.subtitulo,
-                                  style: theme.textTheme.bodyMedium,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: scheme.onSurface.withValues(alpha: 0.4),
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: construirTarjeta(opciones[index], index),
+                ),
+              );
+            }
+            final columnas = constraints.maxWidth >= Breakpoints.escritorio
+                ? 3
+                : 2;
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: GridView.builder(
+                  padding: const EdgeInsets.all(24),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columnas,
+                    mainAxisSpacing: 14,
+                    crossAxisSpacing: 14,
+                    childAspectRatio: 2.6,
                   ),
-                )
-                .animate(delay: (80 * index).ms)
-                .fadeIn(duration: 300.ms)
-                .moveY(begin: 16, end: 0)
-                .flipH(begin: 0.1, end: 0, duration: 320.ms);
+                  itemCount: opciones.length,
+                  itemBuilder: (context, index) =>
+                      construirTarjeta(opciones[index], index),
+                ),
+              ),
+            );
           },
         ),
       ),

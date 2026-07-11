@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../services/pedidos_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/breakpoints.dart';
 import '../utils/fecha_pedido_utils.dart';
 import 'tarjeta_3d.dart';
 
@@ -199,9 +200,10 @@ class SeccionPedidos extends StatelessWidget {
             child: Text(subtitulo, style: theme.textTheme.bodyMedium),
           ),
           const SizedBox(height: 10),
-          ...pedidos.asMap().entries.map(
-            (entry) =>
-                PedidoCard(
+          Builder(
+            builder: (context) {
+              final tarjetas = pedidos.asMap().entries.map(
+                (entry) => PedidoCard(
                       pedido: entry.value,
                       colorSeccion: color,
                       mostrarNombreCliente: mostrarNombreCliente,
@@ -216,6 +218,24 @@ class SeccionPedidos extends StatelessWidget {
                     .fadeIn(duration: 250.ms)
                     .moveY(begin: 8, end: 0)
                     .flipH(begin: 0.12, end: 0, duration: 320.ms),
+              );
+
+              // En pantallas anchas, varias tarjetas caben una al lado de
+              // la otra en vez de una debajo de la otra hasta el infinito
+              // — cada una con un ancho fijo tipo tarjeta, no estirada.
+              final esEscritorio =
+                  MediaQuery.sizeOf(context).width >= Breakpoints.tablet;
+              if (!esEscritorio) {
+                return Column(children: tarjetas.toList());
+              }
+              return Wrap(
+                spacing: 12,
+                runSpacing: 0,
+                children: tarjetas
+                    .map((t) => SizedBox(width: 380, child: t))
+                    .toList(),
+              );
+            },
           ),
         ],
       ),

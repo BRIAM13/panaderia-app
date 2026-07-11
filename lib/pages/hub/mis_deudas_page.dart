@@ -15,6 +15,7 @@ import '../../services/medios_pago_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/solicitudes_pago_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../widgets/ad_banner.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
@@ -226,22 +227,45 @@ class _MisDeudasPageState extends State<MisDeudasPage> {
       );
     }
 
+    final tarjetas = _deudas.asMap().entries.map((entry) {
+      final index = entry.key;
+      final deuda = entry.value;
+      return _TarjetaDeuda(
+            deuda: deuda,
+            seleccionado: _seleccionados.contains(deuda.idPedido),
+            puedeSeleccionar: _puedeSeleccionar(deuda),
+            onTap: () => _alternarSeleccion(deuda),
+          )
+          .animate(delay: (60 * index).ms)
+          .fadeIn(duration: 300.ms)
+          .moveY(begin: 10, end: 0);
+    });
+
     return RefreshIndicator(
       onRefresh: _cargar,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
-        itemCount: _deudas.length,
-        itemBuilder: (context, index) {
-          final deuda = _deudas[index];
-          return _TarjetaDeuda(
-                deuda: deuda,
-                seleccionado: _seleccionados.contains(deuda.idPedido),
-                puedeSeleccionar: _puedeSeleccionar(deuda),
-                onTap: () => _alternarSeleccion(deuda),
-              )
-              .animate(delay: (60 * index).ms)
-              .fadeIn(duration: 300.ms)
-              .moveY(begin: 10, end: 0);
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // En pantallas anchas, varias tarjetas de deuda caben una al
+          // lado de la otra en vez de una larga columna estirada.
+          final esEscritorio = constraints.maxWidth >= Breakpoints.tablet;
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+            children: [
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1400),
+                  child: esEscritorio
+                      ? Wrap(
+                          spacing: 12,
+                          children: tarjetas
+                              .map((t) => SizedBox(width: 380, child: t))
+                              .toList(),
+                        )
+                      : Column(children: tarjetas.toList()),
+                ),
+              ),
+            ],
+          );
         },
       ),
     );
