@@ -12,7 +12,6 @@ import 'services/api_client.dart';
 import 'services/secure_storage_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/page_transitions.dart';
-import 'widgets/web_frame.dart';
 
 /// Referencia global al Navigator raíz — necesaria para poder forzar una
 /// navegación (cerrar sesión y volver al login) desde `ApiClient`, que
@@ -125,7 +124,7 @@ class PanaderiaApp extends StatelessWidget {
           data: mediaQuery.copyWith(
             textScaler: TextScaler.linear(factorSeguro),
           ),
-          child: WebFrame(child: child!),
+          child: child!,
         );
       },
       home: const SplashPage(),

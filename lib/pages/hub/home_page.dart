@@ -5,11 +5,10 @@ import '../../models/usuario_sesion.dart';
 import '../../services/auth_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/tiendas_service.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
-import '../../theme/desktop_theme.dart';
 import '../../widgets/ad_banner.dart';
 import '../../widgets/app_drawer.dart';
-import '../../widgets/desktop_sidebar.dart';
 import '../../widgets/page_transitions.dart';
 import '../auth/login_page.dart';
 import '../hamburguesas/dashboard_page.dart';
@@ -181,14 +180,10 @@ class _HomePageState extends State<HomePage> {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: esEscritorio ? DesktopColors.fondo : null,
-        // En escritorio no hay AppBar: el sidebar ya identifica a la marca
-        // y al usuario, y cada pantalla trae su propio título — repetir
-        // "Corporación Ronceros" arriba de todo era redundante y se sentía
-        // a barra de app móvil, no a panel de trabajo.
-        appBar: esEscritorio
-            ? null
-            : AppBar(title: const Text('Corporación Ronceros')),
+        appBar: AppBar(
+          title: const Text('Corporación Ronceros'),
+          automaticallyImplyLeading: !esEscritorio,
+        ),
         drawer: esEscritorio ? null : Drawer(child: contenidoMenu),
         floatingActionButton: vistaTrabajador
             ? null
@@ -209,33 +204,23 @@ class _HomePageState extends State<HomePage> {
         // al estar dentro del body, el FAB flotaba sin saber cuánto espacio
         // ocupaba el banner abajo y terminaba sobreponiéndosele.
         bottomNavigationBar: vistaTrabajador ? null : const AdBanner(),
+        // En escritorio, el mismo drawer (mismo diseño que en celular) se
+        // muestra siempre visible como panel lateral en vez de un overlay
+        // que hay que abrir con un ícono — el resto del contenido usa
+        // TODO el ancho restante, sin ningún tope artificial.
         body: esEscritorio
             ? Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(
-                    width: 260,
-                    child: DesktopSidebar(
-                      usuario: usuario,
-                      misSlugsTiendas: _misSlugsTiendas,
-                      onAbrirGestion: _abrirGestion,
-                      onAbrirHamburguesas: _abrirGestionHamburguesas,
-                      onAbrirMiPerfil: _abrirMiPerfil,
-                      onAbrirMisPedidos: _abrirMisPedidos,
-                      onAbrirMisDeudas: _abrirMisDeudas,
-                      onHacerPedido: _hacerPedido,
-                      onAbrirTrabajadores: _abrirTrabajadores,
-                      onAbrirTokenApiPeru: _abrirTokenApiPeru,
-                      onCerrarSesion: _cerrarSesion,
-                    ),
-                  ),
-                  const VerticalDivider(width: 1, color: DesktopColors.borde),
-                  Expanded(
+                    width: 300,
                     child: ColoredBox(
-                      color: DesktopColors.fondo,
-                      child: cuerpo,
+                      color: AppColors.background,
+                      child: contenidoMenu,
                     ),
                   ),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: cuerpo),
                 ],
               )
             : cuerpo,
