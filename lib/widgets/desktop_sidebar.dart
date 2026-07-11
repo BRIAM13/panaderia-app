@@ -68,7 +68,7 @@ class DesktopSidebar extends StatelessWidget {
                   height: 38,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    color: DesktopColors.fondo,
+                    color: AppColors.primaryContainer,
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -76,7 +76,7 @@ class DesktopSidebar extends StatelessWidget {
                         ? usuario.nombreCompleto[0].toUpperCase()
                         : '?',
                     style: const TextStyle(
-                      color: DesktopColors.textoPrimario,
+                      color: AppColors.primary,
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                     ),

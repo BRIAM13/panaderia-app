@@ -142,10 +142,7 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
         children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1400),
-              child: Column(
+          Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -179,8 +176,6 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
                     ),
                 ],
               ),
-            ),
-          ),
         ],
       ),
     );

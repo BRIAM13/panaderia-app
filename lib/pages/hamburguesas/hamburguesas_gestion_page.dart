@@ -137,25 +137,22 @@ class HamburguesasGestionPage extends StatelessWidget {
                 ),
               );
             }
-            final columnas = constraints.maxWidth >= Breakpoints.escritorio
-                ? 3
-                : 2;
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1200),
-                child: GridView.builder(
-                  padding: const EdgeInsets.all(24),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columnas,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: 2.6,
-                  ),
-                  itemCount: opciones.length,
-                  itemBuilder: (context, index) =>
-                      construirTarjeta(opciones[index], index),
-                ),
+            // Columnas según el ancho real disponible (una tarjeta cómoda
+            // ronda 340px) en vez de un tope fijo — así la grilla usa toda
+            // la pantalla, más columnas en un monitor ancho, menos en una
+            // laptop, sin dejar franjas vacías a los costados.
+            final columnas = (constraints.maxWidth / 340).floor().clamp(2, 6);
+            return GridView.builder(
+              padding: const EdgeInsets.all(24),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columnas,
+                mainAxisSpacing: 14,
+                crossAxisSpacing: 14,
+                childAspectRatio: 2.6,
               ),
+              itemCount: opciones.length,
+              itemBuilder: (context, index) =>
+                  construirTarjeta(opciones[index], index),
             );
           },
         ),

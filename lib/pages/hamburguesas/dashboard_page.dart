@@ -217,12 +217,7 @@ class _DashboardPageState extends State<DashboardPage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
         children: [
-          Center(
-            child: ConstrainedBox(
-              // En monitores muy anchos, 1400px de contenido se lee mejor
-              // que gráficos estirados de punta a punta de la pantalla.
-              constraints: const BoxConstraints(maxWidth: 1400),
-              child: Column(
+          Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -361,8 +356,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   ],
                 ],
               ),
-            ),
-          ),
         ],
       ),
     );

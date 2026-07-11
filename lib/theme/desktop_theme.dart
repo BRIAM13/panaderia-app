@@ -1,18 +1,17 @@
-import 'package:flutter/material.dart';
+import 'app_theme.dart';
 
-/// Paleta neutra usada SOLO en el layout de escritorio (Web/Windows) — la
-/// paleta cálida crema/ámbar del resto de la app se diseñó pensando en
-/// celular, y en pantallas grandes se sentía "de app móvil agrandada" en
-/// vez de una herramienta de trabajo. Acá se usa un tono neutro, tipo
-/// panel de trabajo (Linear/Stripe), con el color de marca solo como
-/// acento puntual — la vista móvil no se toca, sigue con su paleta cálida.
+/// Colores del layout de escritorio (Web/Windows) — reusa la paleta de
+/// marca (crema/ámbar/terracota) de siempre, ver [AppColors]. Lo que
+/// cambia en escritorio es la ESTRUCTURA (sidebar plano, tarjetas sin
+/// degradado ni animación 3D pensada para touch), no la paleta — la marca
+/// debe reconocerse igual en cualquier tamaño de pantalla.
 class DesktopColors {
   DesktopColors._();
 
-  static const fondo = Color(0xFFF6F6F8);
-  static const superficie = Color(0xFFFFFFFF);
-  static const borde = Color(0xFFE6E6EB);
-  static const textoPrimario = Color(0xFF17171C);
-  static const textoSecundario = Color(0xFF6E6E79);
-  static const hover = Color(0xFFF0F0F3);
+  static const fondo = AppColors.background;
+  static const superficie = AppColors.surface;
+  static const borde = AppColors.surfaceMuted;
+  static const textoPrimario = AppColors.textPrimary;
+  static const textoSecundario = AppColors.textSecondary;
+  static const hover = AppColors.surfaceMuted;
 }

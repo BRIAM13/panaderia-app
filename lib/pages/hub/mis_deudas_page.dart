@@ -251,19 +251,14 @@ class _MisDeudasPageState extends State<MisDeudasPage> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
             children: [
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1400),
-                  child: esEscritorio
-                      ? Wrap(
-                          spacing: 12,
-                          children: tarjetas
-                              .map((t) => SizedBox(width: 380, child: t))
-                              .toList(),
-                        )
-                      : Column(children: tarjetas.toList()),
-                ),
-              ),
+              esEscritorio
+                  ? Wrap(
+                      spacing: 12,
+                      children: tarjetas
+                          .map((t) => SizedBox(width: 380, child: t))
+                          .toList(),
+                    )
+                  : Column(children: tarjetas.toList()),
             ],
           );
         },
