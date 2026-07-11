@@ -8,6 +8,8 @@ import '../../models/usuario_sesion.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
 import '../../services/biometric_service.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../widgets/biometric_offer_sheet.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/premium_button.dart';
@@ -212,8 +214,67 @@ class _LoginPageState extends State<LoginPage> {
 
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final esEscritorio = constraints.maxWidth >= Breakpoints.tablet;
+            final formulario = _construirFormulario(theme, scheme, esEscritorio);
+
+            // En pantallas anchas, el formulario angosto solo (sin nada
+            // más) se veía "perdido" y estirado en medio de tanto espacio.
+            // Se centra en una tarjeta de ancho fijo, sobre un fondo con
+            // los colores de la marca a pantalla completa — no un recorte
+            // en blanco en medio de la ventana.
+            if (!esEscritorio) return formulario;
+
+            return Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [scheme.primary, scheme.secondary],
+                ),
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 32),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 36,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 40,
+                          offset: const Offset(0, 20),
+                        ),
+                      ],
+                    ),
+                    child: formulario,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _construirFormulario(
+    ThemeData theme,
+    ColorScheme scheme,
+    bool esEscritorio,
+  ) {
+    return SingleChildScrollView(
+          padding: EdgeInsets.symmetric(
+            horizontal: esEscritorio ? 0 : 28,
+            vertical: 24,
+          ),
           child: Form(
             key: _formKey,
             child: Column(
@@ -441,8 +502,6 @@ class _LoginPageState extends State<LoginPage> {
               ],
             ),
           ),
-        ),
-      ),
-    );
+        );
   }
 }
