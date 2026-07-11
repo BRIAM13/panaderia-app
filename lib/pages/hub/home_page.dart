@@ -5,6 +5,7 @@ import '../../models/usuario_sesion.dart';
 import '../../services/auth_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/tiendas_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/ad_banner.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/page_transitions.dart';
@@ -129,6 +130,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  /// A partir de este ancho, el drawer deja de ser un overlay deslizante y
+  /// pasa a mostrarse siempre visible como panel lateral — en una ventana
+  /// de escritorio ancha, un menú que hay que "abrir" con un ícono se ve
+  /// fuera de lugar cuando sobra espacio de sobra para tenerlo siempre ahí.
+  static const _anchoEscritorio = 900.0;
+
   @override
   Widget build(BuildContext context) {
     final usuario = widget.usuario;
@@ -138,6 +145,34 @@ class _HomePageState extends State<HomePage> {
     // de cliente (Mis pedidos, Mis deudas, Hacer pedido) quedan en el
     // drawer, no reemplazando el Dashboard/hub de tiendas.
     final vistaTrabajador = usuario.esPersonalDeGestion;
+    final esEscritorio =
+        MediaQuery.sizeOf(context).width >= _anchoEscritorio;
+
+    final contenidoMenu = AppDrawerContenido(
+      usuario: usuario,
+      misSlugsTiendas: _misSlugsTiendas,
+      onAbrirGestion: _abrirGestion,
+      onAbrirHamburguesas: _abrirGestionHamburguesas,
+      onAbrirMiPerfil: _abrirMiPerfil,
+      onAbrirMisPedidos: _abrirMisPedidos,
+      onAbrirMisDeudas: _abrirMisDeudas,
+      onHacerPedido: _hacerPedido,
+      onAbrirTrabajadores: _abrirTrabajadores,
+      onAbrirTokenApiPeru: _abrirTokenApiPeru,
+      onCerrarSesion: _cerrarSesion,
+    );
+
+    final cuerpo = SafeArea(
+      bottom: vistaTrabajador,
+      // El Dashboard de su tienda es la pantalla principal para TODO el
+      // personal (Trabajador/Admin/Superadmin) — antes solo lo veían
+      // Admin/Superadmin, y un Trabajador raso caía al grid genérico
+      // "Elige tu tienda". El propio Dashboard ya distingue el rol para
+      // decidir qué se puede tocar (ej. "Ventas de hoy").
+      child: vistaTrabajador
+          ? DashboardPage(usuario: usuario)
+          : MisPedidosPendientesView(key: _misPedidosKey),
+    );
 
     // El Hub es la raíz de la sesión autenticada: el botón/gesto de
     // retroceso nunca debe devolver al usuario al Login (algunos caminos,
@@ -145,20 +180,14 @@ class _HomePageState extends State<HomePage> {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Corporación Ronceros')),
-        drawer: AppDrawer(
-          usuario: usuario,
-          misSlugsTiendas: _misSlugsTiendas,
-          onAbrirGestion: _abrirGestion,
-          onAbrirHamburguesas: _abrirGestionHamburguesas,
-          onAbrirMiPerfil: _abrirMiPerfil,
-          onAbrirMisPedidos: _abrirMisPedidos,
-          onAbrirMisDeudas: _abrirMisDeudas,
-          onHacerPedido: _hacerPedido,
-          onAbrirTrabajadores: _abrirTrabajadores,
-          onAbrirTokenApiPeru: _abrirTokenApiPeru,
-          onCerrarSesion: _cerrarSesion,
+        appBar: AppBar(
+          title: const Text('Corporación Ronceros'),
+          // Sin esto, en escritorio (sin drawer) el AppBar igual reserva el
+          // hueco del ícono de menú a la izquierda, dejando el título
+          // descentrado sin motivo.
+          automaticallyImplyLeading: !esEscritorio,
         ),
+        drawer: esEscritorio ? null : Drawer(child: contenidoMenu),
         floatingActionButton: vistaTrabajador
             ? null
             : FloatingActionButton.extended(
@@ -178,17 +207,23 @@ class _HomePageState extends State<HomePage> {
         // al estar dentro del body, el FAB flotaba sin saber cuánto espacio
         // ocupaba el banner abajo y terminaba sobreponiéndosele.
         bottomNavigationBar: vistaTrabajador ? null : const AdBanner(),
-        body: SafeArea(
-          bottom: vistaTrabajador,
-          // El Dashboard de su tienda es la pantalla principal para TODO el
-          // personal (Trabajador/Admin/Superadmin) — antes solo lo veían
-          // Admin/Superadmin, y un Trabajador raso caía al grid genérico
-          // "Elige tu tienda". El propio Dashboard ya distingue el rol para
-          // decidir qué se puede tocar (ej. "Ventas de hoy").
-          child: vistaTrabajador
-              ? DashboardPage(usuario: usuario)
-              : MisPedidosPendientesView(key: _misPedidosKey),
-        ),
+        body: esEscritorio
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: 300,
+                    child: Material(
+                      color: AppColors.background,
+                      elevation: 1,
+                      child: contenidoMenu,
+                    ),
+                  ),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: cuerpo),
+                ],
+              )
+            : cuerpo,
       ),
     );
   }

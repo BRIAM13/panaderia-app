@@ -43,6 +43,59 @@ class AppDrawer extends StatelessWidget {
   /// controla qué "Gestionar X" se muestra. SUPERADMIN las recibe todas.
   final Set<String> misSlugsTiendas;
 
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      backgroundColor: AppColors.background,
+      child: AppDrawerContenido(
+        usuario: usuario,
+        misSlugsTiendas: misSlugsTiendas,
+        onAbrirGestion: onAbrirGestion,
+        onAbrirHamburguesas: onAbrirHamburguesas,
+        onAbrirMiPerfil: onAbrirMiPerfil,
+        onAbrirMisPedidos: onAbrirMisPedidos,
+        onAbrirMisDeudas: onAbrirMisDeudas,
+        onHacerPedido: onHacerPedido,
+        onAbrirTrabajadores: onAbrirTrabajadores,
+        onAbrirTokenApiPeru: onAbrirTokenApiPeru,
+        onCerrarSesion: onCerrarSesion,
+      ),
+    );
+  }
+}
+
+/// El contenido del drawer, sin el `Drawer` (overlay deslizante) que lo
+/// envuelve — separado para poder reusarlo tal cual como panel lateral fijo
+/// en pantallas anchas (ver `HomePage`), donde no tiene sentido un overlay
+/// que se desliza si ya está siempre visible.
+class AppDrawerContenido extends StatelessWidget {
+  const AppDrawerContenido({
+    super.key,
+    required this.usuario,
+    required this.onAbrirGestion,
+    required this.onAbrirHamburguesas,
+    required this.onAbrirMiPerfil,
+    required this.onAbrirMisPedidos,
+    required this.onAbrirMisDeudas,
+    required this.onHacerPedido,
+    required this.onAbrirTrabajadores,
+    required this.onAbrirTokenApiPeru,
+    required this.onCerrarSesion,
+    this.misSlugsTiendas = const {},
+  });
+
+  final UsuarioSesion usuario;
+  final void Function(String nombre, IconData icono) onAbrirGestion;
+  final VoidCallback onAbrirHamburguesas;
+  final VoidCallback onAbrirMiPerfil;
+  final VoidCallback onAbrirMisPedidos;
+  final VoidCallback onAbrirMisDeudas;
+  final VoidCallback onHacerPedido;
+  final VoidCallback onAbrirTrabajadores;
+  final VoidCallback onAbrirTokenApiPeru;
+  final VoidCallback onCerrarSesion;
+  final Set<String> misSlugsTiendas;
+
   String _etiquetaRol(String rol) {
     switch (rol) {
       case 'SUPERADMIN':
@@ -60,10 +113,8 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Drawer(
-      backgroundColor: AppColors.background,
-      child: SafeArea(
-        child: Column(
+    return SafeArea(
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
@@ -237,8 +288,7 @@ class AppDrawer extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
 
