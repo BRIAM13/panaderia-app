@@ -35,10 +35,11 @@ export const PLATAFORMAS: PlataformaDescarga[] = [
     nombre: "Android",
     estado: "disponible",
     descripcionEstado: "Instalador directo (.apk)",
-    // Se sirve desde GitHub Releases (no empaquetado en el propio deploy)
-    // para no inflar el tamaño del sitio con un binario de ~58 MB.
-    archivo:
-      "https://github.com/BRIAM13/panaderia-app/releases/download/apk-v1.0.0/CorporacionRonceros-v1.0.0.apk",
+    // NO se sirve desde GitHub Releases: el repo es privado, así que esos
+    // links de descarga dan 404 a cualquier visitante sin sesión — se
+    // vuelve a empaquetar directo en el propio deploy de Vercel, que es
+    // público sin importar que el repo fuente sea privado.
+    archivo: "/downloads/CorporacionRonceros-v1.0.0.apk",
     nombreArchivo: "CorporacionRonceros-v1.0.0.apk",
     viaQr: true,
     tipoAccion: "descargar",
