@@ -16,6 +16,10 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   connectTimeout: 20000,
   charset: 'utf8mb4_unicode_ci',
+  // Sin esto, mysql2 devuelve las columnas DECIMAL (dinero, ej. SUM() en los
+  // resúmenes de tienda) como string en vez de number — a diferencia de
+  // `mssql`, que sí las mandaba como number. La app Flutter espera number.
+  decimalNumbers: true,
 });
 
 // Marcadores de tipo: mysql2 no necesita el tipo explícito por parámetro
