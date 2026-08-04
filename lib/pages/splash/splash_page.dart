@@ -4,8 +4,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/usuario_sesion.dart';
 import '../../services/auth_service.dart';
 import '../../services/biometric_service.dart';
+import '../../services/version_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
+import '../actualizacion/actualizacion_requerida_page.dart';
 import '../auth/login_page.dart';
 import '../hub/home_page.dart';
 
@@ -21,6 +23,7 @@ class SplashPage extends StatefulWidget {
 class _SplashPageState extends State<SplashPage> {
   final _authService = AuthService();
   final _biometricService = BiometricService();
+  final _versionService = VersionService();
 
   @override
   void initState() {
@@ -29,6 +32,15 @@ class _SplashPageState extends State<SplashPage> {
   }
 
   Future<void> _bootstrap() async {
+    // Se revisa antes que cualquier otra cosa (incluso antes de mirar si hay
+    // sesión guardada): si el backend ya no es compatible con esta versión,
+    // no tiene sentido intentar restaurar sesión ni mostrar el login.
+    final actualizacion = await _versionService.verificar();
+    if (actualizacion.actualizacionRequerida) {
+      _irAActualizacionRequerida(actualizacion.urlDescarga);
+      return;
+    }
+
     final storage = _authService.storage;
     final recordarme = await storage.obtenerRecordarme();
 
@@ -58,6 +70,15 @@ class _SplashPageState extends State<SplashPage> {
     } catch (_) {
       _irALogin();
     }
+  }
+
+  void _irAActualizacionRequerida(String urlDescarga) {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      SlideUpFadeRoute(
+        builder: (_) => ActualizacionRequeridaPage(urlDescarga: urlDescarga),
+      ),
+    );
   }
 
   void _irALogin() {

@@ -49,6 +49,36 @@ app.get('/api/keep-alive', async (req, res) => {
   }
 });
 
+// Sin autenticación a propósito: la app consulta esto en el splash, ANTES
+// de que exista una sesión (o con una sesión ya vieja que ni siquiera puede
+// loguearse si el backend cambió de forma incompatible). Si la lectura
+// falla o las claves no existen todavía en Configuraciones, se responde
+// "sin actualización obligatoria" en vez de un error — un fallo acá nunca
+// debe dejar a nadie sin poder entrar a la app.
+app.get('/api/app-info', async (req, res) => {
+  const porDefecto = {
+    versionMinimaAndroid: '0.0.0',
+    urlDescargaApk: 'https://corporacionronceros.vercel.app/',
+  };
+  try {
+    const pool = await getPool();
+    const resultado = await pool
+      .request()
+      .query(
+        "SELECT Clave, Valor FROM Configuraciones WHERE Clave IN ('VERSION_MINIMA_ANDROID', 'URL_DESCARGA_APK')"
+      );
+    const valores = Object.fromEntries(
+      resultado.recordset.map((fila) => [fila.Clave, fila.Valor])
+    );
+    res.json({
+      versionMinimaAndroid: valores.VERSION_MINIMA_ANDROID || porDefecto.versionMinimaAndroid,
+      urlDescargaApk: valores.URL_DESCARGA_APK || porDefecto.urlDescargaApk,
+    });
+  } catch (err) {
+    res.json(porDefecto);
+  }
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/external', externalRoutes);
 app.use('/api/clientes', clientesRoutes);

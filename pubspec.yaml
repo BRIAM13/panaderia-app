@@ -53,6 +53,10 @@ dependencies:
   # Abrir marcador telefónico, WhatsApp y Google Maps desde la app.
   url_launcher: ^6.3.1
 
+  # Leer la versión/build instalada del propio APK, para compararla contra
+  # la versión mínima que exige el backend (ver VersionService).
+  package_info_plus: ^8.1.2
+
   # Compartir contacto mediante el módulo nativo de compartir del sistema.
   share_plus: ^10.1.2
 

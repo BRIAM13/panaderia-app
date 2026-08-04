@@ -16,9 +16,11 @@ import '../../theme/breakpoints.dart';
 import '../../widgets/contador_animado.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
+import '../../widgets/premium_button.dart';
 import '../../widgets/tarjeta_3d.dart';
 import 'deudas_page.dart';
 import 'historial_ventas_page.dart';
+import 'nuevo_pedido_page.dart';
 import 'pedidos_page.dart';
 
 /// Landing del ADMIN/SUPERADMIN al entrar en su vista de personal: un
@@ -64,6 +66,17 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _abrirPedidos() {
     pushSlideUpFade(context, (_) => const PedidosPage());
+  }
+
+  /// Acceso directo a registrar un pedido nuevo desde el propio Dashboard —
+  /// antes solo se llegaba entrando primero a Pedidos y tocando su botón
+  /// flotante, dos pasos que no eran obvios para quien recién entra.
+  Future<void> _abrirNuevoPedido() async {
+    final registrado = await pushSlideUpFade<bool>(
+      context,
+      (_) => const NuevoPedidoPage(),
+    );
+    if (registrado == true) _cargarResumen();
   }
 
   void _abrirDeudas() {
@@ -228,6 +241,18 @@ class _DashboardPageState extends State<DashboardPage> {
                       .animate()
                       .fadeIn(delay: 60.ms, duration: 300.ms)
                       .moveY(begin: 6, end: 0),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                        width: esEscritorio ? 280 : double.infinity,
+                        child: PremiumButton(
+                          label: 'Registrar pedido',
+                          icono: Icons.add_shopping_cart_rounded,
+                          onPressed: _abrirNuevoPedido,
+                        ),
+                      )
+                      .animate()
+                      .fadeIn(delay: 90.ms, duration: 300.ms)
+                      .moveY(begin: 10, end: 0),
                   const SizedBox(height: 16),
                   if (_tiendas.length > 1) ...[
                     SizedBox(

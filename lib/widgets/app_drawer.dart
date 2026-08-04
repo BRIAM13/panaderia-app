@@ -21,9 +21,9 @@ class AppDrawer extends StatelessWidget {
     required this.onAbrirMiPerfil,
     required this.onAbrirMisPedidos,
     required this.onAbrirMisDeudas,
-    required this.onHacerPedido,
     required this.onAbrirTrabajadores,
     required this.onAbrirTokenApiPeru,
+    required this.onAbrirVersionApp,
     required this.onCerrarSesion,
     this.misSlugsTiendas = const {},
   });
@@ -34,9 +34,9 @@ class AppDrawer extends StatelessWidget {
   final VoidCallback onAbrirMiPerfil;
   final VoidCallback onAbrirMisPedidos;
   final VoidCallback onAbrirMisDeudas;
-  final VoidCallback onHacerPedido;
   final VoidCallback onAbrirTrabajadores;
   final VoidCallback onAbrirTokenApiPeru;
+  final VoidCallback onAbrirVersionApp;
   final VoidCallback onCerrarSesion;
 
   /// Slugs de tiendas donde este trabajador/admin tiene acceso vigente —
@@ -55,9 +55,9 @@ class AppDrawer extends StatelessWidget {
         onAbrirMiPerfil: onAbrirMiPerfil,
         onAbrirMisPedidos: onAbrirMisPedidos,
         onAbrirMisDeudas: onAbrirMisDeudas,
-        onHacerPedido: onHacerPedido,
         onAbrirTrabajadores: onAbrirTrabajadores,
         onAbrirTokenApiPeru: onAbrirTokenApiPeru,
+        onAbrirVersionApp: onAbrirVersionApp,
         onCerrarSesion: onCerrarSesion,
       ),
     );
@@ -77,9 +77,9 @@ class AppDrawerContenido extends StatelessWidget {
     required this.onAbrirMiPerfil,
     required this.onAbrirMisPedidos,
     required this.onAbrirMisDeudas,
-    required this.onHacerPedido,
     required this.onAbrirTrabajadores,
     required this.onAbrirTokenApiPeru,
+    required this.onAbrirVersionApp,
     required this.onCerrarSesion,
     this.misSlugsTiendas = const {},
   });
@@ -90,9 +90,9 @@ class AppDrawerContenido extends StatelessWidget {
   final VoidCallback onAbrirMiPerfil;
   final VoidCallback onAbrirMisPedidos;
   final VoidCallback onAbrirMisDeudas;
-  final VoidCallback onHacerPedido;
   final VoidCallback onAbrirTrabajadores;
   final VoidCallback onAbrirTokenApiPeru;
+  final VoidCallback onAbrirVersionApp;
   final VoidCallback onCerrarSesion;
   final Set<String> misSlugsTiendas;
 
@@ -239,6 +239,12 @@ class AppDrawerContenido extends StatelessWidget {
                       onTap: onAbrirTokenApiPeru,
                       delay: 130,
                     ),
+                    _FilaMenu(
+                      icono: Icons.system_update_rounded,
+                      titulo: 'Versión de la app',
+                      onTap: onAbrirVersionApp,
+                      delay: 145,
+                    ),
                   ],
                   if (usuario.esCliente) ...[
                     if (usuario.esPersonalDeGestion) ...[
@@ -246,13 +252,6 @@ class AppDrawerContenido extends StatelessWidget {
                       const Divider(height: 1),
                     ],
                     const _EncabezadoSeccion(texto: 'MI CUENTA'),
-                    if (usuario.esPersonalDeGestion)
-                      _FilaMenu(
-                        icono: Icons.add_shopping_cart_rounded,
-                        titulo: 'Hacer pedido',
-                        onTap: onHacerPedido,
-                        delay: 160,
-                      ),
                     _FilaMenu(
                       icono: Icons.receipt_long_rounded,
                       titulo: 'Mis pedidos',
