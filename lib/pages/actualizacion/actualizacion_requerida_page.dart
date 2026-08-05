@@ -98,6 +98,17 @@ class _ActualizacionRequeridaPageState
         ],
       );
       await intent.launch();
+
+      // FLAG_ACTIVITY_NEW_TASK abre el instalador en una tarea aparte, sin
+      // tocar esta — si esta instancia (la que pedía actualizar) se queda
+      // viva de fondo, Android la deja como una segunda tarea "fantasma" en
+      // Recientes: se ve vieja pero al tocarla ya carga la versión nueva
+      // (mismo paquete, código ya reemplazado), solo que confunde al
+      // parecer dos apps corriendo a la vez. Cerrar el proceso acá evita
+      // esa tarea duplicada — para cuando esto corre, el intent de arriba
+      // ya quedó entregado al sistema, no depende de que este proceso siga
+      // vivo.
+      exit(0);
     } on PlatformException {
       if (mounted) {
         setState(
