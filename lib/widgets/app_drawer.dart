@@ -256,86 +256,110 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-              padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppColors.primary, AppColors.secondary],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.28),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.18),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.4),
-                        width: 1.4,
-                      ),
+                  margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AppColors.primary, AppColors.secondary],
                     ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      usuario.nombreCompleto.isNotEmpty
-                          ? usuario.nombreCompleto[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.28),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          usuario.nombreCompleto,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: Colors.white,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.20),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            _etiquetaRol(usuario.rol),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
+                  // Tocar la tarjeta del usuario lleva a "Mi perfil" — antes
+                  // esa pantalla solo aparecía en "MI CUENTA", una sección
+                  // que se arma a partir de si la persona tiene un perfil
+                  // de Cliente activo. Un SUPERADMIN sembrado directo (sin
+                  // pasar por el registro normal) puede no tener ese
+                  // registro y quedarse sin forma de llegar a sus propios
+                  // datos — tocar acá siempre funciona, sin importar eso.
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(22),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(22),
+                      onTap: widget.onAbrirMiPerfil,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 20, 14, 20),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 54,
+                              height: 54,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withValues(alpha: 0.18),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.4),
+                                  width: 1.4,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                usuario.nombreCompleto.isNotEmpty
+                                    ? usuario.nombreCompleto[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    usuario.nombreCompleto,
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.20),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      _etiquetaRol(usuario.rol),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: Colors.white.withValues(alpha: 0.75),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ],
-              ),
-            ).animate().fadeIn(duration: 300.ms).moveY(begin: -10, end: 0),
+                )
+                .animate()
+                .fadeIn(duration: 300.ms)
+                .moveY(begin: -10, end: 0),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
