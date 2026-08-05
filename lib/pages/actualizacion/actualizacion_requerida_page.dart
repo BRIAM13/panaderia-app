@@ -16,6 +16,12 @@ import '../../widgets/premium_button.dart';
 /// AndroidManifest.
 const _fileProviderAuthority = 'com.corporacionronceros.panaderia_app.fileprovider';
 
+/// Canal nativo mínimo (ver MainActivity.kt) para poder llamar
+/// `Activity.finishAndRemoveTask()` — ni `exit(0)` ni `SystemNavigator.pop()`
+/// sacan la tarea de "Recientes" tras entregarle el APK al instalador,
+/// solo cierran/matan la app dejándola ahí como para "volver" a ella.
+const _canalCierreApp = MethodChannel('corporacionronceros/cierre_app');
+
 /// Pantalla de bloqueo total: se muestra en vez del login/home cuando el
 /// backend indica que la versión instalada quedó por debajo de la mínima
 /// permitida (ver VersionService/SplashPage). No hay forma de saltarla —
@@ -100,14 +106,13 @@ class _ActualizacionRequeridaPageState
       await intent.launch();
 
       // FLAG_ACTIVITY_NEW_TASK abre el instalador en una tarea aparte, sin
-      // tocar esta — si esta instancia (la que pedía actualizar) se queda
-      // viva, Android la deja como una tarea aparte en Recientes.
-      // `exit(0)` (probado antes) mata el proceso de golpe, sin pasar por
-      // el cierre normal de la actividad — la tarea queda huérfana en
-      // Recientes (sin proceso, pero visible igual). SystemNavigator.pop()
-      // sí pasa por Activity.finish(), que al ser la única actividad de su
-      // tarea, hace que Android remueva la tarea completa de Recientes.
-      await SystemNavigator.pop();
+      // tocar esta. Ni `exit(0)` ni `SystemNavigator.pop()` (probados
+      // antes) sacan la tarea de "Recientes" — Android deja ahí cualquier
+      // app cerrada "normalmente" (por diseño, para poder "volver" a
+      // ella). `finishAndRemoveTask()` sí la remueve de verdad; no tiene
+      // API en Flutter, así que se llama por un canal nativo mínimo
+      // (ver MainActivity.kt), sin depender de ningún paquete de pub.dev.
+      await _canalCierreApp.invokeMethod('finishAndRemoveTask');
     } on PlatformException {
       if (mounted) {
         setState(
