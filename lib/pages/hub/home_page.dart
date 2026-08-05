@@ -11,8 +11,13 @@ import '../../widgets/ad_banner.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/page_transitions.dart';
 import '../auth/login_page.dart';
+import '../hamburguesas/ajuste_costos_page.dart';
+import '../hamburguesas/clientes_page.dart';
 import '../hamburguesas/dashboard_page.dart';
-import '../hamburguesas/hamburguesas_gestion_page.dart';
+import '../hamburguesas/deudas_page.dart';
+import '../hamburguesas/medios_pago_page.dart';
+import '../hamburguesas/nuevo_pedido_page.dart';
+import '../hamburguesas/pedidos_page.dart';
 import '../hamburguesas/trabajadores_page.dart';
 import '../perfil/mi_perfil_page.dart';
 import '../sistema/token_api_peru_page.dart';
@@ -36,6 +41,7 @@ class _HomePageState extends State<HomePage> {
   final _notificacionesService = NotificacionesService();
   final _tiendasService = TiendasService();
   final _misPedidosKey = GlobalKey<MisPedidosPendientesViewState>();
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   /// Slugs de las tiendas a las que este trabajador/admin tiene acceso
   /// vigente — controla qué entradas de "Gestionar X" ve en el drawer.
@@ -60,11 +66,42 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _abrirGestionHamburguesas() {
-    pushSlideUpFade(
-      context,
-      (context) => HamburguesasGestionPage(usuario: widget.usuario),
-    );
+  /// Vuelve directo al Dashboard sin importar cuántas pantallas se hayan
+  /// abierto encima — es el equivalente de "Inicio" en cualquier app: un
+  /// solo toque desde donde sea, sin ir cerrando pantalla por pantalla.
+  /// Usa `_scaffoldKey` (no `Scaffold.of(context)`) porque este método vive
+  /// en el `State` de `HomePage`, cuyo `context` queda POR ENCIMA del
+  /// `Scaffold` que arma su propio `build()` — `Scaffold.of` no encuentra
+  /// un descendiente, necesita un ancestro.
+  void _irAInicio() {
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      _scaffoldKey.currentState?.closeDrawer();
+    }
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  void _abrirClientesHamburguesas() {
+    pushSlideUpFade(context, (context) => const ClientesPage());
+  }
+
+  void _abrirPedidosHamburguesas() {
+    pushSlideUpFade(context, (context) => const PedidosPage());
+  }
+
+  void _abrirNuevoPedidoHamburguesas() {
+    pushSlideUpFade(context, (context) => const NuevoPedidoPage());
+  }
+
+  void _abrirDeudasHamburguesas() {
+    pushSlideUpFade(context, (context) => const DeudasPage());
+  }
+
+  void _abrirMediosPagoHamburguesas() {
+    pushSlideUpFade(context, (context) => const MediosPagoPage());
+  }
+
+  void _abrirAjusteCostosHamburguesas() {
+    pushSlideUpFade(context, (context) => const AjusteCostosPage());
   }
 
   /// El anuncio solo existe para monetizar a quienes SOLO son clientes —
@@ -156,8 +193,14 @@ class _HomePageState extends State<HomePage> {
     final contenidoMenu = AppDrawerContenido(
       usuario: usuario,
       misSlugsTiendas: _misSlugsTiendas,
+      onIrAInicio: _irAInicio,
       onAbrirGestion: _abrirGestion,
-      onAbrirHamburguesas: _abrirGestionHamburguesas,
+      onAbrirClientesHamburguesas: _abrirClientesHamburguesas,
+      onAbrirPedidosHamburguesas: _abrirPedidosHamburguesas,
+      onAbrirNuevoPedidoHamburguesas: _abrirNuevoPedidoHamburguesas,
+      onAbrirDeudasHamburguesas: _abrirDeudasHamburguesas,
+      onAbrirMediosPagoHamburguesas: _abrirMediosPagoHamburguesas,
+      onAbrirAjusteCostosHamburguesas: _abrirAjusteCostosHamburguesas,
       onAbrirMiPerfil: _abrirMiPerfil,
       onAbrirMisPedidos: _abrirMisPedidos,
       onAbrirMisDeudas: _abrirMisDeudas,
@@ -185,6 +228,7 @@ class _HomePageState extends State<HomePage> {
     return PopScope(
       canPop: false,
       child: Scaffold(
+        key: _scaffoldKey,
         appBar: AppBar(
           title: const Text('Corporación Ronceros'),
           automaticallyImplyLeading: !esEscritorio,

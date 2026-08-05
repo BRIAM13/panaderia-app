@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.11.5
@@ -56,6 +56,17 @@ dependencies:
   # Leer la versión/build instalada del propio APK, para compararla contra
   # la versión mínima que exige el backend (ver VersionService).
   package_info_plus: ^8.1.2
+
+  # Carpeta temporal del dispositivo para guardar el APK recién descargado
+  # antes de instalarlo (ver ActualizacionRequeridaPage).
+  path_provider: ^2.1.5
+
+  # Dispara el intent ACTION_VIEW de Android para abrir el instalador
+  # nativo sobre el APK ya descargado (ver FileProvider en AndroidManifest
+  # y res/xml/file_paths.xml). Se prefirió sobre open_filex porque ese
+  # paquete trae su propio classpath fijo de Android Gradle Plugin y arrastra
+  # una versión RC de Kotlin que Maven Central sirve muy lento/falla.
+  android_intent_plus: ^5.2.0
 
   # Compartir contacto mediante el módulo nativo de compartir del sistema.
   share_plus: ^10.1.2
