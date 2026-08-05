@@ -101,14 +101,13 @@ class _ActualizacionRequeridaPageState
 
       // FLAG_ACTIVITY_NEW_TASK abre el instalador en una tarea aparte, sin
       // tocar esta — si esta instancia (la que pedía actualizar) se queda
-      // viva de fondo, Android la deja como una segunda tarea "fantasma" en
-      // Recientes: se ve vieja pero al tocarla ya carga la versión nueva
-      // (mismo paquete, código ya reemplazado), solo que confunde al
-      // parecer dos apps corriendo a la vez. Cerrar el proceso acá evita
-      // esa tarea duplicada — para cuando esto corre, el intent de arriba
-      // ya quedó entregado al sistema, no depende de que este proceso siga
-      // vivo.
-      exit(0);
+      // viva, Android la deja como una tarea aparte en Recientes.
+      // `exit(0)` (probado antes) mata el proceso de golpe, sin pasar por
+      // el cierre normal de la actividad — la tarea queda huérfana en
+      // Recientes (sin proceso, pero visible igual). SystemNavigator.pop()
+      // sí pasa por Activity.finish(), que al ser la única actividad de su
+      // tarea, hace que Android remueva la tarea completa de Recientes.
+      await SystemNavigator.pop();
     } on PlatformException {
       if (mounted) {
         setState(
