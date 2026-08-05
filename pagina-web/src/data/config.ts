@@ -39,8 +39,12 @@ export const PLATAFORMAS: PlataformaDescarga[] = [
     // links de descarga dan 404 a cualquier visitante sin sesión — se
     // vuelve a empaquetar directo en el propio deploy de Vercel, que es
     // público sin importar que el repo fuente sea privado.
-    archivo: "/downloads/CorporacionRonceros-v1.0.0.apk",
-    nombreArchivo: "CorporacionRonceros-v1.0.0.apk",
+    // Nombre fijo (no versionado): scripts/publicar_actualizacion.ps1
+    // sobrescribe este mismo archivo en cada release, así que el botón de
+    // la landing siempre sirve la versión más reciente sin tener que tocar
+    // este archivo a mano cada vez.
+    archivo: "/downloads/CorporacionRonceros-latest.apk",
+    nombreArchivo: "CorporacionRonceros.apk",
     viaQr: true,
     tipoAccion: "descargar",
   },
