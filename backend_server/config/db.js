@@ -20,6 +20,12 @@ const pool = mysql.createPool({
   // resúmenes de tienda) como string en vez de number — a diferencia de
   // `mssql`, que sí las mandaba como number. La app Flutter espera number.
   decimalNumbers: true,
+  // El servidor MariaDB (require_secure_transport=ON) rechaza conexiones
+  // sin TLS con ER_SECURE_TRANSPORT_REQUIRED. rejectUnauthorized:false
+  // porque es un certificado propio del servidor, no de una CA pública.
+  // DB_SSL=false desactiva esto por si algún día se apunta a un MariaDB
+  // que no lo exige (ej. local, sin TLS configurado).
+  ssl: process.env.DB_SSL === 'false' ? undefined : { rejectUnauthorized: false },
 });
 
 // Marcadores de tipo: mysql2 no necesita el tipo explícito por parámetro
