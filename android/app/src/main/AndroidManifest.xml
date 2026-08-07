@@ -14,32 +14,12 @@
          como alternativa a elegirlo de la galería. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
-    <!-- Requerido (Android 8+) para poder abrir el instalador del sistema
-         sobre el APK de actualización descargado dentro de la propia app,
-         en vez de mandar a la persona a instalarlo manualmente desde el
-         navegador. Android igual pide una vez, por fuera, el permiso
-         "instalar apps desconocidas" para esta app — no se puede saltar
-         ese aviso, es una protección del sistema operativo. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="Corporación Ronceros"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config">
-        <!-- Permite compartir el APK descargado (en la carpeta caché de la
-             app) con el instalador de paquetes de Android vía un content://
-             URI — Android 7+ ya no deja pasar un file:// URI crudo entre
-             apps distintas (ver ActualizacionRequeridaPage). -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -104,5 +84,11 @@
         <!-- Requerido (Android 11+) para poder detectar/abrir la app de
              Yape desde el botón "Ir a pagar" al cobrar una deuda. -->
         <package android:name="com.bcp.innovacxion.yapeapp"/>
+        <!-- Requerido (Android 11+) para poder abrir Play Store directo con
+             el esquema market:// desde ActualizacionRequeridaPage. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="market"/>
+        </intent>
     </queries>
 </manifest>

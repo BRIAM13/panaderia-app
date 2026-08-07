@@ -1,26 +1,13 @@
-import 'dart:io';
-
-import 'package:android_intent_plus/android_intent.dart';
-import 'package:android_intent_plus/flag.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/app_theme.dart';
 import '../../widgets/premium_button.dart';
 
-/// Debe coincidir con `applicationId` en android/app/build.gradle.kts —
-/// mismo authority declarado en el `<provider>` FileProvider del
-/// AndroidManifest.
-const _fileProviderAuthority = 'com.corporacionronceros.panaderia_app.fileprovider';
-
-/// Canal nativo mínimo (ver MainActivity.kt) para poder llamar
-/// `Activity.finishAndRemoveTask()` — ni `exit(0)` ni `SystemNavigator.pop()`
-/// sacan la tarea de "Recientes" tras entregarle el APK al instalador,
-/// solo cierran/matan la app dejándola ahí como para "volver" a ella.
-const _canalCierreApp = MethodChannel('corporacionronceros/cierre_app');
+/// Id real de la app en Play Store — debe coincidir con `applicationId` en
+/// android/app/build.gradle.kts.
+const _idPaquete = 'com.corporacionronceros.panaderia_app';
 
 /// Pantalla de bloqueo total: se muestra en vez del login/home cuando el
 /// backend indica que la versión instalada quedó por debajo de la mínima
@@ -28,17 +15,20 @@ const _canalCierreApp = MethodChannel('corporacionronceros/cierre_app');
 /// ni botón "Atrás" ni "Más tarde" — porque el punto es forzar la
 /// actualización antes de dejar usar el resto de la app.
 ///
-/// A diferencia de una versión anterior (que solo abría el navegador y
-/// dejaba a la persona descargar/instalar a mano), acá el APK se descarga
-/// DENTRO de la app, con progreso real, y al terminar se abre directo el
-/// instalador del sistema — un solo toque. Lo único que Android sigue
-/// pidiendo aparte (y no se puede evitar, es una protección del sistema)
-/// es autorizar una vez "instalar apps desconocidas" para esta app.
+/// Ahora que la app vive en Play Store, actualizar es simplemente mandar a
+/// la ficha de la app ahí — Play Store se encarga de descargar e instalar
+/// la actualización, y de mantener actualizada a cualquiera que la tenga
+/// instalada desde ahí sin que la app tenga que hacer nada más. (Una
+/// versión anterior de esta pantalla descargaba e instalaba el APK ella
+/// misma, necesario mientras la única forma de distribuir era el enlace
+/// directo — con Play Store ya no hace falta esa complejidad, y evita
+/// fricción con sus políticas sobre apps que se autoactualizan por fuera
+/// de la tienda.)
 class ActualizacionRequeridaPage extends StatefulWidget {
   const ActualizacionRequeridaPage({super.key, required this.urlDescarga});
 
-  /// Debe ser la URL directa del archivo .apk, no una página web — se
-  /// descarga tal cual con una petición HTTP normal.
+  /// Enlace de Play Store (o el que el backend indique como respaldo) —
+  /// ver VERSION_MINIMA_ANDROID/URL_DESCARGA_APK en Configuraciones.
   final String urlDescarga;
 
   @override
@@ -48,87 +38,31 @@ class ActualizacionRequeridaPage extends StatefulWidget {
 
 class _ActualizacionRequeridaPageState
     extends State<ActualizacionRequeridaPage> {
-  bool _descargando = false;
-  double? _progreso; // null = indeterminado (aún no se sabe el tamaño total)
+  bool _abriendo = false;
   String? _error;
 
-  Future<void> _descargarEInstalar() async {
+  Future<void> _irAPlayStore() async {
     setState(() {
-      _descargando = true;
-      _progreso = null;
+      _abriendo = true;
       _error = null;
     });
-
     try {
-      final uri = Uri.parse(widget.urlDescarga);
-      final cliente = http.Client();
-      final peticion = http.Request('GET', uri);
-      final respuesta = await cliente.send(peticion);
-
-      if (respuesta.statusCode != 200) {
-        throw Exception('El servidor respondió ${respuesta.statusCode}');
+      // market:// abre directo la app de Play Store (mejor experiencia);
+      // si no está disponible (ej. no hay Play Store en el dispositivo),
+      // cae al enlace web normal.
+      final uriTienda = Uri.parse('market://details?id=$_idPaquete');
+      var abierto = await launchUrl(uriTienda, mode: LaunchMode.externalApplication);
+      if (!abierto) {
+        final uriWeb = Uri.parse(widget.urlDescarga);
+        abierto = await launchUrl(uriWeb, mode: LaunchMode.externalApplication);
       }
-
-      final total = respuesta.contentLength;
-      // El nombre debe quedar directo en la raíz de la caché (sin
-      // subcarpetas) — así coincide con el <cache-path path="."/> declarado
-      // en res/xml/file_paths.xml, que es lo que arma la URI de abajo.
-      final carpetaTemporal = await getTemporaryDirectory();
-      final archivo = File('${carpetaTemporal.path}/actualizacion.apk');
-      final sink = archivo.openWrite();
-
-      var recibido = 0;
-      await for (final trozo in respuesta.stream) {
-        sink.add(trozo);
-        recibido += trozo.length;
-        if (total != null && total > 0 && mounted) {
-          setState(() => _progreso = recibido / total);
-        }
-      }
-      await sink.close();
-      cliente.close();
-
-      if (!mounted) return;
-
-      // content:// (no file://): Android 7+ bloquea pasar un file:// URI
-      // crudo entre apps — el FileProvider (ver AndroidManifest) expone la
-      // carpeta de caché bajo el nombre "actualizaciones", así que la URI
-      // sigue ese mismo esquema.
-      final intent = AndroidIntent(
-        action: 'action_view',
-        data: 'content://$_fileProviderAuthority/actualizaciones/actualizacion.apk',
-        type: 'application/vnd.android.package-archive',
-        flags: [
-          Flag.FLAG_ACTIVITY_NEW_TASK,
-          Flag.FLAG_GRANT_READ_URI_PERMISSION,
-        ],
-      );
-      await intent.launch();
-
-      // FLAG_ACTIVITY_NEW_TASK abre el instalador en una tarea aparte, sin
-      // tocar esta. Ni `exit(0)` ni `SystemNavigator.pop()` (probados
-      // antes) sacan la tarea de "Recientes" — Android deja ahí cualquier
-      // app cerrada "normalmente" (por diseño, para poder "volver" a
-      // ella). `finishAndRemoveTask()` sí la remueve de verdad; no tiene
-      // API en Flutter, así que se llama por un canal nativo mínimo
-      // (ver MainActivity.kt), sin depender de ningún paquete de pub.dev.
-      await _canalCierreApp.invokeMethod('finishAndRemoveTask');
-    } on PlatformException {
-      if (mounted) {
-        setState(
-          () => _error =
-              'No se pudo abrir el instalador. Puede que debas autorizar '
-              '"instalar apps desconocidas" para esta app en Ajustes.',
-        );
+      if (!abierto && mounted) {
+        setState(() => _error = 'No se pudo abrir Play Store.');
       }
     } catch (_) {
-      if (mounted) {
-        setState(
-          () => _error = 'No se pudo descargar la actualización. Revisa tu conexión e intenta de nuevo.',
-        );
-      }
+      if (mounted) setState(() => _error = 'No se pudo abrir Play Store.');
     } finally {
-      if (mounted) setState(() => _descargando = false);
+      if (mounted) setState(() => _abriendo = false);
     }
   }
 
@@ -190,7 +124,8 @@ class _ActualizacionRequeridaPageState
                     const SizedBox(height: 12),
                     Text(
                       'Hay una nueva versión de la app con correcciones '
-                      'importantes. Actualiza para seguir usándola.',
+                      'importantes. Actualiza desde Play Store para seguir '
+                      'usándola.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: Colors.white.withValues(alpha: 0.92),
@@ -202,7 +137,7 @@ class _ActualizacionRequeridaPageState
                       child: Column(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: AppColors.background,
                               borderRadius: BorderRadius.circular(18),
@@ -214,37 +149,11 @@ class _ActualizacionRequeridaPageState
                                 ),
                               ],
                             ),
-                            child: Column(
-                              children: [
-                                if (_descargando) ...[
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: LinearProgressIndicator(
-                                      value: _progreso,
-                                      minHeight: 8,
-                                      backgroundColor: AppColors.surfaceMuted,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    _progreso != null
-                                        ? 'Descargando… ${(_progreso! * 100).toStringAsFixed(0)}%'
-                                        : 'Descargando…',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                ],
-                                PremiumButton(
-                                  label: _descargando
-                                      ? 'Descargando…'
-                                      : 'Descargar e instalar',
-                                  icono: Icons.download_rounded,
-                                  cargando: _descargando,
-                                  onPressed: _descargarEInstalar,
-                                ),
-                              ],
+                            child: PremiumButton(
+                              label: 'Actualizar en Play Store',
+                              icono: Icons.shop_rounded,
+                              cargando: _abriendo,
+                              onPressed: _irAPlayStore,
                             ),
                           ),
                           if (_error != null) ...[

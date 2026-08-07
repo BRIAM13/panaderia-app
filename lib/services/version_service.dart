@@ -42,7 +42,7 @@ class VersionService {
   /// hace falta actualizar — un fallo de red jamás debe dejar a nadie
   /// bloqueado fuera de la app.
   Future<EstadoActualizacion> verificar() async {
-    const urlPorDefecto = 'https://corporacionronceros.vercel.app/';
+    const urlPorDefecto = 'https://play.google.com/store/apps/details?id=com.corporacionronceros.panaderia_app';
     try {
       final data = await _api.get('/app-info');
       final versionMinima = data['versionMinimaAndroid'] as String? ?? '0.0.0';

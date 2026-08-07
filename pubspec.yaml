@@ -57,17 +57,6 @@ dependencies:
   # la versión mínima que exige el backend (ver VersionService).
   package_info_plus: ^8.1.2
 
-  # Carpeta temporal del dispositivo para guardar el APK recién descargado
-  # antes de instalarlo (ver ActualizacionRequeridaPage).
-  path_provider: ^2.1.5
-
-  # Dispara el intent ACTION_VIEW de Android para abrir el instalador
-  # nativo sobre el APK ya descargado (ver FileProvider en AndroidManifest
-  # y res/xml/file_paths.xml). Se prefirió sobre open_filex porque ese
-  # paquete trae su propio classpath fijo de Android Gradle Plugin y arrastra
-  # una versión RC de Kotlin que Maven Central sirve muy lento/falla.
-  android_intent_plus: ^5.2.0
-
   # Compartir contacto mediante el módulo nativo de compartir del sistema.
   share_plus: ^10.1.2
 

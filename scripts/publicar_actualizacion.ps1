@@ -1,12 +1,14 @@
-# Publica una nueva versión de la app de punta a punta, sin pasos manuales:
+# Prepara una nueva versión para publicar en Play Store:
 #   1) Lee la versión actual de pubspec.yaml (la subes ahí como siempre).
-#   2) Compila el APK de producción.
-#   3) Lo copia a pagina-web/public/downloads/CorporacionRonceros-latest.apk
-#      (nombre fijo: el enlace de descarga nunca cambia, solo el archivo).
-#   4) Sube esos cambios a GitHub (dispara el redeploy de la landing en Vercel).
-#   5) Marca esa versión como mínima requerida en el backend — cualquiera
-#      con una versión menor ve el bloqueo de actualización obligatoria en
-#      su próximo intento de abrir la app.
+#   2) Compila el App Bundle (.aab) de producción, firmado con la llave real
+#      (ver android/key.properties) — Play Store solo acepta .aab, no .apk.
+#   3) Marca esa versión como mínima requerida en el backend — cualquiera
+#      con una versión menor ve el bloqueo de actualización obligatoria
+#      (que ahora manda a Play Store) en su próximo intento de abrir la app.
+#
+# La subida del .aab a Play Console (Producción / Prueba cerrada / etc.)
+# sigue siendo manual — Google exige revisar cada release ahí, no se puede
+# saltar arrastrando el archivo por script.
 #
 # Uso: sube el numero de "version:" en pubspec.yaml a mano (como cualquier
 # release normal) y despues corre:  .\scripts\publicar_actualizacion.ps1
@@ -28,29 +30,26 @@ if ($version -notmatch '^\d+\.\d+\.\d+$') {
     exit 1
 }
 
-Write-Host "=== Publicando version $version ===" -ForegroundColor Cyan
+if (-not (Test-Path 'android\key.properties')) {
+    Write-Error "No existe android\key.properties — el build quedaria firmado con la llave de debug, Play Console lo va a rechazar."
+    exit 1
+}
 
-Write-Host "`n[1/4] Compilando APK de produccion..." -ForegroundColor Yellow
-flutter build apk --release --dart-define=API_BASE_URL=https://panaderia-backend-2xvd.onrender.com/api
-if ($LASTEXITCODE -ne 0) { Write-Error "Fallo la compilacion del APK"; exit 1 }
+Write-Host "=== Preparando version $version para Play Store ===" -ForegroundColor Cyan
 
-Write-Host "`n[2/4] Copiando APK a la landing..." -ForegroundColor Yellow
-$origen = 'build\app\outputs\flutter-apk\app-release.apk'
-$destino = 'pagina-web\public\downloads\CorporacionRonceros-latest.apk'
-Copy-Item -Path $origen -Destination $destino -Force
-Write-Host "Copiado a $destino"
+Write-Host "`n[1/2] Compilando App Bundle (.aab) de produccion..." -ForegroundColor Yellow
+flutter build appbundle --release --dart-define=API_BASE_URL=https://panaderia-backend-2xvd.onrender.com/api
+if ($LASTEXITCODE -ne 0) { Write-Error "Fallo la compilacion del .aab"; exit 1 }
 
-Write-Host "`n[3/4] Subiendo a GitHub..." -ForegroundColor Yellow
-git add $destino
-git commit -m "Publicar version $version del APK"
-git push origin main
-if ($LASTEXITCODE -ne 0) { Write-Error "Fallo el push a GitHub"; exit 1 }
+$aab = 'build\app\outputs\bundle\release\app-release.aab'
+Write-Host "Listo: $aab"
 
-Write-Host "`n[4/4] Marcando $version como version minima requerida..." -ForegroundColor Yellow
+Write-Host "`n[2/2] Marcando $version como version minima requerida..." -ForegroundColor Yellow
 Push-Location backend_server
 node scripts/actualizar_version_minima.js $version
 $codigoNode = $LASTEXITCODE
 Pop-Location
 if ($codigoNode -ne 0) { Write-Error "Fallo al actualizar la version minima en el backend"; exit 1 }
 
-Write-Host "`n=== Listo: version $version publicada y forzada ===" -ForegroundColor Green
+Write-Host "`n=== Version $version lista ===" -ForegroundColor Green
+Write-Host "Sube manualmente $aab en Play Console (Produccion o Prueba cerrada segun corresponda)." -ForegroundColor Green

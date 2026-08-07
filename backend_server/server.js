@@ -58,7 +58,7 @@ app.get('/api/keep-alive', async (req, res) => {
 app.get('/api/app-info', async (req, res) => {
   const porDefecto = {
     versionMinimaAndroid: '0.0.0',
-    urlDescargaApk: 'https://corporacionronceros.vercel.app/',
+    urlDescargaApk: 'https://play.google.com/store/apps/details?id=com.corporacionronceros.panaderia_app',
   };
   try {
     const pool = await getPool();

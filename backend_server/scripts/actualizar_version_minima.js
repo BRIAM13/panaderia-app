@@ -7,7 +7,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const { getPool } = require('../config/db');
 
 const URL_DESCARGA_APK =
-  'https://corporacionronceros.vercel.app/downloads/CorporacionRonceros-latest.apk';
+  'https://play.google.com/store/apps/details?id=com.corporacionronceros.panaderia_app';
 
 async function main() {
   const version = process.argv[2];
