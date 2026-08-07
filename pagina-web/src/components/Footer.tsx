@@ -7,7 +7,9 @@ export function Footer() {
         <p>
           © {new Date().getFullYear()} {SITE.nombre} — {SITE.claim}
         </p>
-        <p className="text-carbon-600">Hecho con Flutter, Node.js y Azure SQL.</p>
+        <a href="/privacidad/" className="text-carbon-400 hover:text-carbon-200">
+          Política de privacidad
+        </a>
       </div>
     </footer>
   );

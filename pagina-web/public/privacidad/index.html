@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Política de Privacidad — Corporación Ronceros</title>
+<meta name="description" content="Política de privacidad de la app Corporación Ronceros." />
+<style>
+  :root {
+    --primario: #B5451B;
+    --secundario: #C08A3E;
+    --fondo: #FDF6EC;
+    --superficie: #FFFBF3;
+    --texto: #2B2118;
+    --texto-secundario: #6B5B4C;
+    --borde: #EADFCB;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--fondo);
+    color: var(--texto);
+    line-height: 1.65;
+  }
+  .encabezado {
+    background: linear-gradient(135deg, var(--primario), var(--secundario));
+    color: #fff;
+    padding: 48px 24px 40px;
+    text-align: center;
+  }
+  .encabezado h1 { margin: 0 0 8px; font-size: 1.9rem; }
+  .encabezado p { margin: 0; opacity: 0.92; }
+  main {
+    max-width: 760px;
+    margin: -24px auto 60px;
+    background: var(--superficie);
+    border-radius: 20px;
+    padding: 36px 32px 44px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+  }
+  h2 {
+    color: var(--primario);
+    font-size: 1.15rem;
+    margin: 32px 0 10px;
+    border-bottom: 1px solid var(--borde);
+    padding-bottom: 8px;
+  }
+  h2:first-of-type { margin-top: 0; }
+  p, li { color: var(--texto); font-size: 0.97rem; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  .meta {
+    color: var(--texto-secundario);
+    font-size: 0.85rem;
+    text-align: center;
+    margin-top: 4px;
+  }
+  a { color: var(--primario); }
+  .volver {
+    display: inline-block;
+    margin-bottom: 20px;
+    color: var(--texto-secundario);
+    text-decoration: none;
+    font-size: 0.9rem;
+  }
+  .volver:hover { color: var(--primario); }
+  footer {
+    text-align: center;
+    color: var(--texto-secundario);
+    font-size: 0.85rem;
+    padding-bottom: 40px;
+  }
+</style>
+</head>
+<body>
+
+<div class="encabezado">
+  <h1>Política de Privacidad</h1>
+  <p>Corporación Ronceros — app de pedidos y gestión</p>
+</div>
+
+<main>
+  <a class="volver" href="/">&larr; Volver al inicio</a>
+  <p class="meta">Última actualización: agosto de 2026</p>
+
+  <h2>1. Responsable</h2>
+  <p>
+    Esta app es operada por <strong>Corporación Ronceros</strong> (RUC 10223034255), negocio familiar dedicado
+    a panadería, pastelería y venta de alimentos en Perú. Para cualquier consulta sobre esta política o tus
+    datos, puedes escribirnos a <a href="mailto:briamronceros@gmail.com">briamronceros@gmail.com</a>.
+  </p>
+
+  <h2>2. Qué datos recopilamos</h2>
+  <p>Según cómo uses la app (cliente o personal del negocio), podemos recopilar:</p>
+  <ul>
+    <li><strong>Datos de identificación:</strong> nombres, apellidos, DNI o RUC, teléfono, correo electrónico y dirección.</li>
+    <li><strong>Datos de cuenta:</strong> usuario y contraseña (guardada siempre cifrada, nunca en texto plano).</li>
+    <li><strong>Ubicación:</strong> con tu permiso, tu ubicación GPS para autocompletar tu dirección de entrega. No se usa para ningún otro fin ni se comparte con terceros de publicidad.</li>
+    <li><strong>Cámara/fotos:</strong> si eliges fotografiar un código QR de pago (Yape/Plin) en vez de subir una imagen ya guardada.</li>
+    <li><strong>Datos de pedidos y pagos:</strong> productos pedidos, montos, estado de pago y deudas asociadas a tu cuenta.</li>
+    <li><strong>Notificaciones push:</strong> un identificador técnico de tu dispositivo (token de Firebase) para poder avisarte sobre el estado de tus pedidos.</li>
+    <li><strong>Datos biométricos (huella/rostro):</strong> si activas el inicio de sesión biométrico, la verificación ocurre 100% en tu dispositivo — nunca enviamos tu huella o rostro a nuestros servidores.</li>
+    <li><strong>Registros técnicos:</strong> dirección IP y tipo de dispositivo/navegador, guardados en un registro de auditoría interno por seguridad (ej. detectar accesos indebidos).</li>
+  </ul>
+
+  <h2>3. Para qué usamos tus datos</h2>
+  <ul>
+    <li>Crear y gestionar tu cuenta, y verificar tu identidad al iniciar sesión.</li>
+    <li>Registrar, procesar y hacer seguimiento a tus pedidos y pagos.</li>
+    <li>Enviarte notificaciones relacionadas al estado de tus pedidos.</li>
+    <li>Verificar tu número de celular o correo mediante códigos de un solo uso, cuando corresponde.</li>
+    <li>Prevenir fraude y proteger la seguridad de tu cuenta y del negocio.</li>
+    <li>Cumplir obligaciones legales y tributarias del negocio.</li>
+  </ul>
+
+  <h2>4. Con quién compartimos datos</h2>
+  <p>No vendemos tus datos personales. Los compartimos únicamente con proveedores que nos ayudan a operar la app:</p>
+  <ul>
+    <li><strong>Firebase (Google):</strong> para el envío de notificaciones push.</li>
+    <li><strong>Google AdMob:</strong> muestra anuncios a cuentas de solo-cliente (no a personal del negocio). AdMob puede usar un identificador de publicidad de tu dispositivo para mostrar anuncios relevantes — puedes limitarlo desde los ajustes de privacidad de tu propio teléfono.</li>
+    <li><strong>apiperu.dev:</strong> para validar que un DNI o RUC ingresado corresponde a un documento real (registro/verificación de clientes y personal).</li>
+    <li><strong>Proveedores de hosting y correo</strong> (ej. servicios de correo SMTP) usados exclusivamente para operar la app, bajo confidencialidad.</li>
+  </ul>
+  <p>No compartimos tus datos con terceros para fines de marketing ajenos a esta app.</p>
+
+  <h2>5. Cómo protegemos tus datos</h2>
+  <ul>
+    <li>Las contraseñas se guardan cifradas (hash), nunca en texto plano.</li>
+    <li>Las conexiones entre la app y nuestros servidores usan cifrado (HTTPS/TLS).</li>
+    <li>Las sesiones usan tokens con vencimiento, renovados de forma segura.</li>
+    <li>El acceso a datos de otros usuarios está restringido según el rol de cada cuenta (cliente, trabajador, administrador).</li>
+  </ul>
+
+  <h2>6. Tus derechos</h2>
+  <p>
+    De acuerdo con la Ley N° 29733 (Ley de Protección de Datos Personales del Perú), puedes solicitar en
+    cualquier momento acceder a tus datos, corregirlos, o pedir su eliminación, escribiendo a
+    <a href="mailto:briamronceros@gmail.com">briamronceros@gmail.com</a>. Responderemos tu solicitud en un
+    plazo razonable.
+  </p>
+
+  <h2>7. Menores de edad</h2>
+  <p>
+    Esta app está dirigida a personas mayores de edad que puedan realizar compras o trabajar en el negocio.
+    No recopilamos intencionalmente datos de menores de edad sin el consentimiento de un padre o tutor.
+  </p>
+
+  <h2>8. Cambios a esta política</h2>
+  <p>
+    Podemos actualizar esta política ocasionalmente para reflejar cambios en la app o en la normativa
+    aplicable. La fecha de la última actualización siempre aparece al inicio de esta página.
+  </p>
+</main>
+
+<footer>
+  Corporación Ronceros — RUC 10223034255
+</footer>
+
+</body>
+</html>
