@@ -765,6 +765,38 @@ async function solicitarAutorizacion(req, res, next) {
 }
 
 /**
+ * Valida el código de autorización EN EL MOMENTO (sin gastarlo — ver
+ * `consumir: false` en `verificarCodigo`), para que el paso de "autoriza
+ * este cambio" en la app pueda mostrar el error ahí mismo si el código es
+ * incorrecto, en vez de dejarlo avanzar en silencio y recién fallar más
+ * adelante al intentar el cambio real (confuso: parece que un código
+ * cualquiera "funciona" cuando en realidad solo se pospuso el rechazo).
+ */
+async function validarAutorizacion(req, res, next) {
+  const { canal, codigo } = req.body;
+  const idPersona = req.usuario.idPersona;
+
+  try {
+    const cliente = await obtenerClientePropio(idPersona);
+    if (!cliente) return res.status(404).json({ mensaje: 'No tienes un perfil de cliente asociado a tu cuenta' });
+
+    if (canal === 'SMS' && !cliente.TelefonoVerificado) {
+      return res.status(400).json({ mensaje: 'Tu celular no está verificado.' });
+    }
+    if (canal === 'EMAIL' && !cliente.EmailVerificado) {
+      return res.status(400).json({ mensaje: 'Tu correo no está verificado.' });
+    }
+
+    const destino = canal === 'SMS' ? cliente.Telefono : cliente.Email;
+    await verificarCodigo({ idPersona, proposito: 'AUTORIZAR_CAMBIO', destino, codigo, consumir: false });
+
+    return res.status(200).json({ mensaje: 'Código válido' });
+  } catch (err) {
+    return manejarOtpError(err, res, next);
+  }
+}
+
+/**
  * Cambio de contraseña autoservicio (distinto del cambio obligatorio de
  * primer login en authController.cambiarPassword): no pide la contraseña
  * actual — la pide el propio código de autorización, que es lo que de
@@ -824,5 +856,6 @@ module.exports = {
   solicitarCodigoCorreo,
   confirmarCodigoCorreo,
   solicitarAutorizacion,
+  validarAutorizacion,
   cambiarPasswordSeguro,
 };

@@ -217,6 +217,22 @@ class ClientesService {
     }, token: token);
   }
 
+  /// Valida el código de autorización EN EL MOMENTO, sin gastarlo (el
+  /// backend lo vuelve a validar y ahí sí lo consume cuando se usa para el
+  /// cambio real). Así el paso de "autoriza este cambio" puede mostrar el
+  /// error de inmediato si el código es incorrecto, en vez de dejar avanzar
+  /// cualquier código y recién fallar en el paso siguiente.
+  Future<void> validarAutorizacion({
+    required String canal,
+    required String codigo,
+  }) async {
+    final token = await _storage.obtenerAccessToken();
+    await _api.post('/clientes/mi-perfil/autorizacion/validar', {
+      'canal': canal,
+      'codigo': codigo,
+    }, token: token);
+  }
+
   /// Cambio de contraseña autoservicio: no pide la contraseña actual, la
   /// protege el código de autorización — así, aunque alguien más use la
   /// sesión ya iniciada del dueño, no puede cambiarla sin acceso real a su

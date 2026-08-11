@@ -13,6 +13,7 @@ const {
   solicitarCodigoCorreo,
   confirmarCodigoCorreo,
   solicitarAutorizacion,
+  validarAutorizacion,
   cambiarPasswordSeguro,
 } = require('../controllers/clientesController');
 const {
@@ -23,6 +24,7 @@ const {
   validateSolicitarCodigoCorreo,
   validateConfirmarCodigoCorreo,
   validateSolicitarAutorizacion,
+  validateValidarAutorizacion,
   validateCambiarPasswordSeguro,
 } = require('../middlewares/validators');
 const { verificarToken, autorizarRoles } = require('../middlewares/authMiddleware');
@@ -46,6 +48,7 @@ router.post('/mi-perfil/celular/confirmar-codigo', validateConfirmarCodigoCelula
 router.post('/mi-perfil/correo/solicitar-codigo', validateSolicitarCodigoCorreo, solicitarCodigoCorreo);
 router.post('/mi-perfil/correo/confirmar-codigo', validateConfirmarCodigoCorreo, confirmarCodigoCorreo);
 router.post('/mi-perfil/autorizacion/solicitar', validateSolicitarAutorizacion, solicitarAutorizacion);
+router.post('/mi-perfil/autorizacion/validar', validateValidarAutorizacion, validarAutorizacion);
 router.post('/mi-perfil/password/cambiar-seguro', validateCambiarPasswordSeguro, cambiarPasswordSeguro);
 
 // El resto del CRUD de Clientes (listar/crear/editar cualquier cliente,

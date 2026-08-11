@@ -26,25 +26,107 @@ function mensajeSms(codigo) {
   return `Corporación Ronceros: tu código de verificación es ${codigo}. Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie.`;
 }
 
+/**
+ * Tablas en vez de divs/flex: es la única forma de que el layout no se
+ * rompa en Outlook de escritorio (renderiza el HTML con el motor de Word,
+ * que ignora la mayoría de CSS moderno) — regla básica de email marketing.
+ * Todo el estilo va inline porque muchos clientes (Gmail incluido) recortan
+ * o ignoran <style> en el <head>.
+ */
 function mensajeEmailHtml(codigo) {
-  // El bloque del código es texto plano seleccionable (no imagen): en Gmail
-  // y la mayoría de clientes basta con mantener presionado para copiarlo,
-  // que es el gesto que complementa al botón "Pegar" dentro de la app.
+  const previsualizacionOculta = `Tu código de verificación es ${codigo}. Vence en ${MINUTOS_EXPIRACION} minutos.`;
+
   return `
-    <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:420px;margin:0 auto;background:#fff8f3;border-radius:20px;overflow:hidden;border:1px solid #f0ded0;">
-      <div style="background:#7a2e1a;padding:20px 24px;">
-        <span style="color:#fff;font-size:15px;font-weight:700;letter-spacing:0.3px;">Corporación Ronceros</span>
-      </div>
-      <div style="padding:28px 24px;">
-        <p style="margin:0 0 18px;color:#2a1c14;font-size:15px;line-height:1.5;">Tu código de verificación es:</p>
-        <div style="background:#ffffff;border:1.5px solid #e8c9b4;border-radius:14px;padding:18px 12px;text-align:center;margin-bottom:18px;">
-          <span style="font-family:'Courier New',monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#7a2e1a;">${codigo}</span>
-        </div>
-        <p style="margin:0 0 6px;color:#6b5849;font-size:13px;line-height:1.5;">Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie, ni siquiera con alguien que diga ser de Corporación Ronceros.</p>
-        <p style="margin:16px 0 0;color:#9c8b7c;font-size:12px;">Si no solicitaste este código, ignora este correo.</p>
-      </div>
-    </div>
-  `;
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="supported-color-schemes" content="light" />
+    <title>Código de verificación</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f3ece1;" bgcolor="#f3ece1">
+    <!-- Texto de previsualización: visible en la lista de la bandeja de entrada, oculto al abrir el correo. -->
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${previsualizacionOculta}</div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3ece1;" bgcolor="#f3ece1">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="440" cellpadding="0" cellspacing="0" style="max-width:440px;width:100%;background:#fff8f3;border-radius:20px;overflow:hidden;border:1px solid #f0ded0;" bgcolor="#fff8f3">
+            <tr>
+              <td style="background:#7a2e1a;padding:20px 28px;" bgcolor="#7a2e1a">
+                <span style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#ffffff;font-size:15px;font-weight:700;letter-spacing:0.3px;">Corporación Ronceros</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 28px 8px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+                <p style="margin:0 0 20px;color:#2a1c14;font-size:15px;line-height:1.5;">Tu código de verificación es:</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 28px;">
+                <!-- Un solo bloque con letter-spacing, no celdas por dígito:
+                probado en Gmail Android con modo oscuro, una tabla de 6
+                <td> se colapsaba a un solo cuadro visible (bug real de
+                renderizado). Esto sí se ve igual en todos los clientes.
+                bgcolor (además del style) porque el modo oscuro de Gmail no
+                siempre respeta bien el color-scheme/CSS inline por sí solo. -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td align="center" style="background:#ffffff;border:1.5px solid #e8c9b4;border-radius:14px;padding:18px 12px;" bgcolor="#ffffff">
+                      <span style="font-family:'Courier New',Courier,monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#7a2e1a;">${codigo}</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:14px 28px 4px;">
+                <!-- No es un botón (un email no puede ejecutar JS para copiar
+                al portapapeles) — es un aviso destacado del gesto real que
+                sí funciona: mantener presionado. Que se vea distinto a un
+                botón evita la falsa expectativa de que "hace algo" al tocarlo. -->
+                <table role="presentation" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="background:#f6e9dc;border-radius:100px;padding:9px 18px;" bgcolor="#f6e9dc">
+                      <span style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#7a2e1a;font-size:13px;font-weight:700;">📋&nbsp; Mantén presionado el código para copiarlo</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:14px 28px 4px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+                <p style="margin:0;color:#6b5849;font-size:13px;line-height:1.5;">Luego vuelve a la app y pégalo con el botón "Pegar" del campo de verificación.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:14px 28px 28px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+                <p style="margin:0 0 10px;color:#6b5849;font-size:13px;line-height:1.5;">Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie, ni siquiera con alguien que diga ser de Corporación Ronceros.</p>
+                <p style="margin:0;color:#9c8b7c;font-size:12px;line-height:1.5;">Si no solicitaste este código, ignora este correo — tu cuenta sigue segura.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+  `.trim();
+}
+
+/** Alternativa en texto plano — la exige la especificación MIME (multipart/alternative) y mejora la entregabilidad; también es lo único que ven algunos lectores de pantalla y clientes de correo minimalistas. */
+function mensajeEmailTexto(codigo) {
+  return [
+    'Corporación Ronceros',
+    '',
+    `Tu código de verificación es: ${codigo}`,
+    '',
+    `Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie, ni siquiera con alguien que diga ser de Corporación Ronceros.`,
+    '',
+    'Si no solicitaste este código, ignora este correo — tu cuenta sigue segura.',
+  ].join('\n');
 }
 
 /**
@@ -107,7 +189,7 @@ async function solicitarCodigo({ idPersona, canal, proposito, destino }) {
   if (canal === 'SMS') {
     await enviarSms(destino, mensajeSms(codigo));
   } else {
-    await enviarEmail(destino, 'Tu código de verificación', mensajeEmailHtml(codigo));
+    await enviarEmail(destino, 'Tu código de verificación', mensajeEmailHtml(codigo), mensajeEmailTexto(codigo));
   }
 }
 
@@ -115,8 +197,16 @@ async function solicitarCodigo({ idPersona, canal, proposito, destino }) {
  * Verifica un código contra el más reciente sin usar para
  * (idPersona, proposito, destino). Nunca revela si el código "no existe"
  * vs "no coincide" — mismo mensaje genérico, para no filtrar información.
+ *
+ * `consumir: false` valida (y sigue contando intentos fallidos) SIN marcar
+ * el código como usado — para poder confirmarlo de inmediato en la UI (ej.
+ * el paso de autorización) sin gastarlo todavía, ya que ese mismo código se
+ * vuelve a validar (y ahí sí se consume) más adelante en el flujo real
+ * (ej. `exigirAutorizacionSiCorresponde`). Sin esto, validarlo dos veces
+ * marcaría "usado" en la primera y la segunda (la que de verdad importa)
+ * fallaría siempre.
  */
-async function verificarCodigo({ idPersona, proposito, destino, codigo }) {
+async function verificarCodigo({ idPersona, proposito, destino, codigo, consumir = true }) {
   const pool = await getPool();
 
   const resultado = await pool
@@ -152,7 +242,9 @@ async function verificarCodigo({ idPersona, proposito, destino, codigo }) {
     throw new OtpError('INVALIDO', 'Código inválido o ya expirado. Solicita uno nuevo.');
   }
 
-  await pool.request().input('IdCodigo', sql.Int, idCodigo).query('UPDATE CodigosVerificacion SET Usado = 1 WHERE IdCodigo = @IdCodigo');
+  if (consumir) {
+    await pool.request().input('IdCodigo', sql.Int, idCodigo).query('UPDATE CodigosVerificacion SET Usado = 1 WHERE IdCodigo = @IdCodigo');
+  }
 }
 
 module.exports = { solicitarCodigo, verificarCodigo, OtpError };

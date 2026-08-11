@@ -276,6 +276,19 @@ function validateSolicitarAutorizacion(req, res, next) {
   next();
 }
 
+function validateValidarAutorizacion(req, res, next) {
+  const { canal, codigo } = req.body;
+  const errores = [];
+  if (canal !== 'SMS' && canal !== 'EMAIL') {
+    errores.push('Canal inválido: debe ser SMS o EMAIL.');
+  }
+  if (!isNonEmptyString(codigo) || !CODIGO_OTP_REGEX.test(codigo.trim())) {
+    errores.push('El código debe tener 6 dígitos.');
+  }
+  if (errores.length > 0) return res.status(400).json({ mensaje: 'Datos inválidos', errores });
+  next();
+}
+
 function validateCambiarPasswordSeguro(req, res, next) {
   const { passwordNueva } = req.body;
   const errores = [];
@@ -479,6 +492,7 @@ module.exports = {
   validateSolicitarCodigoCorreo,
   validateConfirmarCodigoCorreo,
   validateSolicitarAutorizacion,
+  validateValidarAutorizacion,
   validateCambiarPasswordSeguro,
   DNI_PERU_REGEX,
   RUC_PERU_REGEX,

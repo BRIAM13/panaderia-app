@@ -32,19 +32,38 @@ function codificarEncabezado(texto) {
   return `=?UTF-8?B?${Buffer.from(texto, 'utf-8').toString('base64')}?=`;
 }
 
-function construirMensajeMime(destinatario, asunto, cuerpoHtml) {
+/**
+ * multipart/alternative con una parte de texto plano y una de HTML: el
+ * cliente de correo elige la mejor que sepa mostrar (los lectores de
+ * pantalla y clientes minimalistas usan la de texto). Sin la parte de
+ * texto, algunos filtros antispam penalizan la entregabilidad por
+ * considerarlo "solo HTML" — señal típica de correo masivo/spam.
+ */
+function construirMensajeMime(destinatario, asunto, cuerpoTexto, cuerpoHtml) {
+  const limite = `limite_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const mensaje = [
     `From: ${codificarEncabezado('Corporación Ronceros')} <${process.env.GOOGLE_SENDER_EMAIL}>`,
     `To: ${destinatario}`,
     `Subject: ${codificarEncabezado(asunto)}`,
     'MIME-Version: 1.0',
-    'Content-Type: text/html; charset=UTF-8',
+    `Content-Type: multipart/alternative; boundary="${limite}"`,
+    '',
+    `--${limite}`,
+    'Content-Type: text/plain; charset=UTF-8',
     // Sin esto, el cuerpo se asume ASCII de 7 bits y las tildes/ñ (bytes
     // UTF-8 de 2+) llegan corruptas — la codificación base64 del mensaje
     // completo para la Gmail API es un transporte aparte, no alcanza.
     'Content-Transfer-Encoding: 8bit',
     '',
+    cuerpoTexto,
+    '',
+    `--${limite}`,
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: 8bit',
+    '',
     cuerpoHtml,
+    '',
+    `--${limite}--`,
   ].join('\r\n');
   return codificarBase64Url(mensaje);
 }
@@ -57,15 +76,15 @@ function construirMensajeMime(destinatario, asunto, cuerpoHtml) {
  * imprime el mensaje en la consola del servidor (modo desarrollo), misma
  * idea que smsService.js.
  */
-async function enviarEmail(destinatario, asunto, cuerpoHtml) {
+async function enviarEmail(destinatario, asunto, cuerpoHtml, cuerpoTexto) {
   if (!credencialesConfiguradas) {
-    console.log(`[EMAIL - MODO DESARROLLO] Para ${destinatario} | Asunto: ${asunto}\n${cuerpoHtml}`);
+    console.log(`[EMAIL - MODO DESARROLLO] Para ${destinatario} | Asunto: ${asunto}\n${cuerpoTexto || cuerpoHtml}`);
     return { enviado: true, modo: 'DESARROLLO' };
   }
 
   const cliente = obtenerClienteOAuth();
   const { token } = await cliente.getAccessToken();
-  const raw = construirMensajeMime(destinatario, asunto, cuerpoHtml);
+  const raw = construirMensajeMime(destinatario, asunto, cuerpoTexto || asunto, cuerpoHtml);
 
   const respuesta = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
