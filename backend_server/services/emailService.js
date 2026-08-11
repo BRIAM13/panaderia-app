@@ -12,6 +12,10 @@ function obtenerTransportador() {
       port: Number(process.env.SMTP_PORT) || 587,
       secure: Number(process.env.SMTP_PORT) === 465,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
+      // Render (y otros hostings gratuitos) no tienen salida IPv6: sin esto,
+      // Node resuelve smtp.gmail.com a su AAAA y el connect() se cuelga ~2min
+      // con ENETUNREACH antes de fallar. Forzar IPv4 evita ese intento.
+      family: 4,
     });
   }
   return transportador;
