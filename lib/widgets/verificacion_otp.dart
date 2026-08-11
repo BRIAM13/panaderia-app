@@ -78,12 +78,29 @@ class AutorizacionResultado {
 }
 
 /// Campo de 6 dígitos con espaciado grande, reutilizado por ambos flujos de
-/// código (verificar canal / autorizar cambio).
+/// código (verificar canal / autorizar cambio). Incluye un botón de pegar
+/// explícito además del menú nativo (mantener presionado) — el correo con
+/// el código lo muestra en un bloque pensado para copiarse de un toque.
 class _CampoCodigoOtp extends StatelessWidget {
   const _CampoCodigoOtp({required this.controller, this.autofocus = false});
 
   final TextEditingController controller;
   final bool autofocus;
+
+  Future<void> _pegarDesdePortapapeles() async {
+    final datos = await Clipboard.getData(Clipboard.kTextPlain);
+    final texto = datos?.text;
+    if (texto == null) return;
+    final soloDigitos = texto.replaceAll(RegExp(r'[^0-9]'), '');
+    if (soloDigitos.isEmpty) return;
+    final codigo = soloDigitos.length > 6
+        ? soloDigitos.substring(0, 6)
+        : soloDigitos;
+    controller.value = TextEditingValue(
+      text: codigo,
+      selection: TextSelection.collapsed(offset: codigo.length),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,11 +118,16 @@ class _CampoCodigoOtp extends StatelessWidget {
         letterSpacing: 12,
         fontWeight: FontWeight.w700,
       ),
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         counterText: '',
         hintText: '000000',
-        border: OutlineInputBorder(
+        border: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
+        suffixIcon: IconButton(
+          icon: const Icon(Icons.content_paste_rounded),
+          tooltip: 'Pegar código',
+          onPressed: _pegarDesdePortapapeles,
         ),
       ),
       maxLength: 6,

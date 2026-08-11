@@ -27,10 +27,23 @@ function mensajeSms(codigo) {
 }
 
 function mensajeEmailHtml(codigo) {
+  // El bloque del código es texto plano seleccionable (no imagen): en Gmail
+  // y la mayoría de clientes basta con mantener presionado para copiarlo,
+  // que es el gesto que complementa al botón "Pegar" dentro de la app.
   return `
-    <p>Tu código de verificación de Corporación Ronceros es:</p>
-    <p style="font-size:28px;font-weight:700;letter-spacing:4px;">${codigo}</p>
-    <p>Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie.</p>
+    <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:420px;margin:0 auto;background:#fff8f3;border-radius:20px;overflow:hidden;border:1px solid #f0ded0;">
+      <div style="background:#7a2e1a;padding:20px 24px;">
+        <span style="color:#fff;font-size:15px;font-weight:700;letter-spacing:0.3px;">Corporación Ronceros</span>
+      </div>
+      <div style="padding:28px 24px;">
+        <p style="margin:0 0 18px;color:#2a1c14;font-size:15px;line-height:1.5;">Tu código de verificación es:</p>
+        <div style="background:#ffffff;border:1.5px solid #e8c9b4;border-radius:14px;padding:18px 12px;text-align:center;margin-bottom:18px;">
+          <span style="font-family:'Courier New',monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#7a2e1a;">${codigo}</span>
+        </div>
+        <p style="margin:0 0 6px;color:#6b5849;font-size:13px;line-height:1.5;">Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie, ni siquiera con alguien que diga ser de Corporación Ronceros.</p>
+        <p style="margin:16px 0 0;color:#9c8b7c;font-size:12px;">Si no solicitaste este código, ignora este correo.</p>
+      </div>
+    </div>
   `;
 }
 
