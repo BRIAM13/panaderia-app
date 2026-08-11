@@ -23,14 +23,26 @@ function codificarBase64Url(texto) {
     .replace(/=+$/, '');
 }
 
+/**
+ * Los encabezados (From, Subject) van en ASCII salvo que se codifiquen
+ * como "encoded-word" (RFC 2047) — sin esto, tildes/ñ en esos campos
+ * llegan como símbolos rotos aunque el cuerpo HTML sí las muestre bien.
+ */
+function codificarEncabezado(texto) {
+  return `=?UTF-8?B?${Buffer.from(texto, 'utf-8').toString('base64')}?=`;
+}
+
 function construirMensajeMime(destinatario, asunto, cuerpoHtml) {
-  const asuntoCodificado = `=?UTF-8?B?${Buffer.from(asunto, 'utf-8').toString('base64')}?=`;
   const mensaje = [
-    `From: Corporación Ronceros <${process.env.GOOGLE_SENDER_EMAIL}>`,
+    `From: ${codificarEncabezado('Corporación Ronceros')} <${process.env.GOOGLE_SENDER_EMAIL}>`,
     `To: ${destinatario}`,
-    `Subject: ${asuntoCodificado}`,
+    `Subject: ${codificarEncabezado(asunto)}`,
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8',
+    // Sin esto, el cuerpo se asume ASCII de 7 bits y las tildes/ñ (bytes
+    // UTF-8 de 2+) llegan corruptas — la codificación base64 del mensaje
+    // completo para la Gmail API es un transporte aparte, no alcanza.
+    'Content-Transfer-Encoding: 8bit',
     '',
     cuerpoHtml,
   ].join('\r\n');
