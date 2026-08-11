@@ -1,30 +1,11 @@
-const credencialesConfiguradas =
-  Boolean(process.env.SMTP_HOST) &&
-  Boolean(process.env.SMTP_USER) &&
-  Boolean(process.env.SMTP_PASSWORD);
-
-let transportador = null;
-function obtenerTransportador() {
-  if (!transportador) {
-    const nodemailer = require('nodemailer');
-    transportador = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
-      // Render (y otros hostings gratuitos) no tienen salida IPv6: sin esto,
-      // Node resuelve smtp.gmail.com a su AAAA y el connect() se cuelga ~2min
-      // con ENETUNREACH antes de fallar. Forzar IPv4 evita ese intento.
-      family: 4,
-    });
-  }
-  return transportador;
-}
+const credencialesConfiguradas = Boolean(process.env.RESEND_API_KEY);
 
 /**
- * Envía un correo. Sin credenciales SMTP en el .env, no falla ni bloquea el
- * flujo — imprime el mensaje en la consola del servidor (modo desarrollo),
- * misma idea que smsService.js.
+ * Envía un correo vía la API HTTP de Resend (no SMTP: Render no permite
+ * conexiones salientes por el puerto 587/465, se cuelga ~2min y termina en
+ * ETIMEDOUT — probado en producción). Sin RESEND_API_KEY en el .env, no
+ * falla ni bloquea el flujo — imprime el mensaje en la consola del servidor
+ * (modo desarrollo), misma idea que smsService.js.
  */
 async function enviarEmail(destinatario, asunto, cuerpoHtml) {
   if (!credencialesConfiguradas) {
@@ -32,13 +13,25 @@ async function enviarEmail(destinatario, asunto, cuerpoHtml) {
     return { enviado: true, modo: 'DESARROLLO' };
   }
 
-  const transporte = obtenerTransportador();
-  await transporte.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-    to: destinatario,
-    subject: asunto,
-    html: cuerpoHtml,
+  const respuesta = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: process.env.RESEND_FROM || 'Corporación Ronceros <onboarding@resend.dev>',
+      to: [destinatario],
+      subject: asunto,
+      html: cuerpoHtml,
+    }),
   });
+
+  if (!respuesta.ok) {
+    const cuerpoError = await respuesta.text().catch(() => '');
+    throw new Error(`Resend respondió ${respuesta.status}: ${cuerpoError}`);
+  }
+
   return { enviado: true, modo: 'REAL' };
 }
 
