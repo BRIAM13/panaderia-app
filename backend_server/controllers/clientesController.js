@@ -242,12 +242,18 @@ async function crearCliente(req, res, next) {
     const rolResult = await new sql.Request(transaction).query("SELECT IdRol FROM Roles WHERE NombreRol = 'CLIENTE'");
     const idRolCliente = rolResult.recordset[0].IdRol;
 
+    // "IF NOT EXISTS (...) INSERT ..." era T-SQL puro (control de flujo fuera
+    // de un procedimiento almacenado) — MariaDB no lo soporta y tira error de
+    // sintaxis. INSERT...SELECT...WHERE NOT EXISTS es el equivalente
+    // portable (no depende de que exista una constraint UNIQUE, a diferencia
+    // de INSERT IGNORE).
     await new sql.Request(transaction)
       .input('IdPersona', sql.Int, idPersona)
       .input('IdRol', sql.Int, idRolCliente)
       .query(`
-        IF NOT EXISTS (SELECT 1 FROM PersonaRoles WHERE IdPersona = @IdPersona AND IdRol = @IdRol)
-        INSERT INTO PersonaRoles (IdPersona, IdRol) VALUES (@IdPersona, @IdRol)
+        INSERT INTO PersonaRoles (IdPersona, IdRol)
+        SELECT @IdPersona, @IdRol
+        WHERE NOT EXISTS (SELECT 1 FROM PersonaRoles WHERE IdPersona = @IdPersona AND IdRol = @IdRol)
       `);
 
     let clonacion = { creado: false, motivo: 'No verificado con datos reales de la API' };
