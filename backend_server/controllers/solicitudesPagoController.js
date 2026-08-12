@@ -45,13 +45,19 @@ async function misDeudas(req, res, next) {
                sp.IdSolicitudPago, sp.CodigoReferencia, sp.Estado AS EstadoSolicitud, sp.FechaExpiracion
         FROM Pedidos pd
         LEFT JOIN Tiendas t ON t.IdTienda = pd.IdTienda
-        OUTER APPLY (
-          SELECT TOP 1 s.IdSolicitudPago, s.CodigoReferencia, s.Estado, s.FechaExpiracion
+        -- "OUTER APPLY" era T-SQL puro (MariaDB no lo soporta) — el
+        -- equivalente portable es un LEFT JOIN contra una subconsulta
+        -- correlacionada que resuelve la solicitud activa más reciente por
+        -- pedido con LIMIT 1 (no TOP: así no choca con el regex del shim de
+        -- compatibilidad, que solo traduce TOP en el SELECT más externo).
+        LEFT JOIN SolicitudesPago sp ON sp.IdSolicitudPago = (
+          SELECT s.IdSolicitudPago
           FROM SolicitudPagoPedidos spp
           INNER JOIN SolicitudesPago s ON s.IdSolicitudPago = spp.IdSolicitudPago
           WHERE spp.IdPedido = pd.IdPedido AND s.Estado IN ('GENERADO', 'REPORTADO')
           ORDER BY s.IdSolicitudPago DESC
-        ) sp
+          LIMIT 1
+        )
         WHERE pd.IdCliente = @IdCliente AND pd.Estado = 'ENTREGADO' AND pd.EstadoPago = 'DEUDA'
         ORDER BY pd.FechaEntregaReal ASC
       `);
@@ -333,11 +339,12 @@ async function confirmar(req, res, next) {
     await pool
       .request()
       .input('Id', sql.Int, solicitud.IdSolicitudPago)
+      // "UPDATE <alias> SET ... FROM <tabla> JOIN ..." es sintaxis de T-SQL
+      // — MariaDB exige el JOIN pegado directo al UPDATE, sin FROM aparte.
       .query(`
-        UPDATE pd
-        SET pd.EstadoPago = 'PAGADO', pd.FechaPagoDeuda = SYSUTCDATETIME()
-        FROM Pedidos pd
+        UPDATE Pedidos pd
         INNER JOIN SolicitudPagoPedidos spp ON spp.IdPedido = pd.IdPedido
+        SET pd.EstadoPago = 'PAGADO', pd.FechaPagoDeuda = SYSUTCDATETIME()
         WHERE spp.IdSolicitudPago = @Id
       `);
 

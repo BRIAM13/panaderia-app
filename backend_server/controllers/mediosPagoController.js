@@ -87,7 +87,9 @@ async function crear(req, res, next) {
       .input('ImagenQrBase64', sql.NVarChar(sql.MAX), imagenQrBase64 || null)
       .query(`
         INSERT INTO MediosPagoTienda (IdTienda, Tipo, Titular, NumeroDestino, CCI, NombreBanco, Notas, ImagenQrBase64)
-        OUTPUT INSERTED.*
+        OUTPUT INSERTED.IdMedioPago, INSERTED.IdTienda, INSERTED.Tipo, INSERTED.Titular,
+          INSERTED.NumeroDestino, INSERTED.CCI, INSERTED.NombreBanco, INSERTED.Notas,
+          INSERTED.ImagenQrBase64, INSERTED.Estado
         VALUES (@IdTienda, @Tipo, @Titular, @NumeroDestino, @CCI, @NombreBanco, @Notas, @ImagenQrBase64)
       `);
 
@@ -127,7 +129,11 @@ async function actualizar(req, res, next) {
       return res.status(403).json({ mensaje: 'No tienes acceso a esta tienda' });
     }
 
-    const result = await pool
+    // "OUTPUT INSERTED.*" solo tiene sentido en un INSERT — en un UPDATE
+    // MariaDB lo rechaza (y aunque no lo rechazara, el shim de compatibilidad
+    // solo sabe resolver OUTPUT contra el INSERT más reciente, no un UPDATE).
+    // Se actualiza y se hace un SELECT aparte para devolver la fila.
+    await pool
       .request()
       .input('Id', sql.Int, id)
       .input('Titular', sql.NVarChar(150), titular.trim().toUpperCase())
@@ -140,9 +146,13 @@ async function actualizar(req, res, next) {
         UPDATE MediosPagoTienda
         SET Titular = @Titular, NumeroDestino = @NumeroDestino, CCI = @CCI, NombreBanco = @NombreBanco,
             Notas = @Notas, ImagenQrBase64 = @ImagenQrBase64, FechaActualizacion = SYSUTCDATETIME()
-        OUTPUT INSERTED.*
         WHERE IdMedioPago = @Id
       `);
+
+    const result = await pool
+      .request()
+      .input('Id', sql.Int, id)
+      .query('SELECT * FROM MediosPagoTienda WHERE IdMedioPago = @Id');
 
     await registrarAuditoria({
       idUsuario: req.usuario.idUsuario,
