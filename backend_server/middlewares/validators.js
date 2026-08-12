@@ -342,6 +342,60 @@ function validatePedido(req, res, next) {
   next();
 }
 
+function validateCrearPedidoHorneado(req, res, next) {
+  const {
+    idCliente,
+    carne,
+    presentacion,
+    cantidad,
+    aplicaAderezo,
+    tipoAderezo,
+    precioHorneado,
+    precioAderezo,
+    fechaEntrega,
+  } = req.body;
+  const errores = [];
+
+  if (!Number.isInteger(idCliente) || idCliente <= 0) {
+    errores.push('Debe seleccionar un cliente válido.');
+  }
+  if (!isNonEmptyString(carne)) {
+    errores.push('Indica el tipo de carne.');
+  }
+  if (!isNonEmptyString(presentacion)) {
+    errores.push('Indica la presentación.');
+  }
+  if (!Number.isInteger(cantidad) || cantidad <= 0) {
+    errores.push('La cantidad debe ser un número entero mayor a 0.');
+  }
+  if (typeof precioHorneado !== 'number' || !Number.isFinite(precioHorneado) || precioHorneado <= 0) {
+    errores.push('El precio del horneado debe ser un número mayor a 0.');
+  }
+  if (aplicaAderezo === true) {
+    if (tipoAderezo !== 'CRIOLLO' && tipoAderezo !== 'ORIENTAL') {
+      errores.push('Elige el tipo de aderezo (criollo u oriental).');
+    }
+    if (typeof precioAderezo !== 'number' || !Number.isFinite(precioAderezo) || precioAderezo <= 0) {
+      errores.push('El precio del aderezo debe ser un número mayor a 0.');
+    }
+  } else if (aplicaAderezo !== false) {
+    errores.push('Indica si aplica aderezo.');
+  }
+  if (fechaEntrega !== undefined && fechaEntrega !== null && fechaEntrega !== '') {
+    if (Number.isNaN(Date.parse(fechaEntrega))) {
+      errores.push('La fecha y hora de entrega no es válida.');
+    } else if (fechaEntregaEsAnteriorAHoy(fechaEntrega)) {
+      errores.push('La fecha de entrega no puede ser anterior a hoy.');
+    }
+  }
+
+  if (errores.length > 0) {
+    return res.status(400).json({ mensaje: 'Datos de pedido inválidos', errores });
+  }
+
+  next();
+}
+
 /**
  * Autoservicio (rol CLIENTE): a diferencia de validatePedido, aquí no hay
  * `idCliente` (siempre es el del propio JWT) ni `precioUnitario` (siempre
@@ -483,6 +537,7 @@ module.exports = {
   validateMiPerfil,
   validatePedido,
   validateMiPedido,
+  validateCrearPedidoHorneado,
   validateConfiguracion,
   validateMedioPago,
   validateActualizarMedioPago,

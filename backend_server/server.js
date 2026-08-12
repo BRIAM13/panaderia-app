@@ -17,6 +17,7 @@ const trabajadoresRoutes = require('./routes/trabajadoresRoutes');
 const mediosPagoRoutes = require('./routes/mediosPagoRoutes');
 const solicitudesPagoRoutes = require('./routes/solicitudesPagoRoutes');
 const rolesRoutes = require('./routes/rolesRoutes');
+const horneadosRoutes = require('./routes/horneadosRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 
 const app = express();
@@ -91,6 +92,7 @@ app.use('/api/trabajadores', trabajadoresRoutes);
 app.use('/api/medios-pago', mediosPagoRoutes);
 app.use('/api/solicitudes-pago', solicitudesPagoRoutes);
 app.use('/api/roles', rolesRoutes);
+app.use('/api/horneados', horneadosRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
