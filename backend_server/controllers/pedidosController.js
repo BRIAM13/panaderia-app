@@ -330,6 +330,26 @@ async function crearMiPedido(req, res, next) {
   }
 }
 
+/**
+ * Este controller entero es exclusivo de Hamburguesas (ver `crearPedido`,
+ * que ya resuelve su IdTienda igual). Ahora que `Pedidos` también recibe
+ * filas de Horneados (mismo tabla, otro rubro — ver horneadosController.js),
+ * listarPedidos/listarDeudas necesitan este mismo candado explícito: sin
+ * él, un pedido de Horneados se colaba en la vista de Hamburguesas para
+ * cualquier SUPERADMIN (que antes veía "todas las tiendas" sin problema,
+ * porque Hamburguesas era la única con pedidos reales).
+ */
+async function obtenerIdTiendaHamburguesas(pool) {
+  const resultado = await pool.request().query(`
+    SELECT TOP 1 c.IdTienda
+    FROM Productos p
+    INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
+    WHERE c.Nombre = 'Pan de Hamburguesa' AND p.Estado = 1
+    ORDER BY p.IdProducto
+  `);
+  return resultado.recordset[0]?.IdTienda ?? null;
+}
+
 const SELECT_PEDIDOS_BASE = `
   SELECT pd.IdPedido, pd.IdCliente, pd.IdTienda, pd.TipoPedido, pd.Cantidad, pd.PrecioUnitario, pd.Total, pd.FechaEntrega,
          pd.Estado, pd.EstadoPago, pd.FechaEntregaReal, pd.Notas, pd.FechaCreacion,
@@ -409,9 +429,10 @@ function mapearFilaPedido(fila, incluirAuditoria = false) {
 }
 
 /**
- * SUPERADMIN ve todos los pedidos de todas las tiendas. TRABAJADOR/ADMIN
- * solo ven pedidos de las tiendas donde tienen acceso vigente — mismo
- * candado que ya aplica para gestionar trabajadores/notificaciones.
+ * Endpoint exclusivo de Hamburguesas (ver nota en [obtenerIdTiendaHamburguesas]):
+ * SUPERADMIN ve todos los pedidos DE HAMBURGUESAS. TRABAJADOR/ADMIN los ven
+ * solo si tienen acceso vigente a esa tienda — mismo candado que ya aplica
+ * para gestionar trabajadores/notificaciones.
  */
 async function listarPedidos(req, res, next) {
   try {
@@ -422,20 +443,29 @@ async function listarPedidos(req, res, next) {
     const incluirAuditoria = ['ADMIN', 'SUPERADMIN'].includes(req.usuario.rol);
     const mapear = (fila) => mapearFilaPedido(fila, incluirAuditoria);
 
+    const idTiendaHamburguesas = await obtenerIdTiendaHamburguesas(pool);
+    if (!idTiendaHamburguesas) {
+      return res.status(200).json({ pedidos: [] });
+    }
+
     if (req.usuario.rol === 'SUPERADMIN') {
-      const result = await pool.request().query(`${SELECT_PEDIDOS_BASE} ORDER BY pd.FechaCreacion DESC`);
+      const result = await pool
+        .request()
+        .input('IdTienda', sql.Int, idTiendaHamburguesas)
+        .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdTienda = @IdTienda ORDER BY pd.FechaCreacion DESC`);
       return res.status(200).json({ pedidos: result.recordset.map(mapear) });
     }
 
     const idTrabajador = await obtenerIdTrabajador(req.usuario.idPersona);
     const idsTiendas = idTrabajador ? await obtenerTiendasAsignadas(idTrabajador) : [];
-    if (idsTiendas.length === 0) {
+    if (!idsTiendas.includes(idTiendaHamburguesas)) {
       return res.status(200).json({ pedidos: [] });
     }
 
     const result = await pool
       .request()
-      .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdTienda IN (${idsTiendas.join(',')}) ORDER BY pd.FechaCreacion DESC`);
+      .input('IdTienda', sql.Int, idTiendaHamburguesas)
+      .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdTienda = @IdTienda ORDER BY pd.FechaCreacion DESC`);
     return res.status(200).json({ pedidos: result.recordset.map(mapear) });
   } catch (err) {
     return next(err);
@@ -721,11 +751,12 @@ async function rechazarPedido(req, res, next) {
 }
 
 /**
- * Deudas pendientes (Estado=ENTREGADO, EstadoPago=DEUDA), con el mismo
- * candado de tienda que listarPedidos — SUPERADMIN ve todas, el resto solo
- * las de sus tiendas asignadas. El pago real por distintos medios queda
- * para más adelante; por ahora el personal solo puede marcarla saldada a
- * mano (ej. el cliente pagó en efectivo/Yape y se confirma manualmente).
+ * Deudas pendientes (Estado=ENTREGADO, EstadoPago=DEUDA) DE HAMBURGUESAS,
+ * con el mismo candado de tienda que listarPedidos — SUPERADMIN las ve
+ * todas, el resto solo si tiene acceso vigente a esa tienda. El pago real
+ * por distintos medios queda para más adelante; por ahora el personal solo
+ * puede marcarla saldada a mano (ej. el cliente pagó en efectivo/Yape y se
+ * confirma manualmente).
  */
 async function listarDeudas(req, res, next) {
   try {
@@ -734,20 +765,29 @@ async function listarDeudas(req, res, next) {
     const incluirAuditoria = ['ADMIN', 'SUPERADMIN'].includes(req.usuario.rol);
     const mapear = (fila) => mapearFilaPedido(fila, incluirAuditoria);
 
+    const idTiendaHamburguesas = await obtenerIdTiendaHamburguesas(pool);
+    if (!idTiendaHamburguesas) {
+      return res.status(200).json({ pedidos: [] });
+    }
+
     if (req.usuario.rol === 'SUPERADMIN') {
-      const result = await pool.request().query(`${SELECT_PEDIDOS_BASE} ${filtroEstado} ORDER BY pd.FechaEntregaReal ASC`);
+      const result = await pool
+        .request()
+        .input('IdTienda', sql.Int, idTiendaHamburguesas)
+        .query(`${SELECT_PEDIDOS_BASE} ${filtroEstado} AND pd.IdTienda = @IdTienda ORDER BY pd.FechaEntregaReal ASC`);
       return res.status(200).json({ pedidos: result.recordset.map(mapear) });
     }
 
     const idTrabajador = await obtenerIdTrabajador(req.usuario.idPersona);
     const idsTiendas = idTrabajador ? await obtenerTiendasAsignadas(idTrabajador) : [];
-    if (idsTiendas.length === 0) {
+    if (!idsTiendas.includes(idTiendaHamburguesas)) {
       return res.status(200).json({ pedidos: [] });
     }
 
     const result = await pool
       .request()
-      .query(`${SELECT_PEDIDOS_BASE} ${filtroEstado} AND pd.IdTienda IN (${idsTiendas.join(',')}) ORDER BY pd.FechaEntregaReal ASC`);
+      .input('IdTienda', sql.Int, idTiendaHamburguesas)
+      .query(`${SELECT_PEDIDOS_BASE} ${filtroEstado} AND pd.IdTienda = @IdTienda ORDER BY pd.FechaEntregaReal ASC`);
     return res.status(200).json({ pedidos: result.recordset.map(mapear) });
   } catch (err) {
     return next(err);
