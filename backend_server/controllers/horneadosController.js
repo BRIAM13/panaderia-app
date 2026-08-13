@@ -1,5 +1,9 @@
 const { sql, getPool } = require('../config/db');
 const { registrarAuditoria } = require('../utils/auditLog');
+const { obtenerIdTrabajador, obtenerTiendasAsignadas } = require('../utils/tiendaAcceso');
+// Reusa la misma consulta/mapeo que Hamburguesas para no duplicar ~30
+// líneas de JOINs de auditoría — ver la nota en pedidosController.js.
+const { SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
 
 const TIPOS_ADEREZO = ['CRIOLLO', 'ORIENTAL'];
 
@@ -238,4 +242,109 @@ async function crearPedidoHorneado(req, res, next) {
   }
 }
 
-module.exports = { listarSugerencias, crearPedidoHorneado, TIPOS_ADEREZO };
+/** Trae de un solo golpe el detalle (Carne/Presentación/Aderezo) de varios
+ * pedidos, indexado por IdPedido — para fusionarlo con las filas que ya
+ * trajo SELECT_PEDIDOS_BASE sin hacer una consulta por pedido. */
+async function obtenerDetalleHorneadosPorPedidos(pool, idsPedidos) {
+  if (idsPedidos.length === 0) return new Map();
+  const resultado = await pool.request().query(`
+    SELECT IdPedido, Carne, Presentacion, AplicaAderezo, TipoAderezo, PrecioAderezo
+    FROM PedidosHorneadosDetalle
+    WHERE IdPedido IN (${idsPedidos.map(Number).join(',')})
+  `);
+  return new Map(resultado.recordset.map((fila) => [fila.IdPedido, fila]));
+}
+
+function fusionarDetalleHorneado(pedidoMapeado, detalle) {
+  return {
+    ...pedidoMapeado,
+    carne: detalle?.Carne ?? null,
+    presentacion: detalle?.Presentacion ?? null,
+    aplicaAderezo: detalle?.AplicaAderezo === 1,
+    tipoAderezo: detalle?.TipoAderezo ?? null,
+    precioAderezo: detalle?.PrecioAderezo ?? null,
+  };
+}
+
+/** true si el usuario tiene permitido ver los pedidos de Horneados —
+ * SUPERADMIN siempre; TRABAJADOR/ADMIN solo si tienen esa tienda asignada. */
+async function tieneAccesoAHorneados(req, idTiendaHorneados) {
+  if (req.usuario.rol === 'SUPERADMIN') return true;
+  const idTrabajador = await obtenerIdTrabajador(req.usuario.idPersona);
+  const idsTiendas = idTrabajador ? await obtenerTiendasAsignadas(idTrabajador) : [];
+  return idsTiendas.includes(idTiendaHorneados);
+}
+
+/** Mismo candado de tienda que listarPedidos de Hamburguesas, pero para
+ * Horneados — antes de esto no existía ningún endpoint para listar estos
+ * pedidos desde la app (solo se podían crear), así que no aparecían en
+ * ninguna pantalla de personal. */
+async function listarPedidosHorneados(req, res, next) {
+  try {
+    const pool = await getPool();
+    const incluirAuditoria = ['ADMIN', 'SUPERADMIN'].includes(req.usuario.rol);
+
+    const tienda = await obtenerTiendaHorneados(pool);
+    if (!tienda) return res.status(200).json({ pedidos: [] });
+
+    if (!(await tieneAccesoAHorneados(req, tienda.IdTienda))) {
+      return res.status(200).json({ pedidos: [] });
+    }
+
+    const result = await pool
+      .request()
+      .input('IdTienda', sql.Int, tienda.IdTienda)
+      .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdTienda = @IdTienda ORDER BY pd.FechaCreacion DESC`);
+
+    const detalles = await obtenerDetalleHorneadosPorPedidos(pool, result.recordset.map((f) => f.IdPedido));
+    const pedidos = result.recordset.map((fila) =>
+      fusionarDetalleHorneado(mapearFilaPedido(fila, incluirAuditoria), detalles.get(fila.IdPedido)),
+    );
+
+    return res.status(200).json({ pedidos });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** Deudas pendientes (Estado=ENTREGADO, EstadoPago=DEUDA) de Horneados —
+ * mismo candado de tienda que listarPedidosHorneados. */
+async function listarDeudasHorneados(req, res, next) {
+  try {
+    const pool = await getPool();
+    const incluirAuditoria = ['ADMIN', 'SUPERADMIN'].includes(req.usuario.rol);
+
+    const tienda = await obtenerTiendaHorneados(pool);
+    if (!tienda) return res.status(200).json({ pedidos: [] });
+
+    if (!(await tieneAccesoAHorneados(req, tienda.IdTienda))) {
+      return res.status(200).json({ pedidos: [] });
+    }
+
+    const result = await pool
+      .request()
+      .input('IdTienda', sql.Int, tienda.IdTienda)
+      .query(`
+        ${SELECT_PEDIDOS_BASE}
+        WHERE pd.Estado = 'ENTREGADO' AND pd.EstadoPago = 'DEUDA' AND pd.IdTienda = @IdTienda
+        ORDER BY pd.FechaEntregaReal ASC
+      `);
+
+    const detalles = await obtenerDetalleHorneadosPorPedidos(pool, result.recordset.map((f) => f.IdPedido));
+    const pedidos = result.recordset.map((fila) =>
+      fusionarDetalleHorneado(mapearFilaPedido(fila, incluirAuditoria), detalles.get(fila.IdPedido)),
+    );
+
+    return res.status(200).json({ pedidos });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = {
+  listarSugerencias,
+  crearPedidoHorneado,
+  listarPedidosHorneados,
+  listarDeudasHorneados,
+  TIPOS_ADEREZO,
+};

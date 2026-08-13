@@ -913,4 +913,9 @@ module.exports = {
   entregarPedido,
   listarDeudas,
   marcarDeudaPagada,
+  // Reexportados para que horneadosController.js arme su propio listado
+  // (mismas columnas de Pedidos/Clientes/auditoría) sin duplicar esta
+  // consulta — evita que las dos vistas se desincronicen con el tiempo.
+  SELECT_PEDIDOS_BASE,
+  mapearFilaPedido,
 };
