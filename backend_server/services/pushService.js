@@ -41,6 +41,14 @@ async function enviarPush({ tokens, titulo, cuerpo, datos }) {
     ...(titulo ? { notification: { title: titulo, body: cuerpo } } : {}),
     data: datos ? Object.fromEntries(Object.entries(datos).map(([k, v]) => [k, String(v)])) : undefined,
     tokens,
+    // Sin esto, Android trata un mensaje data-only (sin `notification`,
+    // como los "silenciosos" de acá arriba) como prioridad normal y puede
+    // demorarlo bastante en Doze/segundo plano — es justo lo que hacía que
+    // el Dashboard de otro dispositivo no se refrescara solo y hubiera que
+    // deslizar a mano para forzar la recarga. "high" no muestra ningún
+    // banner (eso lo decide `notification`, no la prioridad) — solo pide
+    // entrega inmediata.
+    android: { priority: 'high' },
   };
 
   const respuesta = await getMessaging().sendEachForMulticast(mensaje);
