@@ -926,4 +926,7 @@ module.exports = {
   // consulta — evita que las dos vistas se desincronicen con el tiempo.
   SELECT_PEDIDOS_BASE,
   mapearFilaPedido,
+  // Reexportado para publicoController.js (avisa al personal de un pedido
+  // web nuevo, igual que un pedido solicitado desde la app).
+  notificarPersonalTienda,
 };

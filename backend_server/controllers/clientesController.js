@@ -864,4 +864,8 @@ module.exports = {
   solicitarAutorizacion,
   validarAutorizacion,
   cambiarPasswordSeguro,
+  // Reexportado para publicoController.js (pedido web sin login) — mismo
+  // clonado de cuenta (usuario=DNI, password=DNI) que ya dispara un
+  // registro de cliente hecho por el personal con DNI real verificado.
+  intentarClonarUsuarioCliente,
 };

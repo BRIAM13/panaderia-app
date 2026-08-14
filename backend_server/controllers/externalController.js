@@ -161,13 +161,14 @@ function simularEmpresaPorRuc(ruc) {
   };
 }
 
-async function consultarDni(req, res) {
-  const dni = req.body.dni ?? req.params.dni;
-
-  if (!/^\d{8}$/.test(String(dni || ''))) {
-    return res.status(400).json({ mensaje: 'El DNI debe tener 8 dígitos numéricos' });
-  }
-
+/**
+ * Núcleo de la consulta de DNI, sin la capa HTTP — para que otros
+ * controllers (ver publicoController.js, el pedido web público) puedan
+ * reusar exactamente la misma lógica (API real -> simulador de respaldo)
+ * sin pasar por una petición Express de por medio.
+ * Devuelve `fuente`: 'API_REAL' | 'SIMULADO' | 'NO_ENCONTRADO'.
+ */
+async function buscarPersonaPorDni(dni) {
   const tokenApiPeru = await obtenerTokenApiPeru();
   if (tokenApiPeru) {
     const cliente = crearClienteApiPeru(tokenApiPeru);
@@ -175,31 +176,45 @@ async function consultarDni(req, res) {
 
     if (resultado.estado === 'ENCONTRADO') {
       const { data } = resultado;
-      return res.status(200).json({
-        mensaje: 'Consulta real de RENIEC (apiperu.dev)',
+      return {
         fuente: 'API_REAL',
         dni: data.data.numero || dni,
         nombres: data.data.nombres,
         apellidoPaterno: data.data.apellido_paterno || '',
         apellidoMaterno: data.data.apellido_materno || '',
-      });
+      };
     }
 
     if (resultado.estado === 'NO_ENCONTRADO') {
-      return res.status(404).json({
-        mensaje: 'Documento no encontrado. El DNI ingresado no se encuentra registrado o es inválido.',
-        encontrado: false,
-      });
+      return { fuente: 'NO_ENCONTRADO' };
     }
 
     console.warn('apiperu.dev /dni no disponible, usando simulador:', resultado.error.message);
   }
 
-  return res.status(200).json({
-    mensaje: 'Consulta simulada de RENIEC (apiperu.dev no disponible)',
-    fuente: 'SIMULADO',
-    ...simularPersonaPorDni(String(dni)),
-  });
+  return { fuente: 'SIMULADO', ...simularPersonaPorDni(String(dni)) };
+}
+
+async function consultarDni(req, res) {
+  const dni = req.body.dni ?? req.params.dni;
+
+  if (!/^\d{8}$/.test(String(dni || ''))) {
+    return res.status(400).json({ mensaje: 'El DNI debe tener 8 dígitos numéricos' });
+  }
+
+  const resultado = await buscarPersonaPorDni(String(dni));
+
+  if (resultado.fuente === 'NO_ENCONTRADO') {
+    return res.status(404).json({
+      mensaje: 'Documento no encontrado. El DNI ingresado no se encuentra registrado o es inválido.',
+      encontrado: false,
+    });
+  }
+
+  const mensaje = resultado.fuente === 'API_REAL'
+    ? 'Consulta real de RENIEC (apiperu.dev)'
+    : 'Consulta simulada de RENIEC (apiperu.dev no disponible)';
+  return res.status(200).json({ mensaje, ...resultado });
 }
 
 async function consultarRuc(req, res) {
@@ -248,4 +263,4 @@ async function consultarRuc(req, res) {
   });
 }
 
-module.exports = { consultarDni, consultarRuc };
+module.exports = { consultarDni, consultarRuc, buscarPersonaPorDni };

@@ -397,6 +397,39 @@ function validateCrearPedidoHorneado(req, res, next) {
 }
 
 /**
+ * Pedido desde la página web pública, sin login (ver publicoController.js)
+ * — a diferencia de todo lo demás en este archivo, acá no hay JWT detrás,
+ * así que la validación es la única barrera antes de tocar la base de
+ * datos y (potencialmente) gastar una consulta paga a apiperu.dev.
+ */
+function validateCrearPedidoPublico(req, res, next) {
+  const { dni, telefono, idProducto, cantidad, notas } = req.body;
+  const errores = [];
+
+  if (!isNonEmptyString(dni) || !DNI_PERU_REGEX.test(dni.trim())) {
+    errores.push('Ingresa un DNI válido de 8 dígitos.');
+  }
+  if (!isNonEmptyString(telefono) || !TELEFONO_REGEX.test(telefono.trim())) {
+    errores.push('Ingresa un número de celular válido.');
+  }
+  if (!Number.isInteger(idProducto) || idProducto <= 0) {
+    errores.push('Selecciona un producto válido.');
+  }
+  if (!Number.isInteger(cantidad) || cantidad <= 0 || cantidad > 500) {
+    errores.push('Ingresa una cantidad válida.');
+  }
+  if (notas !== undefined && notas !== null && String(notas).trim().length > 200) {
+    errores.push('La nota es demasiado larga.');
+  }
+
+  if (errores.length > 0) {
+    return res.status(400).json({ mensaje: 'Datos de pedido inválidos', errores });
+  }
+
+  next();
+}
+
+/**
  * Autoservicio (rol CLIENTE): a diferencia de validatePedido, aquí no hay
  * `idCliente` (siempre es el del propio JWT) ni `precioUnitario` (siempre
  * sale del catálogo) — el cliente solo elige tienda, tipo y cantidad.
@@ -538,6 +571,7 @@ module.exports = {
   validatePedido,
   validateMiPedido,
   validateCrearPedidoHorneado,
+  validateCrearPedidoPublico,
   validateConfiguracion,
   validateMedioPago,
   validateActualizarMedioPago,
