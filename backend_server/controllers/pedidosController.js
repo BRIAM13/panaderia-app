@@ -2,6 +2,7 @@ const { sql, getPool } = require('../config/db');
 const { registrarAuditoria } = require('../utils/auditLog');
 const { enviarPush } = require('../services/pushService');
 const { obtenerIdTrabajador, obtenerTiendasAsignadas, tieneAccesoATienda } = require('../utils/tiendaAcceso');
+const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos');
 
 async function crearPedido(req, res, next) {
   const { idCliente, tipoPedido, cantidad, precioUnitario, fechaEntrega, notas } = req.body;
@@ -63,6 +64,7 @@ async function crearPedido(req, res, next) {
     // fecha programada" y coordinarse después. Registrado por el propio
     // personal: nace confirmado (PENDIENTE), no necesita aprobación.
     const fechaEntregaFinal = fechaEntrega ? new Date(fechaEntrega) : null;
+    const numeroPedidoDia = await obtenerSiguienteNumeroPedidoDia(transaction, idTienda);
 
     const insertResult = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, idCliente)
@@ -76,10 +78,11 @@ async function crearPedido(req, res, next) {
       .input('Total', sql.Decimal(10, 2), total)
       .input('FechaEntrega', sql.DateTime2, fechaEntregaFinal)
       .input('Notas', sql.NVarChar(300), notas ? notas.trim().toUpperCase() : null)
+      .input('NumeroPedidoDia', sql.Int, numeroPedidoDia)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, IdUsuarioRegistro, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, Estado)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, IdUsuarioRegistro, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, NumeroPedidoDia, Estado)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, @IdProducto, @IdTrabajador, @IdUsuarioRegistro, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, 'PENDIENTE')
+        VALUES (@IdCliente, @IdTienda, @IdProducto, @IdTrabajador, @IdUsuarioRegistro, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, @NumeroPedidoDia, 'PENDIENTE')
       `);
     const { IdPedido: idPedido, FechaCreacion: fechaCreacion } = insertResult.recordset[0];
 
@@ -107,6 +110,7 @@ async function crearPedido(req, res, next) {
     return res.status(201).json({
       mensaje: 'Pedido registrado correctamente',
       idPedido,
+      numeroPedidoDia,
       precioUnitario: precioUnitarioFinal,
       total,
       fechaEntrega: fechaEntregaFinal,
@@ -271,6 +275,7 @@ async function crearMiPedido(req, res, next) {
 
     const total = Number((precioUnitarioFinal * cantidad).toFixed(2));
     const fechaEntregaFinal = fechaEntrega ? new Date(fechaEntrega) : null;
+    const numeroPedidoDia = await obtenerSiguienteNumeroPedidoDia(transaction, idTienda);
 
     const insertResult = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, cliente.IdCliente)
@@ -282,10 +287,11 @@ async function crearMiPedido(req, res, next) {
       .input('Total', sql.Decimal(10, 2), total)
       .input('FechaEntrega', sql.DateTime2, fechaEntregaFinal)
       .input('Notas', sql.NVarChar(300), notas ? notas.trim().toUpperCase() : null)
+      .input('NumeroPedidoDia', sql.Int, numeroPedidoDia)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, Estado)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, NumeroPedidoDia, Estado)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, @IdProducto, NULL, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, 'SOLICITADO')
+        VALUES (@IdCliente, @IdTienda, @IdProducto, NULL, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, @NumeroPedidoDia, 'SOLICITADO')
       `);
     const { IdPedido: idPedido, FechaCreacion: fechaCreacion } = insertResult.recordset[0];
 
@@ -312,6 +318,7 @@ async function crearMiPedido(req, res, next) {
     return res.status(201).json({
       mensaje: 'Pedido solicitado — el personal lo confirmará según stock disponible',
       idPedido,
+      numeroPedidoDia,
       precioUnitario: precioUnitarioFinal,
       total,
       fechaEntrega: fechaEntregaFinal,
@@ -351,7 +358,7 @@ async function obtenerIdTiendaHamburguesas(pool) {
 }
 
 const SELECT_PEDIDOS_BASE = `
-  SELECT pd.IdPedido, pd.IdCliente, pd.IdTienda, pd.TipoPedido, pd.Cantidad, pd.PrecioUnitario, pd.Total, pd.FechaEntrega,
+  SELECT pd.IdPedido, pd.NumeroPedidoDia, pd.IdCliente, pd.IdTienda, pd.TipoPedido, pd.Cantidad, pd.PrecioUnitario, pd.Total, pd.FechaEntrega,
          pd.Estado, pd.EstadoPago, pd.FechaEntregaReal, pd.Notas, pd.FechaCreacion,
          per.DNI AS ClienteDni, per.Nombres AS ClienteNombres,
          per.ApellidoPaterno AS ClienteApellidoPaterno, per.ApellidoMaterno AS ClienteApellidoMaterno,
@@ -390,6 +397,7 @@ const SELECT_PEDIDOS_BASE = `
 function mapearFilaPedido(fila, incluirAuditoria = false) {
   const base = {
     idPedido: fila.IdPedido,
+    numeroPedidoDia: fila.NumeroPedidoDia,
     idCliente: fila.IdCliente,
     idTienda: fila.IdTienda,
     tienda: fila.TiendaNombre,
@@ -534,7 +542,7 @@ async function cancelarMiPedido(req, res, next) {
       .request()
       .input('IdPedido', sql.Int, id)
       .input('IdCliente', sql.Int, cliente.IdCliente)
-      .query('SELECT IdPedido, IdTienda, Estado FROM Pedidos WHERE IdPedido = @IdPedido AND IdCliente = @IdCliente');
+      .query('SELECT IdPedido, NumeroPedidoDia, IdTienda, Estado FROM Pedidos WHERE IdPedido = @IdPedido AND IdCliente = @IdCliente');
 
     if (pedidoResult.recordset.length === 0) {
       return res.status(404).json({ mensaje: 'Pedido no encontrado' });
@@ -569,7 +577,7 @@ async function cancelarMiPedido(req, res, next) {
       await notificarPersonalTienda({
         idTienda: pedido.IdTienda,
         titulo: 'Pedido cancelado por el cliente',
-        cuerpo: `${cliente.DescripcionNegocio || nombreCliente} canceló su pedido #${pedido.IdPedido}.`,
+        cuerpo: `${cliente.DescripcionNegocio || nombreCliente} canceló su pedido #${pedido.NumeroPedidoDia}.`,
         datos: { tipo: 'PEDIDO_CANCELADO', idTienda: String(pedido.IdTienda), idPedido: String(pedido.IdPedido) },
       });
     }
@@ -619,7 +627,7 @@ async function cancelarPedido(req, res, next) {
     await notificarCliente({
       idCliente: pedido.IdCliente,
       titulo: 'Tu pedido fue cancelado',
-      cuerpo: `Tu pedido #${pedido.IdPedido} fue cancelado por la tienda.`,
+      cuerpo: `Tu pedido #${pedido.NumeroPedidoDia} fue cancelado por la tienda.`,
       datos: { tipo: 'PEDIDO_CANCELADO', idPedido: String(pedido.IdPedido) },
     });
     // Silencioso a propósito — ver comentario en notificarPersonalTienda
@@ -645,7 +653,7 @@ async function obtenerPedidoConAcceso(req, res) {
   const result = await pool
     .request()
     .input('IdPedido', sql.Int, id)
-    .query('SELECT IdPedido, IdCliente, IdTienda, Estado, Total FROM Pedidos WHERE IdPedido = @IdPedido');
+    .query('SELECT IdPedido, NumeroPedidoDia, IdCliente, IdTienda, Estado, Total FROM Pedidos WHERE IdPedido = @IdPedido');
 
   if (result.recordset.length === 0) {
     res.status(404).json({ mensaje: 'Pedido no encontrado' });
@@ -695,7 +703,7 @@ async function aprobarPedido(req, res, next) {
     await notificarCliente({
       idCliente: pedido.IdCliente,
       titulo: 'Tu pedido fue confirmado',
-      cuerpo: `Tu pedido #${pedido.IdPedido} por S/ ${Number(pedido.Total).toFixed(2)} fue aceptado y ya está en camino a entregarse.`,
+      cuerpo: `Tu pedido #${pedido.NumeroPedidoDia} por S/ ${Number(pedido.Total).toFixed(2)} fue aceptado y ya está en camino a entregarse.`,
       datos: { tipo: 'PEDIDO_APROBADO', idPedido: String(pedido.IdPedido) },
     });
     // Silencioso — ídem.
@@ -735,7 +743,7 @@ async function rechazarPedido(req, res, next) {
     await notificarCliente({
       idCliente: pedido.IdCliente,
       titulo: 'Tu pedido fue rechazado',
-      cuerpo: `Tu pedido #${pedido.IdPedido} no pudo confirmarse por falta de stock. Intenta nuevamente más tarde.`,
+      cuerpo: `Tu pedido #${pedido.NumeroPedidoDia} no pudo confirmarse por falta de stock. Intenta nuevamente más tarde.`,
       datos: { tipo: 'PEDIDO_RECHAZADO', idPedido: String(pedido.IdPedido) },
     });
     // Silencioso — ídem.
@@ -828,7 +836,7 @@ async function marcarDeudaPagada(req, res, next) {
     await notificarCliente({
       idCliente: pedido.IdCliente,
       titulo: 'Deuda saldada',
-      cuerpo: `Tu deuda del pedido #${pedido.IdPedido} por S/ ${Number(pedido.Total).toFixed(2)} quedó registrada como pagada. ¡Gracias!`,
+      cuerpo: `Tu deuda del pedido #${pedido.NumeroPedidoDia} por S/ ${Number(pedido.Total).toFixed(2)} quedó registrada como pagada. ¡Gracias!`,
       datos: { tipo: 'DEUDA_PAGADA', idPedido: String(pedido.IdPedido) },
     });
     // Silencioso — ver comentario en notificarPersonalTienda de crearPedido.
@@ -885,8 +893,8 @@ async function entregarPedido(req, res, next) {
       idCliente: pedido.IdCliente,
       titulo: 'Tu pedido fue entregado',
       cuerpo: pagado
-        ? `Tu pedido #${pedido.IdPedido} fue entregado y pagado. ¡Gracias por tu compra!`
-        : `Tu pedido #${pedido.IdPedido} fue entregado. Queda una deuda pendiente de S/ ${Number(pedido.Total).toFixed(2)}.`,
+        ? `Tu pedido #${pedido.NumeroPedidoDia} fue entregado y pagado. ¡Gracias por tu compra!`
+        : `Tu pedido #${pedido.NumeroPedidoDia} fue entregado. Queda una deuda pendiente de S/ ${Number(pedido.Total).toFixed(2)}.`,
       datos: { tipo: 'PEDIDO_ENTREGADO', idPedido: String(pedido.IdPedido) },
     });
     // Silencioso — ídem.

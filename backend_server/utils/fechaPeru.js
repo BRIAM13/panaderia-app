@@ -54,6 +54,12 @@ function inicioDeDiaPeru(fechaISO) {
   return new Date(medianochePeruComoUtc - PERU_OFFSET_MS);
 }
 
+/** "YYYY-MM-DD" del día calendario (hora de Perú) de [fecha] — para claves
+ * de agrupación/conteo por día (ver ContadoresPedidosDiarios). */
+function fechaLocalPeruISO(fecha = new Date()) {
+  return new Date(diaCalendarioPeru(fecha)).toISOString().slice(0, 10);
+}
+
 module.exports = {
   PERU_OFFSET_MS,
   diaCalendarioPeru,
@@ -61,4 +67,5 @@ module.exports = {
   inicioDeHoyPeru,
   inicioDeMesPeru,
   inicioDeDiaPeru,
+  fechaLocalPeruISO,
 };

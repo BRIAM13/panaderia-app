@@ -1,6 +1,7 @@
 const { sql, getPool } = require('../config/db');
 const { registrarAuditoria } = require('../utils/auditLog');
 const { obtenerIdTrabajador, obtenerTiendasAsignadas } = require('../utils/tiendaAcceso');
+const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos');
 // Reusa la misma consulta/mapeo que Hamburguesas para no duplicar ~30
 // líneas de JOINs de auditoría — ver la nota en pedidosController.js.
 const { SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
@@ -152,6 +153,7 @@ async function crearPedidoHorneado(req, res, next) {
     );
     const total = Number((precioUnitarioFinal * cantidad).toFixed(2));
     const fechaEntregaFinal = fechaEntrega ? new Date(fechaEntrega) : null;
+    const numeroPedidoDia = await obtenerSiguienteNumeroPedidoDia(transaction, idTienda);
 
     const insertPedido = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, idCliente)
@@ -165,10 +167,11 @@ async function crearPedidoHorneado(req, res, next) {
       .input('Total', sql.Decimal(10, 2), total)
       .input('FechaEntrega', sql.DateTime2, fechaEntregaFinal)
       .input('Notas', sql.NVarChar(300), notas ? notas.trim().toUpperCase() : null)
+      .input('NumeroPedidoDia', sql.Int, numeroPedidoDia)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, IdUsuarioRegistro, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, Estado)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, IdUsuarioRegistro, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, NumeroPedidoDia, Estado)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, @IdProducto, @IdTrabajador, @IdUsuarioRegistro, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, 'PENDIENTE')
+        VALUES (@IdCliente, @IdTienda, @IdProducto, @IdTrabajador, @IdUsuarioRegistro, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, @NumeroPedidoDia, 'PENDIENTE')
       `);
     const { IdPedido: idPedido, FechaCreacion: fechaCreacion } = insertPedido.recordset[0];
 
@@ -217,6 +220,7 @@ async function crearPedidoHorneado(req, res, next) {
     return res.status(201).json({
       mensaje: 'Pedido de horneados registrado correctamente',
       idPedido,
+      numeroPedidoDia,
       carne: carneNormalizada,
       presentacion: presentacionNormalizada,
       cantidad,
