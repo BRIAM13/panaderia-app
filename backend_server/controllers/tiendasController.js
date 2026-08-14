@@ -209,8 +209,11 @@ async function resumenTienda(req, res, next) {
 
 /**
  * Días (hora de Perú) que sí tienen al menos un pedido ENTREGADO en esta
- * tienda — para que el selector de fecha del Dashboard solo deje elegir
- * días con datos reales, en vez de mostrar un calendario en blanco.
+ * tienda — para que el selector de fecha del Historial de ventas solo deje
+ * elegir días con datos reales, en vez de mostrar un calendario en blanco.
+ * También trae por separado los días que tienen alguna deuda TODAVÍA
+ * pendiente (EstadoPago='DEUDA' — una vez saldada pasa a 'PAGADO' y ese día
+ * deja de listarse acá), para marcarlos con un aro en el calendario.
  */
 async function fechasConVentas(req, res, next) {
   try {
@@ -227,8 +230,19 @@ async function fechasConVentas(req, res, next) {
         ORDER BY Dia DESC
       `);
 
+    const conDeuda = await pool
+      .request()
+      .input('IdTienda', sql.Int, idTienda)
+      .query(`
+        SELECT DISTINCT CAST(DATEADD(HOUR, -5, FechaEntregaReal) AS DATE) AS Dia
+        FROM Pedidos
+        WHERE IdTienda = @IdTienda AND Estado = 'ENTREGADO' AND EstadoPago = 'DEUDA'
+        ORDER BY Dia DESC
+      `);
+
     return res.status(200).json({
       fechas: result.recordset.map((f) => f.Dia.toISOString().slice(0, 10)),
+      fechasConDeuda: conDeuda.recordset.map((f) => f.Dia.toISOString().slice(0, 10)),
     });
   } catch (err) {
     return next(err);
