@@ -1,12 +1,11 @@
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
 import { PackageSearch, ArrowRight } from "lucide-react";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
 
-/** CTA hacia /cuenta (la misma ruta que "Iniciar sesión" del Navbar) — al
- * loguearse, lo primero que ve el cliente ahí es justamente sus pedidos
- * pendientes y su historial, así que no hace falta una ruta aparte. */
+/** CTA hacia /app/ (la misma app Flutter completa a la que lleva "Iniciar
+ * sesión" del Navbar) — ahí, al loguearse, lo primero que ve el cliente es
+ * justamente sus pedidos pendientes y su historial. */
 export function SeguimientoPedido() {
   return (
     <section className="px-6 py-16">
@@ -28,13 +27,13 @@ export function SeguimientoPedido() {
             Inicia sesión con tu DNI para ver en qué va tu pedido y revisar todo lo que ya pediste antes.
           </p>
         </div>
-        <Link
-          to="/cuenta"
+        <a
+          href="/app/"
           className="inline-flex shrink-0 items-center gap-2 rounded-full bg-pan-crema px-6 py-3.5 font-semibold text-pan-terracota transition-transform hover:scale-105"
         >
           Ver mi pedido
           <ArrowRight className="h-4 w-4" />
-        </Link>
+        </a>
       </motion.div>
     </section>
   );

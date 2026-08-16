@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
 import { Menu as MenuIcon, X, User } from "lucide-react";
 import { SITE } from "../data/config";
 
@@ -22,12 +21,12 @@ export function Navbar() {
       className="fixed inset-x-0 top-0 z-50 border-b border-pan-bronce-suave/60 bg-pan-crema/85 backdrop-blur-md"
     >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link
-          to="/"
+        <a
+          href="#"
           className="font-[family-name:var(--font-display-panaderia)] text-xl font-semibold text-pan-carbon"
         >
           {SITE.nombre}
-        </Link>
+        </a>
 
         <nav className="hidden items-center gap-8 md:flex">
           {ENLACES.map((enlace) => (
@@ -39,13 +38,16 @@ export function Navbar() {
               {enlace.texto}
             </a>
           ))}
-          <Link
-            to="/cuenta"
+          {/* /app/ es la app Flutter completa (login, mis pedidos, mis
+              deudas, hacer pedido nuevo, cancelar) — se reusa tal cual en
+              vez de duplicar esa lógica acá. */}
+          <a
+            href="/app/"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-pan-carbon-suave transition-colors hover:text-pan-terracota"
           >
             <User className="h-4 w-4" />
             Iniciar sesión
-          </Link>
+          </a>
           <a
             href="#pedido"
             className="rounded-full bg-pan-terracota px-5 py-2.5 text-sm font-semibold text-pan-crema transition-transform hover:scale-105"
@@ -80,13 +82,13 @@ export function Navbar() {
               {enlace.texto}
             </a>
           ))}
-          <Link
-            to="/cuenta"
+          <a
+            href="/app/"
             onClick={() => setAbierto(false)}
             className="rounded-lg px-3 py-2.5 text-sm font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
           >
             Iniciar sesión
-          </Link>
+          </a>
           <a
             href="#pedido"
             onClick={() => setAbierto(false)}

@@ -1,13 +1,26 @@
-import { Route, Routes } from "react-router-dom";
-import { HomePage } from "./pages/HomePage";
-import { CuentaPage } from "./pages/CuentaPage";
+import { Navbar } from "./components/Navbar";
+import { Hero } from "./components/Hero";
+import { Nosotros } from "./components/Nosotros";
+import { Menu } from "./components/Menu";
+import { PedidoForm } from "./components/PedidoForm";
+import { SeguimientoPedido } from "./components/SeguimientoPedido";
+import { Ubicacion } from "./components/Ubicacion";
+import { Footer } from "./components/Footer";
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/cuenta" element={<CuentaPage />} />
-    </Routes>
+    <div className="min-h-screen bg-pan-crema">
+      <Navbar />
+      <main>
+        <Hero />
+        <Nosotros />
+        <Menu />
+        <PedidoForm />
+        <SeguimientoPedido />
+        <Ubicacion />
+      </main>
+      <Footer />
+    </div>
   );
 }
 
