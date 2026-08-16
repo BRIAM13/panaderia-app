@@ -7,14 +7,14 @@ export const SITE = {
   nombreCorto: "Ronceros",
   claim: "Pan artesanal de siempre, hecho en familia",
   descripcion:
-    "Panadería familiar en Pisco — el mismo pan de toda la vida, hecho a mano con recetas que pasan de generación en generación.",
+    "Somos una panadería familiar en Pisco y horneamos el mismo pan de toda la vida, hecho a mano con recetas que pasan de generación en generación.",
 };
 
 export const HISTORIA = {
   parrafo1:
-    "Somos un negocio familiar: el pan que hacemos hoy es la misma receta que se fue pasando de generación en generación en nuestra familia. No es una fórmula nueva ni un experimento — es lo que siempre hemos horneado, hecho como siempre se hizo.",
+    "Somos un negocio familiar. El pan que hacemos hoy es la misma receta que se fue pasando de generación en generación dentro de nuestra familia, así que no encontrarás aquí ninguna fórmula nueva ni ningún experimento, sino lo que siempre hemos horneado y como siempre lo hicimos.",
   parrafo2:
-    "Cada mañana empezamos temprano para que el pan llegue caliente a la mesa de nuestros vecinos en Pisco, igual que lleva pasando por años.",
+    "Cada mañana empezamos temprano para que el pan llegue caliente a la mesa de nuestros vecinos en Pisco, tal como lleva sucediendo por años.",
 };
 
 export const MISION_VISION = {
@@ -25,77 +25,50 @@ export const MISION_VISION = {
 };
 
 export const UBICACION = {
-  direccion: "Calle Ayacucho, cuadra 4",
+  // Dirección real del local, la que se muestra al visitante.
+  direccion: "Calle Ayacucho 478",
   ciudad: "Pisco, Perú",
   referencia: "Frente a la gruta de la Virgen de Chapi",
-  // Búsqueda genérica (sin coordenadas exactas) — abre Google Maps ya
-  // centrado en la dirección de texto, sin necesitar una API key de mapas.
-  mapaEmbedUrl:
-    "https://www.google.com/maps?q=Calle+Ayacucho+cuadra+4,+Pisco,+Peru&output=embed",
-  mapaUrl:
-    "https://www.google.com/maps/search/?api=1&query=Calle+Ayacucho+cuadra+4,+Pisco,+Peru",
+  // Google Maps no siempre ubica bien el 478 exacto, pero sí encuentra
+  // correctamente el 475 (misma cuadra, a un paso) — se usa ese número solo
+  // para que el mapa abra en el lugar correcto, aunque el texto que lee el
+  // cliente arriba siga mostrando la dirección real.
+  mapaEmbedUrl: "https://www.google.com/maps?q=C.+Ayacucho+475,+Pisco,+Peru&output=embed",
+  mapaUrl: "https://www.google.com/maps/search/?api=1&query=C.+Ayacucho+475,+Pisco,+Peru",
 };
 
 export interface ProductoMenu {
-  /** Debe coincidir EXACTO con Productos.Nombre en la base de datos — así
-   * se cruza con el catálogo real que trae GET /publico/catalogo (mismo
-   * nombre = mismo producto, sin necesitar guardar el IdProducto acá). */
+  /** Debe coincidir EXACTO con Productos.Nombre en la base de datos, así se
+   * cruza con el catálogo real que trae GET /publico/catalogo (mismo
+   * nombre, mismo producto, sin necesitar guardar el IdProducto acá). */
   nombreEnCatalogo: string;
   nombre: string;
   descripcion: string;
-  /** Ruta dentro de /public, o null si todavía no tiene foto propia (se
-   * muestra una tarjeta con ícono en su lugar). */
-  imagen: string | null;
+  imagen: string;
 }
 
+// Solo los panes que ya tienen foto propia — el resto del catálogo (pan de
+// yema, de maíz, integral, de manteca, petipanes) se agrega acá apenas
+// tengan su foto; hasta entonces no se muestran ni se pueden pedir desde
+// la página, aunque ya existan en la base de datos.
 export const PRODUCTOS: ProductoMenu[] = [
   {
     nombreEnCatalogo: "Pan de Hamburguesa Clásico",
     nombre: "Pan de hamburguesa",
-    descripcion: "Suave, dorado y recién horneado — el compañero perfecto para tu hamburguesa.",
+    descripcion: "Suave, dorado y recién horneado, el compañero perfecto para tu hamburguesa.",
     imagen: "/images/productos/pan-de-hamburguesa.jpg",
   },
   {
     nombreEnCatalogo: "Pan de Agua",
     nombre: "Pan de agua",
-    descripcion: "El clásico de siempre: corteza crujiente y miga suave, tal como lo recuerdas.",
+    descripcion: "El clásico de siempre, con esa corteza crujiente y esa miga suave que ya conoces.",
     imagen: "/images/productos/pan-de-agua.jpg",
   },
   {
     nombreEnCatalogo: "Pan Francés",
     nombre: "Pan francés",
-    descripcion: "Corteza dorada y crocante por fuera, ligero por dentro.",
+    descripcion: "Dorado y crocante por fuera, ligero por dentro.",
     imagen: "/images/productos/pan-frances.jpg",
-  },
-  {
-    nombreEnCatalogo: "Pan de Yema",
-    nombre: "Pan de yema",
-    descripcion: "Suave y ligeramente dulce, con ese color dorado característico.",
-    imagen: null,
-  },
-  {
-    nombreEnCatalogo: "Pan de Maíz",
-    nombre: "Pan de maíz",
-    descripcion: "Textura rústica y un sabor único que lo distingue de los demás.",
-    imagen: null,
-  },
-  {
-    nombreEnCatalogo: "Pan Integral",
-    nombre: "Pan integral",
-    descripcion: "Hecho con harina integral, para quienes buscan una opción más natural.",
-    imagen: null,
-  },
-  {
-    nombreEnCatalogo: "Pan de Manteca",
-    nombre: "Pan de manteca",
-    descripcion: "Denso y sabroso, con esa textura característica que lo hace único.",
-    imagen: null,
-  },
-  {
-    nombreEnCatalogo: "Petipanes",
-    nombre: "Petipanes",
-    descripcion: "Panecillos pequeños y suaves, perfectos para acompañar cualquier comida.",
-    imagen: null,
   },
 ];
 
@@ -153,7 +126,7 @@ export const PLATAFORMAS: PlataformaDescarga[] = [
     id: "web",
     nombre: "Web",
     estado: "disponible",
-    descripcionEstado: "Ábrela directo en tu navegador — sin instalar nada",
+    descripcionEstado: "Ábrela directo en tu navegador, sin instalar nada",
     archivo: "/app/",
     nombreArchivo: null,
     viaQr: true,

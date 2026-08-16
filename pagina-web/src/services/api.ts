@@ -17,6 +17,9 @@ export interface ProductoPublico {
   idProducto: number;
   nombre: string;
   precioUnitario: number;
+  /** true: se vende por paquete de 12 a precio fijo (pan de hamburguesa),
+   * no por unidad suelta como el resto del catálogo. */
+  esPaquete: boolean;
 }
 
 export interface PedidoPublicoInput {

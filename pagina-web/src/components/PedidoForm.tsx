@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Loader2, ShoppingBag } from "lucide-react";
+import { PRODUCTOS } from "../data/config";
 import {
   ApiError,
   crearPedidoPublico,
@@ -10,6 +11,7 @@ import {
 } from "../services/api";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
+const NOMBRES_DISPONIBLES = new Set(PRODUCTOS.map((p) => p.nombreEnCatalogo));
 
 export function PedidoForm() {
   const [productos, setProductos] = useState<ProductoPublico[]>([]);
@@ -29,18 +31,23 @@ export function PedidoForm() {
   useEffect(() => {
     obtenerCatalogoPublico()
       .then((lista) => {
-        setProductos(lista);
-        if (lista.length > 0) setIdProducto(lista[0].idProducto);
+        // Solo se ofrecen los panes que ya tienen foto y están en el menú
+        // de arriba (ver PRODUCTOS en data/config.ts) — el resto sigue
+        // existiendo en el sistema, pero todavía no se vende desde acá.
+        const disponibles = lista.filter((p) => NOMBRES_DISPONIBLES.has(p.nombre));
+        setProductos(disponibles);
+        if (disponibles.length > 0) setIdProducto(disponibles[0].idProducto);
       })
       .catch(() =>
         setErrorCatalogo(
-          "No pudimos cargar el catálogo. El servidor puede estar despertando — intenta de nuevo en un momento.",
+          "No pudimos cargar el catálogo porque el servidor puede estar despertando. Intenta de nuevo en un momento.",
         ),
       )
       .finally(() => setCargandoProductos(false));
   }, []);
 
   const productoSeleccionado = productos.find((p) => p.idProducto === idProducto);
+  const esPaquete = productoSeleccionado?.esPaquete ?? false;
   const cantidadNum = Number(cantidad) || 0;
   const total = productoSeleccionado ? productoSeleccionado.precioUnitario * cantidadNum : 0;
 
@@ -52,8 +59,8 @@ export function PedidoForm() {
       setError("Ingresa un DNI válido de 8 dígitos.");
       return;
     }
-    if (!/^\d{6,20}$/.test(telefono.trim())) {
-      setError("Ingresa un número de celular válido.");
+    if (!/^\d{9}$/.test(telefono.trim())) {
+      setError("Ingresa un número de celular válido de 9 dígitos.");
       return;
     }
     if (!idProducto) {
@@ -79,7 +86,7 @@ export function PedidoForm() {
       if (err instanceof ApiError) {
         setError(err.errores?.join(" ") || err.message);
       } else {
-        setError("No se pudo conectar. El servidor puede estar despertando — intenta de nuevo en un momento.");
+        setError("No pudimos conectar porque el servidor puede estar despertando. Intenta de nuevo en un momento.");
       }
     } finally {
       setEnviando(false);
@@ -111,7 +118,8 @@ export function PedidoForm() {
             Haz tu pedido
           </h2>
           <p className="mt-4 text-lg text-pan-carbon-suave">
-            Déjanos tus datos y te llamamos para confirmar. Sin cuenta, sin contraseñas.
+            Déjanos tus datos y te llamamos para confirmarlo. No necesitas crear ninguna cuenta ni
+            contraseña.
           </p>
         </motion.div>
 
@@ -168,7 +176,8 @@ export function PedidoForm() {
                     className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
                   <p className="mt-1 text-xs text-pan-carbon-suave">
-                    Lo verificamos con RENIEC para confirmar tu nombre — no necesitas escribirlo.
+                    Lo verificamos con RENIEC para confirmar tu nombre, así que no hace falta que lo
+                    escribas.
                   </p>
                 </div>
 
@@ -179,7 +188,7 @@ export function PedidoForm() {
                   <input
                     id="telefono"
                     inputMode="numeric"
-                    maxLength={20}
+                    maxLength={9}
                     value={telefono}
                     onChange={(e) => setTelefono(e.target.value.replace(/\D/g, ""))}
                     placeholder="987654321"
@@ -204,7 +213,10 @@ export function PedidoForm() {
                     {!cargandoProductos &&
                       productos.map((p) => (
                         <option key={p.idProducto} value={p.idProducto}>
-                          {p.nombre} — S/ {p.precioUnitario.toFixed(2)}
+                          {p.nombre}{" "}
+                          {p.esPaquete
+                            ? `(S/ ${p.precioUnitario.toFixed(2)} el paquete de 12)`
+                            : `(S/ ${p.precioUnitario.toFixed(2)} cada uno)`}
                         </option>
                       ))}
                   </select>
@@ -213,15 +225,15 @@ export function PedidoForm() {
 
                 <div>
                   <label htmlFor="cantidad" className="mb-1.5 block text-sm font-medium text-pan-carbon">
-                    Cantidad
+                    {esPaquete ? "Cantidad de paquetes (12 unidades cada uno)" : "Cantidad"}
                   </label>
                   <input
                     id="cantidad"
-                    type="number"
-                    min={1}
-                    max={500}
+                    inputMode="numeric"
+                    maxLength={3}
                     value={cantidad}
-                    onChange={(e) => setCantidad(e.target.value)}
+                    onChange={(e) => setCantidad(e.target.value.replace(/\D/g, ""))}
+                    placeholder="1"
                     required
                     className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />

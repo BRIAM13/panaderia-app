@@ -25,8 +25,8 @@ export function DownloadSection() {
             El sistema de <span className="text-gradient-neon">gestión.</span>
           </h2>
           <p className="mt-4 text-lg text-carbon-400">
-            Esto es lo que usa nuestro personal para gestionar pedidos, deudas y pagos — no hace falta
-            descargar nada para pedir tu pan, eso ya lo hiciste arriba.
+            Esto es lo que usa nuestro personal para gestionar pedidos, deudas y pagos. No hace falta que
+            descargues nada para pedir tu pan, eso ya lo hiciste arriba.
           </p>
         </motion.div>
 
