@@ -194,23 +194,29 @@ async function enviarPushLimpiandoInvalidos(tokens, { titulo, cuerpo, datos }) {
   }
 }
 
+// Tiendas con catálogo propio y precio fijo por producto, listas para que
+// un cliente pida sin que nadie negocie nada — misma lista que
+// SLUGS_TIENDA_PUBLICA en publicoController.js (la contraparte sin login de
+// esto mismo, para la página web). Horneados/Mercadería/Pastelería quedan
+// fuera: precio variable o catálogo todavía no armado.
+const SLUGS_AUTOSERVICIO = ['hamburguesas', 'panaderia'];
+
 /**
- * Autoservicio (rol CLIENTE): el propio cliente registra su pedido. A
- * diferencia de crearPedido (personal, precio negociado en el momento),
- * aquí el precio SIEMPRE sale del catálogo — nadie está ahí para negociar.
+ * Autoservicio (rol CLIENTE): el propio cliente registra su pedido, eligiendo
+ * un producto del catálogo de una tienda habilitada para autoservicio — a
+ * diferencia de crearPedido (personal, precio negociado en el momento), aquí
+ * el precio SIEMPRE sale del catálogo, nadie está ahí para negociar.
  * idCliente nunca viene del body: siempre es el del propio JWT, así un
- * cliente jamás puede registrar un pedido a nombre de otro.
- *
- * Por ahora solo se permite Hamburguesas + Paquetes: es el único producto
- * con precio fijo y confiable (Configuraciones.PRECIO_PAQUETE) — el resto
- * del catálogo (Horneados, Unidades sueltas) todavía no tiene un precio
- * estable como para que un cliente lo pida sin que alguien lo revise antes.
+ * cliente jamás puede registrar un pedido a nombre de otro. La tienda y el
+ * tipo de pedido (PAQUETES/UNIDADES) se derivan del producto elegido, no del
+ * body — mismo criterio que crearPedidoPublico, para que un cliente no
+ * pueda pedir "paquetes" de algo que se vende por unidad o viceversa.
  *
  * Nace en estado 'SOLICITADO': el personal de la tienda debe aceptarlo o
  * rechazarlo según stock antes de que cuente como confirmado.
  */
 async function crearMiPedido(req, res, next) {
-  const { idTienda, tipoPedido, cantidad, fechaEntrega, notas } = req.body;
+  const { idProducto, cantidad, fechaEntrega, notas } = req.body;
   const { idPersona, idUsuario } = req.usuario;
 
   const pool = await getPool();
@@ -234,44 +240,37 @@ async function crearMiPedido(req, res, next) {
     }
     const cliente = clienteResult.recordset[0];
 
-    const tiendaResult = await new sql.Request(transaction)
-      .input('IdTienda', sql.Int, idTienda)
-      .query('SELECT IdTienda, Nombre, Slug FROM Tiendas WHERE IdTienda = @IdTienda AND Disponible = 1 AND Estado = 1');
-
-    if (tiendaResult.recordset.length === 0) {
-      await transaction.rollback();
-      return res.status(404).json({ mensaje: 'Tienda no disponible' });
-    }
-    const tienda = tiendaResult.recordset[0];
-
-    if (tienda.Slug !== 'hamburguesas' || tipoPedido !== 'PAQUETES') {
-      await transaction.rollback();
-      return res.status(400).json({
-        mensaje: 'Por ahora solo puedes pedir paquetes de pan de hamburguesa — el resto del catálogo aún no tiene precio fijo.',
-      });
-    }
-
     const productoResult = await new sql.Request(transaction)
-      .input('IdTienda', sql.Int, idTienda)
+      .input('IdProducto', sql.Int, idProducto)
       .query(`
-        SELECT TOP 1 p.IdProducto, p.PrecioUnitario
+        SELECT p.IdProducto, p.Nombre AS ProductoNombre, p.PrecioUnitario, t.IdTienda, t.Nombre AS TiendaNombre, t.Slug
         FROM Productos p
         INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
-        WHERE c.IdTienda = @IdTienda AND p.Estado = 1
-        ORDER BY p.IdProducto
+        INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
+        WHERE p.IdProducto = @IdProducto AND p.Estado = 1 AND t.Estado = 1
+          AND t.Slug IN ('${SLUGS_AUTOSERVICIO.join("','")}')
       `);
 
     if (productoResult.recordset.length === 0) {
       await transaction.rollback();
-      return res.status(500).json({ mensaje: 'Esta tienda todavía no tiene un producto configurado' });
+      return res.status(400).json({ mensaje: 'Ese producto ya no está disponible para pedir.' });
     }
-    const { IdProducto: idProducto } = productoResult.recordset[0];
+    const { IdProducto: idProductoValido, ProductoNombre: productoNombre, IdTienda: idTienda, TiendaNombre: tiendaNombre, Slug: slugTienda } = productoResult.recordset[0];
 
-    // Paquetes de Hamburguesas usa el precio de Configuraciones (el mismo
-    // que ve el personal), no Productos.PrecioUnitario — así el cliente
-    // siempre ve el precio vigente real del paquete de 12.
-    const config = await new sql.Request(transaction).query("SELECT Valor FROM Configuraciones WHERE Clave = 'PRECIO_PAQUETE'");
-    const precioUnitarioFinal = config.recordset.length > 0 ? Number(config.recordset[0].Valor) : 0;
+    // El pan de hamburguesa se vende por paquete de 12 a precio fijo (no por
+    // unidad suelta) — mismo criterio que usa la página web pública (ver
+    // crearPedidoPublico en publicoController.js).
+    const esPaquete = slugTienda === 'hamburguesas';
+    const tipoPedido = esPaquete ? 'PAQUETES' : 'UNIDADES';
+
+    let precioUnitarioFinal = productoResult.recordset[0].PrecioUnitario;
+    if (esPaquete) {
+      // Paquetes de Hamburguesas usa el precio de Configuraciones (el mismo
+      // que ve el personal), no Productos.PrecioUnitario — así el cliente
+      // siempre ve el precio vigente real del paquete de 12.
+      const config = await new sql.Request(transaction).query("SELECT Valor FROM Configuraciones WHERE Clave = 'PRECIO_PAQUETE'");
+      if (config.recordset.length > 0) precioUnitarioFinal = Number(config.recordset[0].Valor);
+    }
 
     const total = Number((precioUnitarioFinal * cantidad).toFixed(2));
     const fechaEntregaFinal = fechaEntrega ? new Date(fechaEntrega) : null;
@@ -280,7 +279,7 @@ async function crearMiPedido(req, res, next) {
     const insertResult = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, cliente.IdCliente)
       .input('IdTienda', sql.Int, idTienda)
-      .input('IdProducto', sql.Int, idProducto)
+      .input('IdProducto', sql.Int, idProductoValido)
       .input('TipoPedido', sql.VarChar(20), tipoPedido)
       .input('Cantidad', sql.Int, cantidad)
       .input('PrecioUnitario', sql.Decimal(10, 2), precioUnitarioFinal)
@@ -302,7 +301,7 @@ async function crearMiPedido(req, res, next) {
       accion: 'CREAR_MI_PEDIDO',
       tablaAfectada: 'Pedidos',
       registroAfectadoId: String(idPedido),
-      datosNuevos: { idTienda, tipoPedido, cantidad, precioUnitario: precioUnitarioFinal, total, fechaEntrega },
+      datosNuevos: { idTienda, idProducto: idProductoValido, tipoPedido, cantidad, precioUnitario: precioUnitarioFinal, total, fechaEntrega },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -310,7 +309,7 @@ async function crearMiPedido(req, res, next) {
     const nombreCliente = [cliente.Nombres, cliente.ApellidoPaterno].filter(Boolean).join(' ');
     await notificarPersonalTienda({
       idTienda,
-      titulo: `Pedido por confirmar — ${tienda.Nombre}`,
+      titulo: `Pedido por confirmar — ${tiendaNombre}`,
       cuerpo: `${cliente.DescripcionNegocio || nombreCliente} solicitó un pedido por S/ ${total.toFixed(2)}. Revisa el stock y acéptalo o recházalo.`,
       datos: { tipo: 'PEDIDO_SOLICITADO', idTienda: String(idTienda), idPedido: String(idPedido) },
     });
@@ -319,6 +318,9 @@ async function crearMiPedido(req, res, next) {
       mensaje: 'Pedido solicitado — el personal lo confirmará según stock disponible',
       idPedido,
       numeroPedidoDia,
+      tienda: tiendaNombre,
+      producto: productoNombre,
+      tipoPedido,
       precioUnitario: precioUnitarioFinal,
       total,
       fechaEntrega: fechaEntregaFinal,

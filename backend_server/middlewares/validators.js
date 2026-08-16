@@ -435,17 +435,16 @@ function validateCrearPedidoPublico(req, res, next) {
 /**
  * Autoservicio (rol CLIENTE): a diferencia de validatePedido, aquí no hay
  * `idCliente` (siempre es el del propio JWT) ni `precioUnitario` (siempre
- * sale del catálogo) — el cliente solo elige tienda, tipo y cantidad.
+ * sale del catálogo) — el cliente solo elige un producto y una cantidad; la
+ * tienda y el tipo de pedido (PAQUETES/UNIDADES) se derivan del producto en
+ * el controller, no vienen del body (ver crearMiPedido).
  */
 function validateMiPedido(req, res, next) {
-  const { idTienda, tipoPedido, cantidad, fechaEntrega } = req.body;
+  const { idProducto, cantidad, fechaEntrega } = req.body;
   const errores = [];
 
-  if (!Number.isInteger(idTienda) || idTienda <= 0) {
-    errores.push('Debes seleccionar una tienda válida.');
-  }
-  if (tipoPedido !== 'UNIDADES' && tipoPedido !== 'PAQUETES') {
-    errores.push('El tipo de pedido debe ser UNIDADES o PAQUETES.');
+  if (!Number.isInteger(idProducto) || idProducto <= 0) {
+    errores.push('Selecciona un producto válido.');
   }
   if (!Number.isInteger(cantidad) || cantidad <= 0) {
     errores.push('La cantidad debe ser un número entero mayor a 0.');
