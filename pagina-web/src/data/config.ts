@@ -1,12 +1,103 @@
 // Toda la información editable del sitio vive acá — para cambiar textos,
-// links de descarga o features NO hace falta tocar ningún componente.
+// productos, la misión/visión o los links de descarga NO hace falta tocar
+// ningún componente.
 
 export const SITE = {
-  nombre: "Corporación Ronceros",
-  claim: "Panadería y Pastelería Briam",
+  nombre: "Panadería Ronceros",
+  nombreCorto: "Ronceros",
+  claim: "Pan artesanal de siempre, hecho en familia",
   descripcion:
-    "El sistema que gestiona pedidos, deudas y pagos del negocio — en el celular, la laptop o donde estés.",
+    "Panadería familiar en Pisco — el mismo pan de toda la vida, hecho a mano con recetas que pasan de generación en generación.",
 };
+
+export const HISTORIA = {
+  parrafo1:
+    "Somos un negocio familiar: el pan que hacemos hoy es la misma receta que se fue pasando de generación en generación en nuestra familia. No es una fórmula nueva ni un experimento — es lo que siempre hemos horneado, hecho como siempre se hizo.",
+  parrafo2:
+    "Cada mañana empezamos temprano para que el pan llegue caliente a la mesa de nuestros vecinos en Pisco, igual que lleva pasando por años.",
+};
+
+export const MISION_VISION = {
+  mision:
+    "Elaborar cada día pan artesanal de calidad, con las recetas que se transmiten en nuestra familia de generación en generación, llevando a la mesa de cada hogar en Pisco el sabor de siempre, con calidez y a un precio justo.",
+  vision:
+    "Ser la panadería de referencia en Pisco, reconocida por la calidad de nuestro pan artesanal y por mantener viva, generación tras generación, una tradición familiar que forma parte de la identidad de nuestra comunidad.",
+};
+
+export const UBICACION = {
+  direccion: "Calle Ayacucho, cuadra 4",
+  ciudad: "Pisco, Perú",
+  referencia: "Frente a la gruta de la Virgen de Chapi",
+  // Búsqueda genérica (sin coordenadas exactas) — abre Google Maps ya
+  // centrado en la dirección de texto, sin necesitar una API key de mapas.
+  mapaEmbedUrl:
+    "https://www.google.com/maps?q=Calle+Ayacucho+cuadra+4,+Pisco,+Peru&output=embed",
+  mapaUrl:
+    "https://www.google.com/maps/search/?api=1&query=Calle+Ayacucho+cuadra+4,+Pisco,+Peru",
+};
+
+export interface ProductoMenu {
+  /** Debe coincidir EXACTO con Productos.Nombre en la base de datos — así
+   * se cruza con el catálogo real que trae GET /publico/catalogo (mismo
+   * nombre = mismo producto, sin necesitar guardar el IdProducto acá). */
+  nombreEnCatalogo: string;
+  nombre: string;
+  descripcion: string;
+  /** Ruta dentro de /public, o null si todavía no tiene foto propia (se
+   * muestra una tarjeta con ícono en su lugar). */
+  imagen: string | null;
+}
+
+export const PRODUCTOS: ProductoMenu[] = [
+  {
+    nombreEnCatalogo: "Pan de Hamburguesa Clásico",
+    nombre: "Pan de hamburguesa",
+    descripcion: "Suave, dorado y recién horneado — el compañero perfecto para tu hamburguesa.",
+    imagen: "/images/productos/pan-de-hamburguesa.jpg",
+  },
+  {
+    nombreEnCatalogo: "Pan de Agua",
+    nombre: "Pan de agua",
+    descripcion: "El clásico de siempre: corteza crujiente y miga suave, tal como lo recuerdas.",
+    imagen: "/images/productos/pan-de-agua.jpg",
+  },
+  {
+    nombreEnCatalogo: "Pan Francés",
+    nombre: "Pan francés",
+    descripcion: "Corteza dorada y crocante por fuera, ligero por dentro.",
+    imagen: "/images/productos/pan-frances.jpg",
+  },
+  {
+    nombreEnCatalogo: "Pan de Yema",
+    nombre: "Pan de yema",
+    descripcion: "Suave y ligeramente dulce, con ese color dorado característico.",
+    imagen: null,
+  },
+  {
+    nombreEnCatalogo: "Pan de Maíz",
+    nombre: "Pan de maíz",
+    descripcion: "Textura rústica y un sabor único que lo distingue de los demás.",
+    imagen: null,
+  },
+  {
+    nombreEnCatalogo: "Pan Integral",
+    nombre: "Pan integral",
+    descripcion: "Hecho con harina integral, para quienes buscan una opción más natural.",
+    imagen: null,
+  },
+  {
+    nombreEnCatalogo: "Pan de Manteca",
+    nombre: "Pan de manteca",
+    descripcion: "Denso y sabroso, con esa textura característica que lo hace único.",
+    imagen: null,
+  },
+  {
+    nombreEnCatalogo: "Petipanes",
+    nombre: "Petipanes",
+    descripcion: "Panecillos pequeños y suaves, perfectos para acompañar cualquier comida.",
+    imagen: null,
+  },
+];
 
 export type OS = "android" | "ios" | "windows" | "macos" | "web";
 
@@ -90,62 +181,3 @@ export const PLATAFORMAS: PlataformaDescarga[] = [
   },
 ];
 
-export interface FeatureBento {
-  id: string;
-  titulo: string;
-  descripcion: string;
-  /** Controla cuántas columnas/filas ocupa en el bento grid desktop. */
-  span: "col-2" | "row-2" | "col-2-row-2" | "normal";
-  acento: "green" | "violet";
-}
-
-export const FEATURES: FeatureBento[] = [
-  {
-    id: "pedidos",
-    titulo: "Pedidos en tiempo real",
-    descripcion:
-      "Cada pedido se registra al instante y viaja sincronizado entre el cliente y el personal, sin recargar nada.",
-    span: "col-2-row-2",
-    acento: "green",
-  },
-  {
-    id: "roles",
-    titulo: "Roles jerárquicos",
-    descripcion:
-      "Cliente, Trabajador, Administrador y Super Administrador — cada uno ve exactamente lo que le corresponde.",
-    span: "normal",
-    acento: "violet",
-  },
-  {
-    id: "pagos",
-    titulo: "Pagos con verificación real",
-    descripcion:
-      "QR real de Yape/Plin, más confirmación manual del personal antes de saldar cualquier deuda.",
-    span: "normal",
-    acento: "green",
-  },
-  {
-    id: "notificaciones",
-    titulo: "Notificaciones push",
-    descripcion:
-      "Avisos instantáneos cuando cambia el estado de un pedido o se reporta un pago, sin abrir la app.",
-    span: "col-2",
-    acento: "violet",
-  },
-  {
-    id: "reniec",
-    titulo: "Verificación RENIEC/SUNAT",
-    descripcion:
-      "El registro de clientes valida DNI y RUC contra fuentes oficiales en tiempo real, en vez de confiar a ciegas.",
-    span: "normal",
-    acento: "green",
-  },
-  {
-    id: "multiplataforma",
-    titulo: "Un solo sistema, todos tus dispositivos",
-    descripcion:
-      "Android, iOS, Windows, macOS y Web comparten la misma base — la misma cuenta, los mismos datos, siempre al día.",
-    span: "normal",
-    acento: "violet",
-  },
-];

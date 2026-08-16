@@ -4,7 +4,10 @@
   --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
 
-  /* Carbón premium — nunca negro puro, siempre con un matiz azulado. */
+  /* Carbón premium — nunca negro puro, siempre con un matiz azulado. Se
+     conserva para la sección "Descargar la app" (herramienta de gestión,
+     no vitrina de la panadería) a propósito: ese contraste oscuro/tech
+     contra el resto cálido de la página marca que es "otra cosa". */
   --color-carbon-950: #08090c;
   --color-carbon-900: #0e1013;
   --color-carbon-800: #15171c;
@@ -17,6 +20,20 @@
   --color-neon-green: #39ffb0;
   --color-cyber-violet: #a855f7;
 
+  /* Paleta cálida de la panadería — mismos tonos que la app móvil
+     (lib/theme/app_theme.dart), para que la marca se vea igual en los dos
+     lugares. */
+  --font-display-panaderia: "Fraunces", "Georgia", serif;
+  --color-pan-crema: #fdf6ec;
+  --color-pan-crema-suave: #fffbf3;
+  --color-pan-crema-muted: #f3e9d8;
+  --color-pan-terracota: #b5451b;
+  --color-pan-terracota-suave: #f3d3be;
+  --color-pan-bronce: #c08a3e;
+  --color-pan-bronce-suave: #f1ddb6;
+  --color-pan-carbon: #2b2118;
+  --color-pan-carbon-suave: #6b5b4c;
+
   --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -26,29 +43,36 @@ html {
 
 body {
   margin: 0;
-  background-color: var(--color-carbon-950);
-  color: var(--color-carbon-200);
+  background-color: var(--color-pan-crema);
+  color: var(--color-pan-carbon);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background-color: var(--color-neon-green);
-  color: var(--color-carbon-950);
+  background-color: var(--color-pan-terracota);
+  color: var(--color-pan-crema);
 }
 
 ::-webkit-scrollbar {
   width: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-carbon-950);
+  background: var(--color-pan-crema);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-carbon-700);
+  background: var(--color-pan-bronce-suave);
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-carbon-600);
+  background: var(--color-pan-bronce);
+}
+
+.text-gradient-pan {
+  background: linear-gradient(90deg, var(--color-pan-terracota), var(--color-pan-bronce));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .text-gradient-neon {

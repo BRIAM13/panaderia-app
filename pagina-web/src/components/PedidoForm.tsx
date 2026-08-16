@@ -1,0 +1,274 @@
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { CheckCircle2, Loader2, ShoppingBag } from "lucide-react";
+import {
+  ApiError,
+  crearPedidoPublico,
+  obtenerCatalogoPublico,
+  type PedidoPublicoResultado,
+  type ProductoPublico,
+} from "../services/api";
+
+const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
+
+export function PedidoForm() {
+  const [productos, setProductos] = useState<ProductoPublico[]>([]);
+  const [cargandoProductos, setCargandoProductos] = useState(true);
+  const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null);
+
+  const [dni, setDni] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [idProducto, setIdProducto] = useState<number | "">("");
+  const [cantidad, setCantidad] = useState("1");
+  const [notas, setNotas] = useState("");
+
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resultado, setResultado] = useState<PedidoPublicoResultado | null>(null);
+
+  useEffect(() => {
+    obtenerCatalogoPublico()
+      .then((lista) => {
+        setProductos(lista);
+        if (lista.length > 0) setIdProducto(lista[0].idProducto);
+      })
+      .catch(() =>
+        setErrorCatalogo(
+          "No pudimos cargar el catálogo. El servidor puede estar despertando — intenta de nuevo en un momento.",
+        ),
+      )
+      .finally(() => setCargandoProductos(false));
+  }, []);
+
+  const productoSeleccionado = productos.find((p) => p.idProducto === idProducto);
+  const cantidadNum = Number(cantidad) || 0;
+  const total = productoSeleccionado ? productoSeleccionado.precioUnitario * cantidadNum : 0;
+
+  async function enviar(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (!/^\d{8}$/.test(dni.trim())) {
+      setError("Ingresa un DNI válido de 8 dígitos.");
+      return;
+    }
+    if (!/^\d{6,20}$/.test(telefono.trim())) {
+      setError("Ingresa un número de celular válido.");
+      return;
+    }
+    if (!idProducto) {
+      setError("Selecciona un producto.");
+      return;
+    }
+    if (!Number.isInteger(cantidadNum) || cantidadNum <= 0) {
+      setError("Ingresa una cantidad válida.");
+      return;
+    }
+
+    setEnviando(true);
+    try {
+      const resultado = await crearPedidoPublico({
+        dni: dni.trim(),
+        telefono: telefono.trim(),
+        idProducto: Number(idProducto),
+        cantidad: cantidadNum,
+        notas: notas.trim() || undefined,
+      });
+      setResultado(resultado);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.errores?.join(" ") || err.message);
+      } else {
+        setError("No se pudo conectar. El servidor puede estar despertando — intenta de nuevo en un momento.");
+      }
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  function pedirOtroVez() {
+    setResultado(null);
+    setDni("");
+    setTelefono("");
+    setCantidad("1");
+    setNotas("");
+  }
+
+  return (
+    <section id="pedido" className="px-6 py-24 sm:py-32">
+      <div className="mx-auto max-w-xl">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.6, ease: EASE_PREMIUM }}
+          className="text-center"
+        >
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-pan-terracota-suave/60 text-pan-terracota">
+            <ShoppingBag className="h-7 w-7" />
+          </div>
+          <h2 className="font-[family-name:var(--font-display-panaderia)] text-4xl font-semibold text-pan-carbon sm:text-5xl">
+            Haz tu pedido
+          </h2>
+          <p className="mt-4 text-lg text-pan-carbon-suave">
+            Déjanos tus datos y te llamamos para confirmar. Sin cuenta, sin contraseñas.
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.6, ease: EASE_PREMIUM, delay: 0.1 }}
+          className="mt-10 rounded-3xl bg-pan-crema-suave p-6 shadow-sm shadow-pan-carbon/5 sm:p-8"
+        >
+          <AnimatePresence mode="wait">
+            {resultado ? (
+              <motion.div
+                key="exito"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="py-6 text-center"
+              >
+                <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" />
+                <h3 className="mt-4 font-[family-name:var(--font-display-panaderia)] text-2xl font-semibold text-pan-carbon">
+                  Pedido #{resultado.numeroPedidoDia} recibido
+                </h3>
+                <p className="mt-2 text-pan-carbon-suave">{resultado.mensaje}</p>
+                <p className="mt-3 text-lg font-semibold text-pan-terracota">
+                  Total: S/ {resultado.total.toFixed(2)}
+                </p>
+                <button
+                  onClick={pedirOtroVez}
+                  className="mt-6 rounded-full border border-pan-bronce-suave px-5 py-2.5 text-sm font-semibold text-pan-carbon transition-colors hover:bg-pan-crema-muted"
+                >
+                  Hacer otro pedido
+                </button>
+              </motion.div>
+            ) : (
+              <motion.form
+                key="formulario"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                onSubmit={enviar}
+                className="space-y-5"
+              >
+                <div>
+                  <label htmlFor="dni" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                    DNI
+                  </label>
+                  <input
+                    id="dni"
+                    inputMode="numeric"
+                    maxLength={8}
+                    value={dni}
+                    onChange={(e) => setDni(e.target.value.replace(/\D/g, ""))}
+                    placeholder="12345678"
+                    required
+                    className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                  />
+                  <p className="mt-1 text-xs text-pan-carbon-suave">
+                    Lo verificamos con RENIEC para confirmar tu nombre — no necesitas escribirlo.
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="telefono" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                    Celular
+                  </label>
+                  <input
+                    id="telefono"
+                    inputMode="numeric"
+                    maxLength={20}
+                    value={telefono}
+                    onChange={(e) => setTelefono(e.target.value.replace(/\D/g, ""))}
+                    placeholder="987654321"
+                    required
+                    className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="producto" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                    Producto
+                  </label>
+                  <select
+                    id="producto"
+                    value={idProducto}
+                    onChange={(e) => setIdProducto(Number(e.target.value))}
+                    disabled={cargandoProductos || productos.length === 0}
+                    required
+                    className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota disabled:opacity-60"
+                  >
+                    {cargandoProductos && <option>Cargando productos…</option>}
+                    {!cargandoProductos &&
+                      productos.map((p) => (
+                        <option key={p.idProducto} value={p.idProducto}>
+                          {p.nombre} — S/ {p.precioUnitario.toFixed(2)}
+                        </option>
+                      ))}
+                  </select>
+                  {errorCatalogo && <p className="mt-1.5 text-xs text-red-700">{errorCatalogo}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor="cantidad" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                    Cantidad
+                  </label>
+                  <input
+                    id="cantidad"
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={cantidad}
+                    onChange={(e) => setCantidad(e.target.value)}
+                    required
+                    className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="notas" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                    Notas (opcional)
+                  </label>
+                  <textarea
+                    id="notas"
+                    value={notas}
+                    onChange={(e) => setNotas(e.target.value)}
+                    rows={2}
+                    placeholder="Ej: para recoger mañana temprano"
+                    className="w-full resize-none rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                  />
+                </div>
+
+                {productoSeleccionado && cantidadNum > 0 && (
+                  <div className="flex items-center justify-between rounded-xl bg-pan-terracota-suave/40 px-4 py-3">
+                    <span className="text-sm font-medium text-pan-carbon">Total estimado</span>
+                    <span className="text-lg font-semibold text-pan-terracota">S/ {total.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {error && <p className="text-sm font-medium text-red-700">{error}</p>}
+
+                <button
+                  type="submit"
+                  disabled={enviando || cargandoProductos}
+                  className="flex w-full items-center justify-center gap-2 rounded-full bg-pan-terracota px-6 py-3.5 font-semibold text-pan-crema shadow-lg shadow-pan-terracota/20 transition-transform hover:scale-[1.02] disabled:opacity-60 disabled:hover:scale-100"
+                >
+                  {enviando ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Enviando…
+                    </>
+                  ) : (
+                    "Enviar pedido"
+                  )}
+                </button>
+              </motion.form>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </div>
+    </section>
+  );
+}

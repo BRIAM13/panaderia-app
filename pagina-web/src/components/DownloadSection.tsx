@@ -9,7 +9,7 @@ export function DownloadSection() {
   const detectado = useDetectOS();
 
   return (
-    <section id="descargar" className="border-t border-carbon-800 px-6 py-28">
+    <section id="descargar" className="border-t border-carbon-800 bg-carbon-950 px-6 py-28">
       <div className="mx-auto max-w-3xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -18,11 +18,15 @@ export function DownloadSection() {
           transition={{ duration: 0.6, ease: EASE_PREMIUM }}
           className="mb-12 text-center"
         >
+          <span className="mb-4 inline-block rounded-full bg-carbon-800 px-4 py-1.5 text-xs font-medium tracking-wide text-carbon-400 uppercase">
+            Para nuestro equipo
+          </span>
           <h2 className="font-[family-name:var(--font-display)] text-4xl font-bold text-white sm:text-5xl">
-            Elige dónde <span className="text-gradient-neon">empezar.</span>
+            El sistema de <span className="text-gradient-neon">gestión.</span>
           </h2>
           <p className="mt-4 text-lg text-carbon-400">
-            Android y Web ya están listos. El resto de plataformas se están terminando de preparar.
+            Esto es lo que usa nuestro personal para gestionar pedidos, deudas y pagos — no hace falta
+            descargar nada para pedir tu pan, eso ya lo hiciste arriba.
           </p>
         </motion.div>
 

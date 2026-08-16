@@ -1,16 +1,22 @@
 import { Navbar } from "./components/Navbar";
 import { Hero } from "./components/Hero";
-import { BentoGrid } from "./components/BentoGrid";
+import { Nosotros } from "./components/Nosotros";
+import { Menu } from "./components/Menu";
+import { PedidoForm } from "./components/PedidoForm";
+import { Ubicacion } from "./components/Ubicacion";
 import { DownloadSection } from "./components/DownloadSection";
 import { Footer } from "./components/Footer";
 
 function App() {
   return (
-    <div className="min-h-screen bg-carbon-950">
+    <div className="min-h-screen bg-pan-crema">
       <Navbar />
       <main>
         <Hero />
-        <BentoGrid />
+        <Nosotros />
+        <Menu />
+        <PedidoForm />
+        <Ubicacion />
         <DownloadSection />
       </main>
       <Footer />
