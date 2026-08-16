@@ -5,8 +5,8 @@ const { obtenerIdTrabajador, obtenerTiendasAsignadas, tieneAccesoATienda } = req
 const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos');
 
 async function crearPedido(req, res, next) {
-  const { idCliente, tipoPedido, cantidad, precioUnitario, fechaEntrega, notas } = req.body;
-  const { idPersona, idUsuario } = req.usuario;
+  const { idCliente, idProducto, tipoPedido, cantidad, precioUnitario, fechaEntrega, notas } = req.body;
+  const { idPersona, idUsuario, rol } = req.usuario;
 
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
@@ -41,23 +41,37 @@ async function crearPedido(req, res, next) {
     }
     const cliente = clienteResult.recordset[0];
 
-    // El producto solo se usa para categorizar el pedido en reportes; el
-    // precio real lo decide el vendedor en pantalla (ver más abajo), no el
-    // catálogo — así se pueden negociar descuentos o precios especiales.
-    const productoResult = await new sql.Request(transaction).query(`
-      SELECT TOP 1 p.IdProducto, c.IdTienda
-      FROM Productos p
-      INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
-      WHERE c.Nombre = 'Pan de Hamburguesa' AND p.Estado = 1
-      ORDER BY p.IdProducto
-    `);
+    // El producto solo se usa para categorizar el pedido en reportes (y
+    // para derivar a qué tienda pertenece); el precio real lo decide el
+    // vendedor en pantalla (ver más abajo), no el catálogo — así se pueden
+    // negociar descuentos o precios especiales. Restringido a las mismas
+    // tiendas de catálogo simple que el autoservicio (ver SLUGS_AUTOSERVICIO
+    // en crearMiPedido) — Horneados sigue registrándose por su propio
+    // endpoint, con sus campos propios.
+    const productoResult = await new sql.Request(transaction)
+      .input('IdProducto', sql.Int, idProducto)
+      .query(`
+        SELECT p.IdProducto, t.IdTienda
+        FROM Productos p
+        INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
+        INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
+        WHERE p.IdProducto = @IdProducto AND p.Estado = 1 AND t.Estado = 1
+          AND t.Slug IN ('${SLUGS_AUTOSERVICIO.join("','")}')
+      `);
 
     if (productoResult.recordset.length === 0) {
       await transaction.rollback();
-      return res.status(500).json({ mensaje: 'No hay un producto de Pan de Hamburguesa configurado' });
+      return res.status(400).json({ mensaje: 'Ese producto ya no está disponible para pedir.' });
     }
 
-    const { IdProducto: idProducto, IdTienda: idTienda } = productoResult.recordset[0];
+    const { IdProducto: idProductoValido, IdTienda: idTienda } = productoResult.recordset[0];
+
+    const acceso = await tieneAccesoATienda({ rol, idPersona, idTienda });
+    if (!acceso) {
+      await transaction.rollback();
+      return res.status(403).json({ mensaje: 'No tienes acceso a esta tienda.' });
+    }
+
     const precioUnitarioFinal = Number(Number(precioUnitario).toFixed(2));
     const total = Number((precioUnitarioFinal * cantidad).toFixed(2));
     // La fecha/hora de entrega es opcional: un pedido puede quedar "sin
@@ -69,7 +83,7 @@ async function crearPedido(req, res, next) {
     const insertResult = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, idCliente)
       .input('IdTienda', sql.Int, idTienda)
-      .input('IdProducto', sql.Int, idProducto)
+      .input('IdProducto', sql.Int, idProductoValido)
       .input('IdTrabajador', sql.Int, idTrabajador)
       .input('IdUsuarioRegistro', sql.Int, idUsuario)
       .input('TipoPedido', sql.VarChar(20), tipoPedido)
@@ -93,7 +107,7 @@ async function crearPedido(req, res, next) {
       accion: 'CREAR_PEDIDO',
       tablaAfectada: 'Pedidos',
       registroAfectadoId: String(idPedido),
-      datosNuevos: { idCliente, tipoPedido, cantidad, precioUnitario: precioUnitarioFinal, total, fechaEntrega },
+      datosNuevos: { idCliente, idProducto: idProductoValido, tipoPedido, cantidad, precioUnitario: precioUnitarioFinal, total, fechaEntrega },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -339,26 +353,6 @@ async function crearMiPedido(req, res, next) {
   }
 }
 
-/**
- * Este controller entero es exclusivo de Hamburguesas (ver `crearPedido`,
- * que ya resuelve su IdTienda igual). Ahora que `Pedidos` también recibe
- * filas de Horneados (mismo tabla, otro rubro — ver horneadosController.js),
- * listarPedidos/listarDeudas necesitan este mismo candado explícito: sin
- * él, un pedido de Horneados se colaba en la vista de Hamburguesas para
- * cualquier SUPERADMIN (que antes veía "todas las tiendas" sin problema,
- * porque Hamburguesas era la única con pedidos reales).
- */
-async function obtenerIdTiendaHamburguesas(pool) {
-  const resultado = await pool.request().query(`
-    SELECT TOP 1 c.IdTienda
-    FROM Productos p
-    INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
-    WHERE c.Nombre = 'Pan de Hamburguesa' AND p.Estado = 1
-    ORDER BY p.IdProducto
-  `);
-  return resultado.recordset[0]?.IdTienda ?? null;
-}
-
 const SELECT_PEDIDOS_BASE = `
   SELECT pd.IdPedido, pd.NumeroPedidoDia, pd.IdCliente, pd.IdTienda, pd.TipoPedido, pd.Cantidad, pd.PrecioUnitario, pd.Total, pd.FechaEntrega,
          pd.Estado, pd.EstadoPago, pd.FechaEntregaReal, pd.Notas, pd.FechaCreacion,
@@ -439,13 +433,20 @@ function mapearFilaPedido(fila, incluirAuditoria = false) {
 }
 
 /**
- * Endpoint exclusivo de Hamburguesas (ver nota en [obtenerIdTiendaHamburguesas]):
- * SUPERADMIN ve todos los pedidos DE HAMBURGUESAS. TRABAJADOR/ADMIN los ven
- * solo si tienen acceso vigente a esa tienda — mismo candado que ya aplica
- * para gestionar trabajadores/notificaciones.
+ * Pedidos de UNA tienda de catálogo simple (Hamburguesas o Panadería —
+ * Horneados tiene su propio endpoint dedicado en horneadosController.js).
+ * SUPERADMIN ve cualquier tienda que pida. TRABAJADOR/ADMIN solo si tienen
+ * acceso vigente a esa tienda — mismo candado que ya aplica para gestionar
+ * trabajadores/notificaciones. Sin acceso, devuelve lista vacía (no 403):
+ * así la pantalla no necesita distinguir "sin acceso" de "sin pedidos".
  */
 async function listarPedidos(req, res, next) {
   try {
+    const idTienda = Number(req.query.idTienda);
+    if (!idTienda) {
+      return res.status(400).json({ mensaje: 'Debes indicar una tienda válida.' });
+    }
+
     const pool = await getPool();
     // Quién registró/aprobó/canceló/entregó cada pedido es información
     // sensible de gestión interna — solo ADMIN/SUPERADMIN la ven, un
@@ -453,28 +454,23 @@ async function listarPedidos(req, res, next) {
     const incluirAuditoria = ['ADMIN', 'SUPERADMIN'].includes(req.usuario.rol);
     const mapear = (fila) => mapearFilaPedido(fila, incluirAuditoria);
 
-    const idTiendaHamburguesas = await obtenerIdTiendaHamburguesas(pool);
-    if (!idTiendaHamburguesas) {
-      return res.status(200).json({ pedidos: [] });
-    }
-
     if (req.usuario.rol === 'SUPERADMIN') {
       const result = await pool
         .request()
-        .input('IdTienda', sql.Int, idTiendaHamburguesas)
+        .input('IdTienda', sql.Int, idTienda)
         .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdTienda = @IdTienda ORDER BY pd.FechaCreacion DESC`);
       return res.status(200).json({ pedidos: result.recordset.map(mapear) });
     }
 
     const idTrabajador = await obtenerIdTrabajador(req.usuario.idPersona);
     const idsTiendas = idTrabajador ? await obtenerTiendasAsignadas(idTrabajador) : [];
-    if (!idsTiendas.includes(idTiendaHamburguesas)) {
+    if (!idsTiendas.includes(idTienda)) {
       return res.status(200).json({ pedidos: [] });
     }
 
     const result = await pool
       .request()
-      .input('IdTienda', sql.Int, idTiendaHamburguesas)
+      .input('IdTienda', sql.Int, idTienda)
       .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdTienda = @IdTienda ORDER BY pd.FechaCreacion DESC`);
     return res.status(200).json({ pedidos: result.recordset.map(mapear) });
   } catch (err) {
@@ -761,42 +757,42 @@ async function rechazarPedido(req, res, next) {
 }
 
 /**
- * Deudas pendientes (Estado=ENTREGADO, EstadoPago=DEUDA) DE HAMBURGUESAS,
- * con el mismo candado de tienda que listarPedidos — SUPERADMIN las ve
- * todas, el resto solo si tiene acceso vigente a esa tienda. El pago real
- * por distintos medios queda para más adelante; por ahora el personal solo
- * puede marcarla saldada a mano (ej. el cliente pagó en efectivo/Yape y se
- * confirma manualmente).
+ * Deudas pendientes (Estado=ENTREGADO, EstadoPago=DEUDA) de UNA tienda de
+ * catálogo simple, con el mismo candado de tienda que listarPedidos —
+ * SUPERADMIN las ve todas, el resto solo si tiene acceso vigente a esa
+ * tienda. El pago real por distintos medios queda para más adelante; por
+ * ahora el personal solo puede marcarla saldada a mano (ej. el cliente pagó
+ * en efectivo/Yape y se confirma manualmente).
  */
 async function listarDeudas(req, res, next) {
   try {
+    const idTienda = Number(req.query.idTienda);
+    if (!idTienda) {
+      return res.status(400).json({ mensaje: 'Debes indicar una tienda válida.' });
+    }
+
     const pool = await getPool();
     const filtroEstado = "WHERE pd.Estado = 'ENTREGADO' AND pd.EstadoPago = 'DEUDA'";
     const incluirAuditoria = ['ADMIN', 'SUPERADMIN'].includes(req.usuario.rol);
     const mapear = (fila) => mapearFilaPedido(fila, incluirAuditoria);
 
-    const idTiendaHamburguesas = await obtenerIdTiendaHamburguesas(pool);
-    if (!idTiendaHamburguesas) {
-      return res.status(200).json({ pedidos: [] });
-    }
-
     if (req.usuario.rol === 'SUPERADMIN') {
       const result = await pool
         .request()
-        .input('IdTienda', sql.Int, idTiendaHamburguesas)
+        .input('IdTienda', sql.Int, idTienda)
         .query(`${SELECT_PEDIDOS_BASE} ${filtroEstado} AND pd.IdTienda = @IdTienda ORDER BY pd.FechaEntregaReal ASC`);
       return res.status(200).json({ pedidos: result.recordset.map(mapear) });
     }
 
     const idTrabajador = await obtenerIdTrabajador(req.usuario.idPersona);
     const idsTiendas = idTrabajador ? await obtenerTiendasAsignadas(idTrabajador) : [];
-    if (!idsTiendas.includes(idTiendaHamburguesas)) {
+    if (!idsTiendas.includes(idTienda)) {
       return res.status(200).json({ pedidos: [] });
     }
 
     const result = await pool
       .request()
-      .input('IdTienda', sql.Int, idTiendaHamburguesas)
+      .input('IdTienda', sql.Int, idTienda)
       .query(`${SELECT_PEDIDOS_BASE} ${filtroEstado} AND pd.IdTienda = @IdTienda ORDER BY pd.FechaEntregaReal ASC`);
     return res.status(200).json({ pedidos: result.recordset.map(mapear) });
   } catch (err) {

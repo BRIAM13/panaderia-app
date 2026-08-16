@@ -249,4 +249,64 @@ async function fechasConVentas(req, res, next) {
   }
 }
 
-module.exports = { listarTiendas, misTiendas, resumenTienda, fechasConVentas };
+// Mismas tiendas que SLUGS_AUTOSERVICIO en pedidosController.js: catálogo
+// simple de producto+cantidad, a diferencia de Horneados (campos propios,
+// sin catálogo de precio fijo).
+const SLUGS_CATALOGO_SIMPLE = ['hamburguesas', 'panaderia'];
+
+/**
+ * Catálogo de una tienda puntual para que el personal registre un pedido
+ * (`NuevoPedidoPage`) — mismo shape que el catálogo público de la página web
+ * (`listarCatalogoPublico` en publicoController.js), pero autenticado y
+ * acotado a UNA tienda. El candado de acceso a esa tienda lo aplica
+ * `autorizarTienda` en la ruta.
+ */
+async function listarProductosTienda(req, res, next) {
+  try {
+    const idTienda = Number(req.params.idTienda);
+    const pool = await getPool();
+
+    const tiendaResult = await pool
+      .request()
+      .input('IdTienda', sql.Int, idTienda)
+      .query('SELECT Slug FROM Tiendas WHERE IdTienda = @IdTienda AND Estado = 1');
+    if (tiendaResult.recordset.length === 0 || !SLUGS_CATALOGO_SIMPLE.includes(tiendaResult.recordset[0].Slug)) {
+      return res.status(400).json({ mensaje: 'Esta tienda no tiene catálogo de autoservicio.' });
+    }
+    const slug = tiendaResult.recordset[0].Slug;
+
+    const result = await pool
+      .request()
+      .input('IdTienda', sql.Int, idTienda)
+      .query(`
+        SELECT p.IdProducto, p.Nombre, p.PrecioUnitario
+        FROM Productos p
+        INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
+        WHERE c.IdTienda = @IdTienda AND p.Estado = 1
+        ORDER BY p.IdProducto
+      `);
+
+    // El pan de hamburguesa se vende por paquete de 12 a precio fijo (el
+    // mismo que ve el cliente en autoservicio), no por unidad suelta como el
+    // resto del catálogo — ver misma lógica en listarCatalogoPublico.
+    const esPaquete = slug === 'hamburguesas';
+    let precioPaquete = null;
+    if (esPaquete) {
+      const config = await pool.request().query("SELECT Valor FROM Configuraciones WHERE Clave = 'PRECIO_PAQUETE'");
+      precioPaquete = config.recordset.length > 0 ? Number(config.recordset[0].Valor) : null;
+    }
+
+    return res.status(200).json({
+      productos: result.recordset.map((p) => ({
+        idProducto: p.IdProducto,
+        nombre: p.Nombre,
+        precioUnitario: esPaquete && precioPaquete != null ? precioPaquete : p.PrecioUnitario,
+        esPaquete,
+      })),
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = { listarTiendas, misTiendas, resumenTienda, fechasConVentas, listarProductosTienda };

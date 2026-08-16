@@ -308,11 +308,14 @@ function validateCambiarPasswordSeguro(req, res, next) {
 }
 
 function validatePedido(req, res, next) {
-  const { idCliente, tipoPedido, cantidad, precioUnitario, fechaEntrega } = req.body;
+  const { idCliente, idProducto, tipoPedido, cantidad, precioUnitario, fechaEntrega } = req.body;
   const errores = [];
 
   if (!Number.isInteger(idCliente) || idCliente <= 0) {
     errores.push('Debe seleccionar un cliente válido.');
+  }
+  if (!Number.isInteger(idProducto) || idProducto <= 0) {
+    errores.push('Debe seleccionar un producto válido.');
   }
   if (tipoPedido !== 'UNIDADES' && tipoPedido !== 'PAQUETES') {
     errores.push('El tipo de pedido debe ser UNIDADES o PAQUETES.');
