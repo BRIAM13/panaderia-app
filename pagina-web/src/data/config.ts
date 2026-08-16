@@ -1,6 +1,5 @@
 // Toda la información editable del sitio vive acá — para cambiar textos,
-// productos, la misión/visión o los links de descarga NO hace falta tocar
-// ningún componente.
+// productos o la misión/visión NO hace falta tocar ningún componente.
 
 export const SITE = {
   nombre: "Panadería Ronceros",
@@ -72,85 +71,4 @@ export const PRODUCTOS: ProductoMenu[] = [
   },
 ];
 
-export type OS = "android" | "ios" | "windows" | "macos" | "web";
-
-export interface PlataformaDescarga {
-  id: OS;
-  nombre: string;
-  estado: "disponible" | "en-camino" | "proximamente";
-  descripcionEstado: string;
-  /** Ruta pública del instalador/app, o null si todavía no hay nada. */
-  archivo: string | null;
-  /** Nombre visible del archivo a descargar (null si no aplica, ej. "abrir"). */
-  nombreArchivo: string | null;
-  /** true = además de la acción principal, se puede escanear un QR. */
-  viaQr: boolean;
-  /** "descargar" = botón de bajar un archivo; "abrir" = enlace directo (Web). */
-  tipoAccion: "descargar" | "abrir";
-}
-
-// "archivo" acepta dos formas: una ruta relativa dentro de /public (Vite la
-// sirve tal cual, resuelta contra el dominio donde se despliegue el sitio —
-// ver PlatformCard.tsx), o una URL externa completa (ej. GitHub Releases,
-// para binarios grandes que no conviene empaquetar en el propio deploy).
-export const PLATAFORMAS: PlataformaDescarga[] = [
-  {
-    id: "android",
-    nombre: "Android",
-    estado: "disponible",
-    descripcionEstado: "Instalador directo (.apk)",
-    // NO se sirve desde GitHub Releases: el repo es privado, así que esos
-    // links de descarga dan 404 a cualquier visitante sin sesión — se
-    // vuelve a empaquetar directo en el propio deploy de Vercel, que es
-    // público sin importar que el repo fuente sea privado.
-    // Nombre fijo (no versionado): scripts/publicar_actualizacion.ps1
-    // sobrescribe este mismo archivo en cada release, así que el botón de
-    // la landing siempre sirve la versión más reciente sin tener que tocar
-    // este archivo a mano cada vez.
-    archivo: "/downloads/CorporacionRonceros-latest.apk",
-    nombreArchivo: "CorporacionRonceros.apk",
-    viaQr: true,
-    tipoAccion: "descargar",
-  },
-  {
-    id: "windows",
-    nombre: "Windows",
-    estado: "en-camino",
-    descripcionEstado: "Instalador (.exe) en preparación final",
-    archivo: null,
-    nombreArchivo: "CorporacionRonceros-Setup.exe",
-    viaQr: false,
-    tipoAccion: "descargar",
-  },
-  {
-    id: "web",
-    nombre: "Web",
-    estado: "disponible",
-    descripcionEstado: "Ábrela directo en tu navegador, sin instalar nada",
-    archivo: "/app/",
-    nombreArchivo: null,
-    viaQr: true,
-    tipoAccion: "abrir",
-  },
-  {
-    id: "ios",
-    nombre: "iOS",
-    estado: "proximamente",
-    descripcionEstado: "En revisión por Apple Developer Program",
-    archivo: null,
-    nombreArchivo: null,
-    viaQr: true,
-    tipoAccion: "descargar",
-  },
-  {
-    id: "macos",
-    nombre: "macOS",
-    estado: "proximamente",
-    descripcionEstado: "Compilación pendiente de licencia Apple",
-    archivo: null,
-    nombreArchivo: null,
-    viaQr: false,
-    tipoAccion: "descargar",
-  },
-];
 

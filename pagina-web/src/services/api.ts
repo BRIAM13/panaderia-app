@@ -1,5 +1,6 @@
-// Cliente delgado para las dos únicas rutas públicas del backend (sin
-// login) — ver backend_server/controllers/publicoController.js.
+// Cliente delgado para el backend: las rutas públicas (sin login, ver
+// publicoController.js) y las de cuenta de cliente (login + mis pedidos,
+// las mismas que ya usa la app móvil).
 
 const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
@@ -65,4 +66,85 @@ export async function crearPedidoPublico(
     body: JSON.stringify(input),
   });
   return manejarRespuesta<PedidoPublicoResultado>(respuesta);
+}
+
+export interface UsuarioSesion {
+  idUsuario: number;
+  idPersona: number;
+  nombreUsuario: string;
+  rol: string;
+  requiereCambioPassword: boolean;
+  nombres: string | null;
+  apellidoPaterno: string | null;
+  apellidoMaterno: string | null;
+}
+
+export interface LoginResultado {
+  accessToken: string;
+  refreshToken: string;
+  usuario: UsuarioSesion;
+}
+
+/** Mismo login que usa la app móvil (POST /auth/login) — el usuario es el
+ * DNI para cualquier cuenta creada desde un pedido web (ver
+ * publicoController.js), con la contraseña por defecto también el DNI. */
+export async function login(nombreUsuario: string, password: string): Promise<LoginResultado> {
+  const respuesta = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nombreUsuario, password }),
+  });
+  return manejarRespuesta<LoginResultado>(respuesta);
+}
+
+export async function cambiarPasswordPrimerIngreso(
+  accessToken: string,
+  passwordNueva: string,
+): Promise<void> {
+  const respuesta = await fetch(`${API_BASE_URL}/auth/cambiar-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ passwordNueva }),
+  });
+  await manejarRespuesta(respuesta);
+}
+
+export interface PedidoClienteResumen {
+  dni: string | null;
+  nombres: string;
+  apellidoPaterno: string;
+  apellidoMaterno: string | null;
+  descripcionNegocio: string | null;
+}
+
+/** Un pedido propio, tal como lo devuelve GET /pedidos/mis-pedidos — ya
+ * excluye rechazados/cancelados, e incluye pedidos de cualquier tienda
+ * (Hamburguesas, Panadería, etc.), no solo una. */
+export interface PedidoCliente {
+  idPedido: number;
+  numeroPedidoDia: number;
+  tienda: string | null;
+  producto: string;
+  tipoPedido: string;
+  cantidad: number;
+  precioUnitario: number;
+  total: number;
+  fechaEntrega: string | null;
+  estado: string;
+  estadoPago: string | null;
+  fechaEntregaReal: string | null;
+  notas: string | null;
+  fechaCreacion: string;
+  cliente: PedidoClienteResumen;
+}
+
+export async function obtenerMisPedidos(accessToken: string): Promise<PedidoCliente[]> {
+  const respuesta = await fetch(`${API_BASE_URL}/pedidos/mis-pedidos`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await manejarRespuesta<{ pedidos: PedidoCliente[] }>(respuesta);
+  return data.pedidos;
 }
