@@ -3,7 +3,7 @@ const { registrarAuditoria } = require('../utils/auditLog');
 const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos');
 const { buscarPersonaPorDni } = require('./externalController');
 const { intentarClonarUsuarioCliente } = require('./clientesController');
-const { notificarPersonalTienda } = require('./pedidosController');
+const { notificarPersonalTienda, SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
 
 // Tiendas que la página web pública puede mostrar/vender — Mercadería y
 // Pastelería todavía no tienen catálogo real, y Horneados tiene precio
@@ -235,4 +235,51 @@ async function crearPedidoPublico(req, res, next) {
   }
 }
 
-module.exports = { listarCatalogoPublico, crearPedidoPublico };
+/**
+ * Consulta pública de pedidos por DNI, sin login: el visitante solo escribe
+ * su DNI (ya validado por validateConsultarPedidosPublico) y ve sus pedidos
+ * SOLICITADO (pendiente de confirmar) y PENDIENTE (confirmado, pendiente de
+ * entrega) — nunca los ya ENTREGADO/RECHAZADO/CANCELADO, que quedan solo
+ * para el historial dentro de la app real. Mismo límite por IP que
+ * crearPedidoPublico: es la otra puerta sin JWT del sistema.
+ */
+async function consultarPedidosPublicos(req, res, next) {
+  if (limiteExcedido(req.ip)) {
+    return res.status(429).json({ mensaje: 'Demasiados intentos. Intenta de nuevo en unos minutos.' });
+  }
+
+  const dniLimpio = String(req.query.dni).trim();
+
+  try {
+    const pool = await getPool();
+
+    const personaResult = await pool.request()
+      .input('DNI', sql.VarChar(15), dniLimpio)
+      .query('SELECT IdPersona, Nombres, ApellidoPaterno FROM Personas WHERE DNI = @DNI');
+    if (personaResult.recordset.length === 0) {
+      return res.status(200).json({ nombre: null, pedidos: [] });
+    }
+    const { IdPersona: idPersona, Nombres: nombres, ApellidoPaterno: apellidoPaterno } = personaResult.recordset[0];
+
+    const clienteResult = await pool.request()
+      .input('IdPersona', sql.Int, idPersona)
+      .query('SELECT IdCliente FROM Clientes WHERE IdPersona = @IdPersona');
+    if (clienteResult.recordset.length === 0) {
+      return res.status(200).json({ nombre: [nombres, apellidoPaterno].filter(Boolean).join(' '), pedidos: [] });
+    }
+    const { IdCliente: idCliente } = clienteResult.recordset[0];
+
+    const pedidosResult = await pool.request()
+      .input('IdCliente', sql.Int, idCliente)
+      .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdCliente = @IdCliente AND pd.Estado IN ('SOLICITADO', 'PENDIENTE') ORDER BY pd.FechaCreacion DESC`);
+
+    return res.status(200).json({
+      nombre: [nombres, apellidoPaterno].filter(Boolean).join(' '),
+      pedidos: pedidosResult.recordset.map((fila) => mapearFilaPedido(fila)),
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = { listarCatalogoPublico, crearPedidoPublico, consultarPedidosPublicos };

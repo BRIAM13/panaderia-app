@@ -563,6 +563,20 @@ function validateSolicitudPago(req, res, next) {
   next();
 }
 
+/**
+ * Consulta pública de pedidos por DNI (ver publicoController.js) — igual
+ * de sin-JWT que validateCrearPedidoPublico, el DNI viene por query string.
+ */
+function validateConsultarPedidosPublico(req, res, next) {
+  const { dni } = req.query;
+
+  if (!isNonEmptyString(dni) || !DNI_PERU_REGEX.test(dni.trim())) {
+    return res.status(400).json({ mensaje: 'Ingresa un DNI válido de 8 dígitos.' });
+  }
+
+  next();
+}
+
 module.exports = {
   validateRegister,
   validateLogin,
@@ -575,6 +589,7 @@ module.exports = {
   validateMiPedido,
   validateCrearPedidoHorneado,
   validateCrearPedidoPublico,
+  validateConsultarPedidosPublico,
   validateConfiguracion,
   validateMedioPago,
   validateActualizarMedioPago,

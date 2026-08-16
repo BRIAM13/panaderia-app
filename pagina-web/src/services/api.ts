@@ -66,3 +66,28 @@ export async function crearPedidoPublico(
   });
   return manejarRespuesta<PedidoPublicoResultado>(respuesta);
 }
+
+/** Solo los dos estados que le importan a un cliente esperando su pan:
+ * SOLICITADO (todavía nadie de la tienda lo confirmó) y PENDIENTE
+ * (confirmado, en camino a entregarse). Ya entregado/cancelado/rechazado no
+ * aparece acá — eso queda para el historial dentro de /app/. */
+export interface PedidoPublicoConsultaItem {
+  idPedido: number;
+  numeroPedidoDia: number;
+  tienda: string | null;
+  producto: string;
+  cantidad: number;
+  total: number;
+  estado: "SOLICITADO" | "PENDIENTE";
+  fechaCreacion: string;
+}
+
+export interface PedidoPublicoConsultaResultado {
+  nombre: string | null;
+  pedidos: PedidoPublicoConsultaItem[];
+}
+
+export async function consultarPedidosPublicos(dni: string): Promise<PedidoPublicoConsultaResultado> {
+  const respuesta = await fetch(`${API_BASE_URL}/publico/pedidos?dni=${encodeURIComponent(dni)}`);
+  return manejarRespuesta<PedidoPublicoConsultaResultado>(respuesta);
+}
