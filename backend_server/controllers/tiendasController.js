@@ -309,4 +309,66 @@ async function listarProductosTienda(req, res, next) {
   }
 }
 
-module.exports = { listarTiendas, misTiendas, resumenTienda, fechasConVentas, listarProductosTienda };
+/**
+ * Cambia el precio por unidad de UN producto de una tienda de catálogo
+ * simple (ej. Pan de Agua en Panadería) — usado por la pantalla "Ajustar
+ * precios". Restringido a ADMIN/SUPERADMIN en la ruta, además del candado
+ * de acceso a la tienda (`autorizarTienda`). El precio nuevo solo aplica
+ * hacia adelante — no toca pedidos ya registrados (mismo criterio que
+ * `AjusteCostosPage`, que edita el precio de PAQUETE de Hamburguesas).
+ */
+async function actualizarPrecioProducto(req, res, next) {
+  try {
+    const idTienda = Number(req.params.idTienda);
+    const idProducto = Number(req.params.idProducto);
+    const { precioUnitario } = req.body;
+
+    if (typeof precioUnitario !== 'number' || !Number.isFinite(precioUnitario) || precioUnitario <= 0) {
+      return res.status(400).json({ mensaje: 'El precio debe ser un número mayor a 0.' });
+    }
+
+    const pool = await getPool();
+
+    const tiendaResult = await pool
+      .request()
+      .input('IdTienda', sql.Int, idTienda)
+      .query('SELECT Slug FROM Tiendas WHERE IdTienda = @IdTienda AND Estado = 1');
+    if (tiendaResult.recordset.length === 0 || !SLUGS_CATALOGO_SIMPLE.includes(tiendaResult.recordset[0].Slug)) {
+      return res.status(400).json({ mensaje: 'Esta tienda no tiene catálogo de autoservicio.' });
+    }
+
+    const productoResult = await pool
+      .request()
+      .input('IdProducto', sql.Int, idProducto)
+      .input('IdTienda', sql.Int, idTienda)
+      .query(`
+        SELECT p.IdProducto
+        FROM Productos p
+        INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
+        WHERE p.IdProducto = @IdProducto AND c.IdTienda = @IdTienda AND p.Estado = 1
+      `);
+    if (productoResult.recordset.length === 0) {
+      return res.status(404).json({ mensaje: 'Ese producto no pertenece a esta tienda.' });
+    }
+
+    const precioFinal = Number(precioUnitario.toFixed(2));
+    await pool
+      .request()
+      .input('IdProducto', sql.Int, idProducto)
+      .input('PrecioUnitario', sql.Decimal(10, 2), precioFinal)
+      .query('UPDATE Productos SET PrecioUnitario = @PrecioUnitario WHERE IdProducto = @IdProducto');
+
+    return res.status(200).json({ mensaje: 'Precio actualizado', precioUnitario: precioFinal });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = {
+  listarTiendas,
+  misTiendas,
+  resumenTienda,
+  fechasConVentas,
+  listarProductosTienda,
+  actualizarPrecioProducto,
+};

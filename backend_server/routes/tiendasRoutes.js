@@ -1,5 +1,12 @@
 const express = require('express');
-const { listarTiendas, misTiendas, resumenTienda, fechasConVentas, listarProductosTienda } = require('../controllers/tiendasController');
+const {
+  listarTiendas,
+  misTiendas,
+  resumenTienda,
+  fechasConVentas,
+  listarProductosTienda,
+  actualizarPrecioProducto,
+} = require('../controllers/tiendasController');
 const { verificarToken, autorizarRoles, autorizarTienda } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
@@ -29,6 +36,14 @@ router.get(
   autorizarRoles('TRABAJADOR', 'ADMIN', 'SUPERADMIN'),
   autorizarTienda((req) => req.params.idTienda),
   listarProductosTienda,
+);
+router.put(
+  '/:idTienda/productos/:idProducto',
+  // Solo ADMIN/SUPERADMIN pueden cambiar precios — mismo nivel que
+  // "Ajuste de costos" de Hamburguesas, un Trabajador raso no.
+  autorizarRoles('ADMIN', 'SUPERADMIN'),
+  autorizarTienda((req) => req.params.idTienda),
+  actualizarPrecioProducto,
 );
 
 module.exports = router;
