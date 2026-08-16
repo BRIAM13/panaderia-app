@@ -3,6 +3,7 @@ const { fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
 const DNI_REGEX = /^[0-9A-Za-z]{8,15}$/;
 const DNI_PERU_REGEX = /^\d{8}$/;
 const RUC_PERU_REGEX = /^\d{11}$/;
+const CELULAR_PERU_REGEX = /^\d{9}$/;
 const USERNAME_REGEX = /^[a-zA-Z0-9_.]{4,50}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -409,8 +410,10 @@ function validateCrearPedidoPublico(req, res, next) {
   if (!isNonEmptyString(dni) || !DNI_PERU_REGEX.test(dni.trim())) {
     errores.push('Ingresa un DNI válido de 8 dígitos.');
   }
-  if (!isNonEmptyString(telefono) || !TELEFONO_REGEX.test(telefono.trim())) {
-    errores.push('Ingresa un número de celular válido.');
+  // Celular peruano: siempre 9 dígitos, más estricto que TELEFONO_REGEX
+  // (6-20, pensado para otros formularios que sí aceptan fijos/extranjeros).
+  if (!isNonEmptyString(telefono) || !CELULAR_PERU_REGEX.test(telefono.trim())) {
+    errores.push('Ingresa un número de celular válido de 9 dígitos.');
   }
   if (!Number.isInteger(idProducto) || idProducto <= 0) {
     errores.push('Selecciona un producto válido.');

@@ -30,25 +30,41 @@ function limiteExcedido(ip) {
   return intentos.length > INTENTOS_MAXIMOS;
 }
 
+async function obtenerPrecioPaquete(pool) {
+  const result = await pool.request().query("SELECT Valor FROM Configuraciones WHERE Clave = 'PRECIO_PAQUETE'");
+  return result.recordset.length > 0 ? Number(result.recordset[0].Valor) : null;
+}
+
 /** Catálogo público: solo lo que un visitante sin cuenta puede pedir desde
- * la página web — no expone la estructura interna de Tiendas/Categorias. */
+ * la página web, no expone la estructura interna de Tiendas/Categorias.
+ * El pan de hamburguesa se vende por paquete de 12 a precio fijo (el mismo
+ * que usa el personal en la app, Configuraciones.PRECIO_PAQUETE), no por
+ * unidad suelta como el resto del catálogo, así que acá se marca con
+ * `esPaquete` para que el formulario lo sepa y pida "cantidad de paquetes"
+ * en vez de "cantidad de unidades". */
 async function listarCatalogoPublico(req, res, next) {
   try {
     const pool = await getPool();
     const result = await pool.request().query(`
-      SELECT p.IdProducto, p.Nombre, p.PrecioUnitario
+      SELECT p.IdProducto, p.Nombre, p.PrecioUnitario, t.Slug
       FROM Productos p
       INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
       INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
       WHERE p.Estado = 1 AND t.Estado = 1 AND t.Slug IN ('${SLUGS_TIENDA_PUBLICA.join("','")}')
       ORDER BY p.IdProducto
     `);
+    const precioPaquete = await obtenerPrecioPaquete(pool);
+
     return res.status(200).json({
-      productos: result.recordset.map((p) => ({
-        idProducto: p.IdProducto,
-        nombre: p.Nombre,
-        precioUnitario: p.PrecioUnitario,
-      })),
+      productos: result.recordset.map((p) => {
+        const esPaquete = p.Slug === 'hamburguesas';
+        return {
+          idProducto: p.IdProducto,
+          nombre: p.Nombre,
+          precioUnitario: esPaquete && precioPaquete != null ? precioPaquete : p.PrecioUnitario,
+          esPaquete,
+        };
+      }),
     });
   } catch (err) {
     return next(err);
@@ -85,7 +101,7 @@ async function crearPedidoPublico(req, res, next) {
     const productoResult = await new sql.Request(transaction)
       .input('IdProducto', sql.Int, idProducto)
       .query(`
-        SELECT p.IdProducto, p.Nombre, p.PrecioUnitario, c.IdTienda
+        SELECT p.IdProducto, p.Nombre, p.PrecioUnitario, c.IdTienda, t.Slug
         FROM Productos p
         INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
         INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
@@ -96,7 +112,16 @@ async function crearPedidoPublico(req, res, next) {
       await transaction.rollback();
       return res.status(400).json({ mensaje: 'Ese producto ya no está disponible para pedir en línea.' });
     }
-    const { IdTienda: idTienda, PrecioUnitario: precioUnitario } = productoResult.recordset[0];
+    const { IdTienda: idTienda, Slug: slugTienda } = productoResult.recordset[0];
+
+    // El pan de hamburguesa se vende por paquete de 12 a precio fijo (no por
+    // unidad suelta) — mismo precio y mismo TipoPedido que usa el personal
+    // en la app (ver crearMiPedido en pedidosController.js).
+    const esPaquete = slugTienda === 'hamburguesas';
+    const tipoPedido = esPaquete ? 'PAQUETES' : 'UNIDADES';
+    const precioUnitario = esPaquete
+      ? (await obtenerPrecioPaquete(pool)) ?? productoResult.recordset[0].PrecioUnitario
+      : productoResult.recordset[0].PrecioUnitario;
 
     const personaExistente = await new sql.Request(transaction)
       .input('DNI', sql.VarChar(15), dniLimpio)
@@ -167,7 +192,7 @@ async function crearPedidoPublico(req, res, next) {
       .input('IdCliente', sql.Int, idCliente)
       .input('IdTienda', sql.Int, idTienda)
       .input('IdProducto', sql.Int, idProducto)
-      .input('TipoPedido', sql.VarChar(20), 'UNIDADES')
+      .input('TipoPedido', sql.VarChar(20), tipoPedido)
       .input('Cantidad', sql.Int, cantidadNum)
       .input('PrecioUnitario', sql.Decimal(10, 2), precioUnitario)
       .input('Total', sql.Decimal(10, 2), total)
