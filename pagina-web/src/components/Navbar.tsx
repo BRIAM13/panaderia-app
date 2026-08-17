@@ -70,7 +70,7 @@ export function Navbar() {
             <a
               href="/downloads/CorporacionRonceros-latest.apk"
               download
-              className="inline-flex items-center gap-1.5 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-4 py-2 text-sm font-medium text-pan-carbon transition-colors hover:bg-pan-crema-muted"
+              className="boton-relleno inline-flex items-center gap-1.5 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-4 py-2 text-sm font-medium text-pan-carbon"
             >
               <Download className="h-4 w-4" />
               Descargar app

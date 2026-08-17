@@ -33,7 +33,7 @@ export function Ubicacion() {
             rel="noopener noreferrer"
             whileHover={{ scale: 1.05, y: -2 }}
             whileTap={{ scale: 0.97 }}
-            className="mt-6 inline-flex items-center gap-2 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-5 py-2.5 text-sm font-semibold text-pan-carbon shadow-sm shadow-pan-carbon/5 transition-colors hover:bg-pan-crema"
+            className="boton-relleno mt-6 inline-flex items-center gap-2 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-5 py-2.5 text-sm font-semibold text-pan-carbon shadow-sm shadow-pan-carbon/5"
           >
             Abrir en Google Maps
             <ExternalLink className="h-4 w-4" />

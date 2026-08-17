@@ -94,7 +94,7 @@ export function Hero() {
               href="#menu"
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.97 }}
-              className="inline-flex items-center gap-2 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-6 py-3.5 font-semibold text-pan-carbon transition-colors hover:bg-pan-crema-muted"
+              className="boton-relleno inline-flex items-center gap-2 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-6 py-3.5 font-semibold text-pan-carbon"
             >
               Ver nuestro pan
             </motion.a>

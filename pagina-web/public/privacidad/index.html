@@ -3,159 +3,647 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Política de Privacidad — Corporación Ronceros</title>
-<meta name="description" content="Política de privacidad de la app Corporación Ronceros." />
+<title>Política de Privacidad · Panadería Ronceros</title>
+<meta name="description" content="Cómo Panadería Ronceros recopila, usa y protege tus datos, tanto en panaderiaronceros.com como en la app del personal." />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --primario: #B5451B;
-    --secundario: #C08A3E;
-    --fondo: #FDF6EC;
-    --superficie: #FFFBF3;
-    --texto: #2B2118;
-    --texto-secundario: #6B5B4C;
-    --borde: #EADFCB;
+    --crema: #fdf6ec;
+    --crema-suave: #fffbf3;
+    --crema-muted: #f3e9d8;
+    --terracota: #b5451b;
+    --terracota-suave: #f3d3be;
+    --terracota-profundo: #7a2e10;
+    --bronce: #c08a3e;
+    --bronce-suave: #f1ddb6;
+    --carbon: #2b2118;
+    --carbon-suave: #6b5b4c;
+    --oro: #e0a940;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0;
-    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--fondo);
-    color: var(--texto);
-    line-height: 1.65;
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--crema);
+    color: var(--carbon);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
   }
-  .encabezado {
-    background: linear-gradient(135deg, var(--primario), var(--secundario));
-    color: #fff;
-    padding: 48px 24px 40px;
-    text-align: center;
-  }
-  .encabezado h1 { margin: 0 0 8px; font-size: 1.9rem; }
-  .encabezado p { margin: 0; opacity: 0.92; }
-  main {
-    max-width: 760px;
-    margin: -24px auto 60px;
-    background: var(--superficie);
-    border-radius: 20px;
-    padding: 36px 32px 44px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.12);
-  }
-  h2 {
-    color: var(--primario);
-    font-size: 1.15rem;
-    margin: 32px 0 10px;
-    border-bottom: 1px solid var(--borde);
-    padding-bottom: 8px;
-  }
-  h2:first-of-type { margin-top: 0; }
-  p, li { color: var(--texto); font-size: 0.97rem; }
-  ul { padding-left: 20px; }
-  li { margin-bottom: 6px; }
-  .meta {
-    color: var(--texto-secundario);
-    font-size: 0.85rem;
-    text-align: center;
-    margin-top: 4px;
-  }
-  a { color: var(--primario); }
-  .volver {
-    display: inline-block;
-    margin-bottom: 20px;
-    color: var(--texto-secundario);
+  h1, h2, h3 { font-family: "Fraunces", Georgia, serif; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--terracota); outline-offset: 3px; border-radius: 4px; }
+
+  .saltar-enlace {
+    position: absolute;
+    left: -999px;
+    top: 12px;
+    z-index: 100;
+    background: var(--carbon);
+    color: var(--crema);
+    padding: 10px 16px;
+    border-radius: 10px;
     text-decoration: none;
     font-size: 0.9rem;
   }
-  .volver:hover { color: var(--primario); }
+  .saltar-enlace:focus { left: 12px; }
+
+  /* Barra de progreso de lectura */
+  .barra-progreso {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: 3px;
+    z-index: 60;
+    background: linear-gradient(90deg, var(--terracota), var(--oro), var(--bronce));
+    transform-origin: left;
+    transform: scaleX(0);
+    transition: transform 0.12s linear;
+  }
+
+  /* Botón de contorno estándar de esta página: empieza vacío y, al pasar
+     el mouse, se llena de color de izquierda a derecha mientras el texto
+     invierte su tono. Mismo lenguaje que el resto del sitio (ver
+     pagina-web/src/index.css → .boton-relleno) para que cualquier botón
+     con borde se sienta igual en cualquier parte de la web. */
+  .boton-relleno {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    color: var(--carbon);
+    border: 1px solid var(--bronce-suave);
+    background: var(--crema-suave);
+    transition: color 0.45s var(--ease), border-color 0.45s var(--ease);
+  }
+  .boton-relleno::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--terracota);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.45s var(--ease);
+  }
+  .boton-relleno:hover,
+  .boton-relleno:focus-visible {
+    color: var(--crema);
+    border-color: var(--terracota);
+  }
+  .boton-relleno:hover::before,
+  .boton-relleno:focus-visible::before { transform: scaleX(1); }
+
+  .boton-volver {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 50;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px 10px 14px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.88rem;
+    text-decoration: none;
+    box-shadow: 0 6px 20px rgba(43, 33, 24, 0.08);
+    transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), color 0.45s var(--ease), border-color 0.45s var(--ease);
+  }
+  .boton-volver svg { width: 16px; height: 16px; transition: transform 0.3s var(--ease); }
+  .boton-volver:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(43, 33, 24, 0.14);
+  }
+  .boton-volver:hover svg { transform: translateX(-3px); }
+
+  .hero {
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+    padding: 96px 24px 56px;
+    background:
+      radial-gradient(ellipse 70% 60% at 15% 0%, var(--terracota-suave) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 55% at 100% 15%, var(--bronce-suave) 0%, transparent 55%),
+      var(--crema);
+  }
+  .hero-icono {
+    width: 76px;
+    height: 76px;
+    margin: 0 auto 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 22px;
+    background: linear-gradient(135deg, var(--terracota), var(--bronce));
+    color: var(--crema);
+    box-shadow: 0 14px 30px rgba(181, 69, 27, 0.28);
+    opacity: 0;
+    transform: scale(0.6) rotate(-12deg);
+    animation: entrar-icono 0.7s var(--ease) 0.1s forwards, flotar 4.5s ease-in-out 1s infinite;
+  }
+  .hero-icono svg { width: 36px; height: 36px; }
+  @keyframes entrar-icono { to { opacity: 1; transform: scale(1) rotate(0deg); } }
+  @keyframes flotar { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  @keyframes subir { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+  .hero-eyebrow {
+    margin: 0 0 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--terracota);
+    opacity: 0;
+    animation: subir 0.6s var(--ease) 0.15s forwards;
+  }
+  .hero h1 {
+    margin: 0 0 14px;
+    font-size: clamp(2rem, 5vw, 2.9rem);
+    font-weight: 600;
+    color: var(--carbon);
+    opacity: 0;
+    animation: subir 0.6s var(--ease) 0.22s forwards;
+  }
+  .hero-sub {
+    max-width: 46ch;
+    margin: 0 auto 4px;
+    color: var(--carbon-suave);
+    font-size: 1.05rem;
+    opacity: 0;
+    animation: subir 0.6s var(--ease) 0.3s forwards;
+  }
+
+  /* Nav de contenido en móvil: acordeón */
+  .toc-toggle {
+    display: none;
+  }
+  @media (max-width: 860px) {
+    .toc-toggle {
+      display: flex;
+      width: calc(100% - 48px);
+      margin: 28px auto 0;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-radius: 16px;
+      font-weight: 600;
+      font-size: 0.92rem;
+      cursor: pointer;
+    }
+    .toc-toggle svg.chevron { width: 18px; height: 18px; transition: transform 0.3s var(--ease); }
+    .toc-toggle[aria-expanded="true"] svg.chevron { transform: rotate(180deg); }
+  }
+
+  .layout {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 24px 40px;
+    display: grid;
+    grid-template-columns: 230px 1fr;
+    gap: 40px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; padding-top: 8px; }
+  }
+
+  .toc-envoltorio {
+    position: sticky;
+    top: 24px;
+    display: flex;
+    gap: 12px;
+  }
+  .toc-linea {
+    width: 2px;
+    border-radius: 2px;
+    background: var(--bronce-suave);
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .toc-progreso {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 0%;
+    background: linear-gradient(180deg, var(--terracota), var(--oro));
+    transition: height 0.15s linear;
+  }
+  .toc {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  @media (max-width: 860px) {
+    .toc-envoltorio { position: static; }
+    .toc-linea { display: none; }
+    .toc {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s var(--ease);
+      background: var(--crema-suave);
+      border: 1px solid var(--bronce-suave);
+      border-radius: 16px;
+      width: calc(100% - 48px);
+      margin: 8px auto 0;
+    }
+    .toc.abierto { max-height: 480px; padding: 6px; }
+  }
+  .toc a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--carbon-suave);
+    font-size: 0.86rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background 0.25s var(--ease), color 0.25s var(--ease);
+  }
+  .toc a svg { width: 17px; height: 17px; flex-shrink: 0; transition: transform 0.25s var(--ease); }
+  .toc a:hover { background: var(--crema-muted); color: var(--carbon); }
+  .toc a.activo { background: var(--terracota-suave); color: var(--terracota-profundo); }
+  .toc a.activo svg { transform: scale(1.1); }
+
+  .contenido { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+  .tarjeta {
+    background: var(--crema-suave);
+    border: 1px solid var(--bronce-suave);
+    border-radius: 20px;
+    padding: 28px 28px 26px;
+    scroll-margin-top: 24px;
+    opacity: 0;
+    transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
+  }
+  /* Cada sección entra desde un lado distinto: se siente más espontáneo
+     que repetir el mismo "sube y aparece" ocho veces seguidas. */
+  .entra-arriba { transform: translateY(26px); }
+  .entra-izquierda { transform: translateX(-32px) rotate(-1.2deg); }
+  .entra-derecha { transform: translateX(32px) rotate(1.2deg); }
+  .entra-escala { transform: scale(0.93) translateY(10px); }
+  .tarjeta.visible { opacity: 1; transform: translateY(0) translateX(0) scale(1) rotate(0deg); }
+
+  .tarjeta-encabezado { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .tarjeta-icono {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: var(--terracota-suave);
+    color: var(--terracota);
+  }
+  .tarjeta-icono svg { width: 21px; height: 21px; }
+  .tarjeta h2 { margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--carbon); }
+
+  .tarjeta p, .tarjeta li { color: var(--carbon-suave); font-size: 0.97rem; }
+  .tarjeta ul { padding-left: 20px; margin: 10px 0 0; }
+  .tarjeta li { margin-bottom: 8px; }
+  .tarjeta li strong, .tarjeta p strong { color: var(--carbon); }
+  .tarjeta a.enlace {
+    color: var(--terracota);
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px solid var(--terracota-suave);
+    transition: border-color 0.2s var(--ease);
+  }
+  .tarjeta a.enlace:hover { border-color: var(--terracota); }
+
+  .nota-destacada {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: var(--terracota-suave);
+    color: var(--terracota-profundo);
+    font-size: 0.9rem;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .nota-destacada svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; }
+
+  /* Cierre: invitación a escribir, con más peso que un simple párrafo */
+  .cierre {
+    text-align: center;
+    background: linear-gradient(160deg, var(--terracota), var(--terracota-profundo));
+    color: var(--crema);
+    border-radius: 22px;
+    padding: 34px 28px;
+  }
+  .cierre h2 { margin: 0 0 8px; font-size: 1.4rem; color: var(--crema); }
+  .cierre p { color: rgba(253, 246, 236, 0.85); margin: 0 0 18px; font-size: 0.95rem; }
+  .cierre a.boton-escribir {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--crema);
+    color: var(--terracota-profundo);
+    padding: 12px 22px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.92rem;
+    transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
+  }
+  .cierre a.boton-escribir:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 12px 26px rgba(0,0,0,0.18); }
+  .cierre a.boton-escribir svg { width: 16px; height: 16px; }
+
   footer {
     text-align: center;
-    color: var(--texto-secundario);
+    color: var(--carbon-suave);
     font-size: 0.85rem;
-    padding-bottom: 40px;
+    padding: 26px 24px 56px;
+  }
+  footer a.enlace-footer {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 18px;
+    padding: 11px 22px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-decoration: none;
+  }
+  footer a.enlace-footer svg { width: 15px; height: 15px; transition: transform 0.3s var(--ease); }
+  footer a.enlace-footer:hover svg { transform: translateX(-3px); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    html { scroll-behavior: auto; }
   }
 </style>
 </head>
 <body>
 
-<div class="encabezado">
+<a href="#contenido-principal" class="saltar-enlace">Saltar al contenido</a>
+<div class="barra-progreso" id="barraProgreso"></div>
+
+<a href="/" class="boton-relleno boton-volver">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+  Volver al inicio
+</a>
+
+<header class="hero">
+  <div class="hero-icono">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+  </div>
+  <p class="hero-eyebrow">Panadería Ronceros</p>
   <h1>Política de Privacidad</h1>
-  <p>Corporación Ronceros — app de pedidos y gestión</p>
+  <p class="hero-sub">Así cuidamos tus datos, tanto si pides pan en panaderiaronceros.com como si usas la app del personal.</p>
+</header>
+
+<button class="boton-relleno toc-toggle" id="tocToggle" aria-expanded="false" aria-controls="toc">
+  <span>Ver contenido de la página</span>
+  <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+</button>
+
+<div class="layout" id="contenido-principal">
+  <div class="toc-envoltorio">
+    <div class="toc-linea"><div class="toc-progreso" id="tocProgreso"></div></div>
+    <nav class="toc" id="toc" aria-label="Tabla de contenidos">
+      <a href="#responsable" data-target="responsable">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
+        Responsable
+      </a>
+      <a href="#datos" data-target="datos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></svg>
+        Qué datos recopilamos
+      </a>
+      <a href="#uso" data-target="uso">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg>
+        Para qué los usamos
+      </a>
+      <a href="#compartir" data-target="compartir">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.4"/><circle cx="17" cy="6" r="2.4"/><circle cx="17" cy="18" r="2.4"/><path d="M8.2 10.8 14.8 7.2M8.2 13.2 14.8 16.8"/></svg>
+        Con quién compartimos
+      </a>
+      <a href="#proteccion" data-target="proteccion">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>
+        Cómo los protegemos
+      </a>
+      <a href="#derechos" data-target="derechos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 21h10"/><path d="M5 7h4M15 7h4"/><path d="M3 7l2 5a2 2 0 0 0 4 0l-2-5M15 7l2 5a2 2 0 0 0 4 0l-2-5"/></svg>
+        Tus derechos
+      </a>
+      <a href="#menores" data-target="menores">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+        Menores de edad
+      </a>
+      <a href="#cambios" data-target="cambios">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.5L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.5L3 16"/><path d="M3 21v-5h5"/></svg>
+        Cambios a esta política
+      </a>
+    </nav>
+  </div>
+
+  <main class="contenido">
+
+    <section id="responsable" class="tarjeta entra-izquierda">
+      <div class="tarjeta-encabezado">
+        <span class="tarjeta-icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg></span>
+        <h2>1. Responsable</h2>
+      </div>
+      <p>
+        Panadería Ronceros es el nombre con el que nos conoces: la marca que atiende a nuestros clientes en
+        <a class="enlace" href="https://panaderiaronceros.com">panaderiaronceros.com</a> y en nuestro local de
+        Pisco. Detrás de esa marca está <strong>Panadería y Pastelería Briam</strong> (RUC 10223034255), un
+        negocio familiar peruano.
+      </p>
+      <p>
+        Nuestro equipo usa también un sistema interno llamado <strong>Corporación Ronceros</strong> para
+        organizar pedidos, deudas y pagos. Esta política cubre las dos caras del negocio: la página donde haces
+        tu pedido y la app que usa nuestro personal.
+      </p>
+      <div class="nota-destacada">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+        ¿Tienes dudas sobre tus datos? Escríbenos a <a class="enlace" href="mailto:briamronceros@gmail.com">briamronceros@gmail.com</a>.
+      </div>
+    </section>
+
+    <section id="datos" class="tarjeta entra-arriba">
+      <div class="tarjeta-encabezado">
+        <span class="tarjeta-icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></svg></span>
+        <h2>2. Qué datos recopilamos</h2>
+      </div>
+      <p>Lo que guardamos depende de cómo nos uses: si eres una visita que hace un pedido rápido, un cliente con cuenta, o parte de nuestro personal. En general, puede tratarse de:</p>
+      <ul>
+        <li><strong>Pedido como invitado en panaderiaronceros.com.</strong> Tu DNI, tu celular, el pan y la cantidad que pides, y cualquier nota que quieras agregar. No hace falta crear una cuenta.</li>
+        <li><strong>Datos de identificación:</strong> nombres, apellidos, DNI o RUC, teléfono, correo y dirección.</li>
+        <li>Tu <strong>usuario y contraseña</strong>, si tienes cuenta. La contraseña siempre queda cifrada, nunca la guardamos en texto plano.</li>
+        <li>Tu <strong>ubicación</strong>, solo si nos das permiso, para completar tu dirección de entrega más rápido. No la usamos para nada más.</li>
+        <li>Una <strong>foto</strong>, si eliges fotografiar un código QR de pago (Yape o Plin) en vez de subir una imagen que ya tenías guardada.</li>
+        <li>Los <strong>pedidos y pagos</strong> que hagas: productos, montos, si ya pagaste o si quedó una deuda pendiente.</li>
+        <li>Un identificador técnico de tu dispositivo (token de Firebase), que usamos solo para poder enviarte notificaciones sobre tus pedidos.</li>
+        <li>Tu <strong>huella o tu rostro</strong>, si activas el inicio de sesión biométrico. Esa verificación pasa por completo dentro de tu celular. Nunca llega a nuestros servidores.</li>
+        <li>Algunos registros técnicos, como tu dirección IP y el tipo de dispositivo, que guardamos por seguridad para poder detectar accesos indebidos.</li>
+      </ul>
+    </section>
+
+    <section id="uso" class="tarjeta entra-derecha">
+      <div class="tarjeta-encabezado">
+        <span class="tarjeta-icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg></span>
+        <h2>3. Para qué usamos tus datos</h2>
+      </div>
+      <p>Usamos tu información para cosas concretas, nunca para adivinar tus gustos ni venderte cosas que no pediste:</p>
+      <ul>
+        <li>Registrar tu pedido, confirmarlo y hacerle seguimiento hasta que lo recibas, tengas o no una cuenta.</li>
+        <li>Crear y administrar tu cuenta, y comprobar que eres tú cuando inicias sesión.</li>
+        <li>Llamarte o escribirte para coordinar la entrega o resolver alguna duda sobre tu pedido.</li>
+        <li>Avisarte cuando tu pedido cambie de estado.</li>
+        <li>Confirmar tu celular o tu correo con un código de un solo uso, cuando hace falta.</li>
+        <li>Prevenir fraude y mantener segura tanto tu cuenta como el negocio.</li>
+        <li>Cumplir con nuestras obligaciones legales y tributarias.</li>
+      </ul>
+    </section>
+
+    <section id="compartir" class="tarjeta entra-escala">
+      <div class="tarjeta-encabezado">
+        <span class="tarjeta-icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.4"/><circle cx="17" cy="6" r="2.4"/><circle cx="17" cy="18" r="2.4"/><path d="M8.2 10.8 14.8 7.2M8.2 13.2 14.8 16.8"/></svg></span>
+        <h2>4. Con quién compartimos datos</h2>
+      </div>
+      <p>No vendemos tus datos personales. Los compartimos solo con quienes nos ayudan a operar el negocio:</p>
+      <ul>
+        <li><strong>Firebase</strong>, de Google, para poder enviarte notificaciones push.</li>
+        <li><strong>Google AdMob</strong> les muestra anuncios a las cuentas de solo cliente, no al personal del negocio. Puede usar un identificador de publicidad de tu teléfono, que puedes limitar tú mismo desde los ajustes de privacidad de tu dispositivo.</li>
+        <li><strong>apiperu.dev</strong>, para comprobar que un DNI o RUC que se ingresó corresponde a un documento real.</li>
+        <li><strong>Vercel</strong> aloja panaderiaronceros.com y procesa las solicitudes que tu navegador hace para mostrarte la página.</li>
+        <li>Proveedores de hosting y correo que usamos únicamente para operar la app, siempre bajo confidencialidad.</li>
+      </ul>
+      <p>No compartimos tus datos con terceros para fines de marketing ajenos a nuestros propios canales.</p>
+    </section>
+
+    <section id="proteccion" class="tarjeta entra-izquierda">
+      <div class="tarjeta-encabezado">
+        <span class="tarjeta-icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg></span>
+        <h2>5. Cómo protegemos tus datos</h2>
+      </div>
+      <ul>
+        <li>Tu contraseña se guarda cifrada. Nunca en texto plano.</li>
+        <li>Todo lo que viaja entre tu navegador o tu app y nuestros servidores va cifrado, con HTTPS y TLS.</li>
+        <li>Tus sesiones usan tokens que vencen solos y se renuevan de forma segura.</li>
+        <li>Cada cuenta ve solo lo que le corresponde según su rol: cliente, trabajador o administrador.</li>
+      </ul>
+    </section>
+
+    <section id="derechos" class="tarjeta entra-arriba">
+      <div class="tarjeta-encabezado">
+        <span class="tarjeta-icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 21h10"/><path d="M5 7h4M15 7h4"/><path d="M3 7l2 5a2 2 0 0 0 4 0l-2-5M15 7l2 5a2 2 0 0 0 4 0l-2-5"/></svg></span>
+        <h2>6. Tus derechos</h2>
+      </div>
+      <p>
+        Bajo la Ley N.° 29733, la Ley de Protección de Datos Personales del Perú, puedes pedirnos en cualquier
+        momento que te dejemos ver tus datos, que los corrijamos, o que los eliminemos. Solo escríbenos a
+        <a class="enlace" href="mailto:briamronceros@gmail.com">briamronceros@gmail.com</a> y te respondemos en
+        un plazo razonable.
+      </p>
+    </section>
+
+    <section id="menores" class="tarjeta entra-derecha">
+      <div class="tarjeta-encabezado">
+        <span class="tarjeta-icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span>
+        <h2>7. Menores de edad</h2>
+      </div>
+      <p>
+        Nuestros servicios están pensados para personas mayores de edad, ya sea para comprar o para trabajar en
+        el negocio. No recopilamos a propósito datos de menores de edad sin el permiso de un padre o tutor.
+      </p>
+    </section>
+
+    <section id="cambios" class="tarjeta entra-escala">
+      <div class="tarjeta-encabezado">
+        <span class="tarjeta-icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.5L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.5L3 16"/><path d="M3 21v-5h5"/></svg></span>
+        <h2>8. Cambios a esta política</h2>
+      </div>
+      <p>
+        De vez en cuando actualizamos esta política, ya sea porque cambia algo en nuestros servicios o porque
+        cambia la ley. La fecha que ves al inicio de esta página siempre refleja la última actualización.
+      </p>
+    </section>
+
+    <section class="cierre">
+      <h2>¿Te quedó alguna duda?</h2>
+      <p>Escríbenos directamente. Te respondemos nosotros mismos, sin bots ni formularios eternos.</p>
+      <a class="boton-escribir" href="mailto:briamronceros@gmail.com">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+        Escribir a briamronceros@gmail.com
+      </a>
+    </section>
+
+  </main>
 </div>
 
-<main>
-  <a class="volver" href="/">&larr; Volver al inicio</a>
-  <p class="meta">Última actualización: agosto de 2026</p>
-
-  <h2>1. Responsable</h2>
-  <p>
-    Esta app es operada por <strong>Corporación Ronceros</strong> (RUC 10223034255), negocio familiar dedicado
-    a panadería, pastelería y venta de alimentos en Perú. Para cualquier consulta sobre esta política o tus
-    datos, puedes escribirnos a <a href="mailto:briamronceros@gmail.com">briamronceros@gmail.com</a>.
-  </p>
-
-  <h2>2. Qué datos recopilamos</h2>
-  <p>Según cómo uses la app (cliente o personal del negocio), podemos recopilar:</p>
-  <ul>
-    <li><strong>Datos de identificación:</strong> nombres, apellidos, DNI o RUC, teléfono, correo electrónico y dirección.</li>
-    <li><strong>Datos de cuenta:</strong> usuario y contraseña (guardada siempre cifrada, nunca en texto plano).</li>
-    <li><strong>Ubicación:</strong> con tu permiso, tu ubicación GPS para autocompletar tu dirección de entrega. No se usa para ningún otro fin ni se comparte con terceros de publicidad.</li>
-    <li><strong>Cámara/fotos:</strong> si eliges fotografiar un código QR de pago (Yape/Plin) en vez de subir una imagen ya guardada.</li>
-    <li><strong>Datos de pedidos y pagos:</strong> productos pedidos, montos, estado de pago y deudas asociadas a tu cuenta.</li>
-    <li><strong>Notificaciones push:</strong> un identificador técnico de tu dispositivo (token de Firebase) para poder avisarte sobre el estado de tus pedidos.</li>
-    <li><strong>Datos biométricos (huella/rostro):</strong> si activas el inicio de sesión biométrico, la verificación ocurre 100% en tu dispositivo — nunca enviamos tu huella o rostro a nuestros servidores.</li>
-    <li><strong>Registros técnicos:</strong> dirección IP y tipo de dispositivo/navegador, guardados en un registro de auditoría interno por seguridad (ej. detectar accesos indebidos).</li>
-  </ul>
-
-  <h2>3. Para qué usamos tus datos</h2>
-  <ul>
-    <li>Crear y gestionar tu cuenta, y verificar tu identidad al iniciar sesión.</li>
-    <li>Registrar, procesar y hacer seguimiento a tus pedidos y pagos.</li>
-    <li>Enviarte notificaciones relacionadas al estado de tus pedidos.</li>
-    <li>Verificar tu número de celular o correo mediante códigos de un solo uso, cuando corresponde.</li>
-    <li>Prevenir fraude y proteger la seguridad de tu cuenta y del negocio.</li>
-    <li>Cumplir obligaciones legales y tributarias del negocio.</li>
-  </ul>
-
-  <h2>4. Con quién compartimos datos</h2>
-  <p>No vendemos tus datos personales. Los compartimos únicamente con proveedores que nos ayudan a operar la app:</p>
-  <ul>
-    <li><strong>Firebase (Google):</strong> para el envío de notificaciones push.</li>
-    <li><strong>Google AdMob:</strong> muestra anuncios a cuentas de solo-cliente (no a personal del negocio). AdMob puede usar un identificador de publicidad de tu dispositivo para mostrar anuncios relevantes — puedes limitarlo desde los ajustes de privacidad de tu propio teléfono.</li>
-    <li><strong>apiperu.dev:</strong> para validar que un DNI o RUC ingresado corresponde a un documento real (registro/verificación de clientes y personal).</li>
-    <li><strong>Proveedores de hosting y correo</strong> (ej. servicios de correo SMTP) usados exclusivamente para operar la app, bajo confidencialidad.</li>
-  </ul>
-  <p>No compartimos tus datos con terceros para fines de marketing ajenos a esta app.</p>
-
-  <h2>5. Cómo protegemos tus datos</h2>
-  <ul>
-    <li>Las contraseñas se guardan cifradas (hash), nunca en texto plano.</li>
-    <li>Las conexiones entre la app y nuestros servidores usan cifrado (HTTPS/TLS).</li>
-    <li>Las sesiones usan tokens con vencimiento, renovados de forma segura.</li>
-    <li>El acceso a datos de otros usuarios está restringido según el rol de cada cuenta (cliente, trabajador, administrador).</li>
-  </ul>
-
-  <h2>6. Tus derechos</h2>
-  <p>
-    De acuerdo con la Ley N° 29733 (Ley de Protección de Datos Personales del Perú), puedes solicitar en
-    cualquier momento acceder a tus datos, corregirlos, o pedir su eliminación, escribiendo a
-    <a href="mailto:briamronceros@gmail.com">briamronceros@gmail.com</a>. Responderemos tu solicitud en un
-    plazo razonable.
-  </p>
-
-  <h2>7. Menores de edad</h2>
-  <p>
-    Esta app está dirigida a personas mayores de edad que puedan realizar compras o trabajar en el negocio.
-    No recopilamos intencionalmente datos de menores de edad sin el consentimiento de un padre o tutor.
-  </p>
-
-  <h2>8. Cambios a esta política</h2>
-  <p>
-    Podemos actualizar esta política ocasionalmente para reflejar cambios en la app o en la normativa
-    aplicable. La fecha de la última actualización siempre aparece al inicio de esta página.
-  </p>
-</main>
-
 <footer>
-  Corporación Ronceros — RUC 10223034255
+  Panadería Ronceros opera bajo Panadería y Pastelería Briam · RUC 10223034255
+  <br />
+  <a class="boton-relleno enlace-footer" href="/">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    Volver al inicio
+  </a>
 </footer>
+
+<script>
+  var barra = document.getElementById('barraProgreso');
+  var tocProgreso = document.getElementById('tocProgreso');
+  function actualizarBarra() {
+    var alto = document.documentElement.scrollHeight - window.innerHeight;
+    var progreso = alto > 0 ? window.scrollY / alto : 0;
+    progreso = Math.min(1, Math.max(0, progreso));
+    barra.style.transform = 'scaleX(' + progreso + ')';
+    if (tocProgreso) tocProgreso.style.height = (progreso * 100) + '%';
+  }
+  window.addEventListener('scroll', actualizarBarra, { passive: true });
+  actualizarBarra();
+
+  var tarjetas = document.querySelectorAll('.tarjeta');
+  var observadorRevela = new IntersectionObserver(function (entradas) {
+    entradas.forEach(function (entrada) {
+      if (entrada.isIntersecting) {
+        entrada.target.style.transitionDelay = (Array.prototype.indexOf.call(tarjetas, entrada.target) % 3) * 0.06 + 's';
+        entrada.target.classList.add('visible');
+        observadorRevela.unobserve(entrada.target);
+      }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
+  tarjetas.forEach(function (t) { observadorRevela.observe(t); });
+
+  var enlacesToc = document.querySelectorAll('.toc a');
+  var observadorSpy = new IntersectionObserver(function (entradas) {
+    entradas.forEach(function (entrada) {
+      var enlace = document.querySelector('.toc a[data-target="' + entrada.target.id + '"]');
+      if (!enlace) return;
+      if (entrada.isIntersecting) {
+        enlacesToc.forEach(function (a) { a.classList.remove('activo'); a.removeAttribute('aria-current'); });
+        enlace.classList.add('activo');
+        enlace.setAttribute('aria-current', 'true');
+      }
+    });
+  }, { rootMargin: '-20% 0px -65% 0px', threshold: 0 });
+  document.querySelectorAll('#contenido-principal section[id]').forEach(function (t) { observadorSpy.observe(t); });
+
+  // Acordeón de contenido en móvil
+  var tocToggle = document.getElementById('tocToggle');
+  var toc = document.getElementById('toc');
+  if (tocToggle) {
+    tocToggle.addEventListener('click', function () {
+      var abierto = toc.classList.toggle('abierto');
+      tocToggle.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+    });
+    enlacesToc.forEach(function (a) {
+      a.addEventListener('click', function () {
+        toc.classList.remove('abierto');
+        tocToggle.setAttribute('aria-expanded', 'false');
+      });
+    });
+  }
+</script>
 
 </body>
 </html>

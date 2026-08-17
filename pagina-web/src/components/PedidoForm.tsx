@@ -259,7 +259,7 @@ export function PedidoForm() {
                 </p>
                 <button
                   onClick={pedirOtroVez}
-                  className="mt-6 rounded-full border border-pan-bronce-suave px-5 py-2.5 text-sm font-semibold text-pan-carbon transition-colors hover:bg-pan-crema-muted"
+                  className="boton-relleno mt-6 rounded-full border border-pan-bronce-suave px-5 py-2.5 text-sm font-semibold text-pan-carbon"
                 >
                   Hacer otro pedido
                 </button>

@@ -95,3 +95,37 @@ body {
 .shine-sweep:hover::after {
   transform: translateX(120%);
 }
+
+/* Botón de contorno estándar del sitio: empieza vacío y, al pasar el
+   mouse, se llena de color de izquierda a derecha mientras el texto
+   invierte su tono — el mismo lenguaje de interacción en cualquier botón
+   con borde (no relleno sólido) de la página. Se activa con la clase
+   .boton-relleno; el color de relleno se controla con --color-relleno y
+   --color-relleno-texto (por defecto, terracota sobre crema). Reusar esta
+   clase en cualquier botón nuevo con borde para mantener la misma
+   sensación en toda la web. */
+.boton-relleno {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition: color 0.45s var(--ease-premium), border-color 0.45s var(--ease-premium);
+}
+.boton-relleno::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--color-relleno, var(--color-pan-terracota));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.45s var(--ease-premium);
+}
+.boton-relleno:hover,
+.boton-relleno:focus-visible {
+  color: var(--color-relleno-texto, var(--color-pan-crema));
+  border-color: var(--color-relleno, var(--color-pan-terracota));
+}
+.boton-relleno:hover::before,
+.boton-relleno:focus-visible::before {
+  transform: scaleX(1);
+}
