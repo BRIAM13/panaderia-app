@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Loader2, ShoppingBag } from "lucide-react";
 import { PRODUCTOS } from "../data/config";
-import { EVENTO_PEDIDO_ENVIADO } from "../lib/eventos";
 import {
   ApiError,
   crearPedidoPublico,
@@ -35,6 +34,12 @@ export function PedidoForm() {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<PedidoPublicoResultado | null>(null);
+  const [mascotaAgitada, setMascotaAgitada] = useState(false);
+
+  function saludarMascota() {
+    setMascotaAgitada(true);
+    window.setTimeout(() => setMascotaAgitada(false), 650);
+  }
 
   useEffect(() => {
     obtenerCatalogoPublico()
@@ -65,6 +70,15 @@ export function PedidoForm() {
   useEffect(() => {
     setCantidad("");
   }, [idProducto]);
+
+  // El personaje festeja un instante cuando el pedido se confirma — un
+  // gesto puntual, no una animación que se repite sola sin parar.
+  useEffect(() => {
+    if (!resultado) return;
+    setMascotaAgitada(true);
+    const id = window.setTimeout(() => setMascotaAgitada(false), 1400);
+    return () => window.clearTimeout(id);
+  }, [resultado]);
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -101,7 +115,6 @@ export function PedidoForm() {
         notas: notas.trim() || undefined,
       });
       setResultado(resultado);
-      window.dispatchEvent(new Event(EVENTO_PEDIDO_ENVIADO));
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.errores?.join(" ") || err.message);
@@ -149,13 +162,40 @@ export function PedidoForm() {
           </p>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.6, ease: EASE_PREMIUM, delay: 0.1 }}
-          className="mt-10 rounded-3xl border border-pan-bronce-suave/50 bg-pan-crema-suave p-6 shadow-md shadow-pan-carbon/5 sm:p-8"
-        >
+        <div className="relative mt-20 sm:mt-24">
+          <motion.button
+            type="button"
+            onClick={saludarMascota}
+            aria-label="Saludar al panadero"
+            initial={{ opacity: 0, y: 20, rotate: -8 }}
+            whileInView={{ opacity: 1, y: 0, rotate: -6 }}
+            viewport={{ once: true, margin: "-80px" }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            animate={
+              mascotaAgitada ? { rotate: [-4, 6, -4, 6, -6] } : { rotate: -6 }
+            }
+            transition={
+              mascotaAgitada
+                ? { duration: 0.55, ease: "easeInOut" }
+                : { duration: 0.5, ease: EASE_PREMIUM }
+            }
+            className="absolute -top-14 right-6 z-0 cursor-pointer sm:-top-20 sm:right-10"
+          >
+            <img
+              src="/images/mascota/panadero.png"
+              alt=""
+              className="h-28 w-auto drop-shadow-lg sm:h-40"
+            />
+          </motion.button>
+
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.6, ease: EASE_PREMIUM, delay: 0.1 }}
+            className="relative z-10 rounded-3xl border border-pan-bronce-suave/50 bg-pan-crema-suave p-6 shadow-md shadow-pan-carbon/5 sm:p-8"
+          >
           <AnimatePresence mode="wait">
             {resultado ? (
               <motion.div
@@ -318,7 +358,8 @@ export function PedidoForm() {
               </motion.form>
             )}
           </AnimatePresence>
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
     </section>
   );
