@@ -7,6 +7,11 @@ export const SITE = {
   claim: "Pan artesanal de siempre, hecho en familia",
   descripcion:
     "Somos una panadería familiar en Pisco y horneamos el mismo pan de toda la vida, hecho a mano con recetas que pasan de generación en generación.",
+  // "Panadería Ronceros" es la marca de cara al cliente; el nombre
+  // comercial formal y el RUC (persona natural) van solo en el pie de
+  // página, por transparencia con el cliente.
+  nombreComercial: "Panadería y Pastelería Briam",
+  ruc: "10223034255",
 };
 
 export const HISTORIA = {
