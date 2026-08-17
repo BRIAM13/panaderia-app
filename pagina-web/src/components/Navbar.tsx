@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, useMotionValueEvent, useScroll } from "framer-motion";
-import { Menu as MenuIcon, X, User } from "lucide-react";
+import { Menu as MenuIcon, X, User, Download } from "lucide-react";
 import { SITE } from "../data/config";
 
 const ENLACES = [
@@ -9,6 +9,11 @@ const ENLACES = [
   { href: "#pedido", texto: "Hacer un pedido" },
   { href: "#ubicacion", texto: "Ubicación" },
 ];
+
+// La app instalable (.apk) solo tiene sentido ofrecerla a quien navega
+// desde Android — en cualquier otro dispositivo el archivo no sirve de
+// nada y solo confundiría.
+const ES_ANDROID = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
 
 export function Navbar() {
   const [abierto, setAbierto] = useState(false);
@@ -34,7 +39,7 @@ export function Navbar() {
     >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <a
-          href="#"
+          href="/"
           className="font-[family-name:var(--font-display-panaderia)] text-xl font-semibold text-pan-carbon transition-colors hover:text-pan-terracota"
         >
           {SITE.nombre}
@@ -61,6 +66,16 @@ export function Navbar() {
             <User className="h-4 w-4" />
             Iniciar sesión
           </a>
+          {ES_ANDROID && (
+            <a
+              href="/downloads/CorporacionRonceros-latest.apk"
+              download
+              className="inline-flex items-center gap-1.5 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-4 py-2 text-sm font-medium text-pan-carbon transition-colors hover:bg-pan-crema-muted"
+            >
+              <Download className="h-4 w-4" />
+              Descargar app
+            </a>
+          )}
           <a
             href="#pedido"
             className="rounded-full bg-pan-terracota px-5 py-2.5 text-sm font-semibold text-pan-crema transition-transform hover:scale-105"
@@ -102,6 +117,17 @@ export function Navbar() {
           >
             Iniciar sesión
           </a>
+          {ES_ANDROID && (
+            <a
+              href="/downloads/CorporacionRonceros-latest.apk"
+              download
+              onClick={() => setAbierto(false)}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
+            >
+              <Download className="h-4 w-4" />
+              Descargar app
+            </a>
+          )}
           <a
             href="#pedido"
             onClick={() => setAbierto(false)}

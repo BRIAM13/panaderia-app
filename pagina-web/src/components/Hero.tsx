@@ -1,11 +1,5 @@
 import { useRef } from "react";
-import {
-  motion,
-  useMotionValue,
-  useScroll,
-  useSpring,
-  useTransform,
-} from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { ArrowRight, ChevronDown, MapPin } from "lucide-react";
 import { SITE, UBICACION } from "../data/config";
 
@@ -16,31 +10,6 @@ export function Hero() {
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
   const yImagen = useTransform(scrollYProgress, [0, 1], [0, 90]);
   const opacidad = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
-
-  // Inclinación 3D de la foto según la posición del cursor dentro de la
-  // tarjeta — sutil (rango chico) para que se sienta premium, no un efecto
-  // de feria. Con `useSpring` el regreso al reposo es suave, no un salto.
-  const tiltX = useMotionValue(0);
-  const tiltY = useMotionValue(0);
-  const rotateX = useSpring(useTransform(tiltY, [-0.5, 0.5], [8, -8]), {
-    stiffness: 200,
-    damping: 20,
-  });
-  const rotateY = useSpring(useTransform(tiltX, [-0.5, 0.5], [-8, 8]), {
-    stiffness: 200,
-    damping: 20,
-  });
-
-  function manejarMovimiento(e: React.MouseEvent<HTMLDivElement>) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    tiltX.set((e.clientX - rect.left) / rect.width - 0.5);
-    tiltY.set((e.clientY - rect.top) / rect.height - 0.5);
-  }
-
-  function resetearInclinacion() {
-    tiltX.set(0);
-    tiltY.set(0);
-  }
 
   return (
     <section
@@ -133,25 +102,20 @@ export function Hero() {
         </div>
 
         <motion.div
-          style={{ y: yImagen, perspective: 1000 }}
+          style={{ y: yImagen }}
           initial={{ opacity: 0, scale: 0.94 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, ease: EASE_PREMIUM, delay: 0.15 }}
-          onMouseMove={manejarMovimiento}
-          onMouseLeave={resetearInclinacion}
-          className="relative mx-auto aspect-square w-full max-w-md [transform-style:preserve-3d]"
+          className="relative mx-auto aspect-square w-full max-w-md"
         >
-          <motion.div
-            style={{ rotateX, rotateY }}
-            className="relative h-full w-full overflow-hidden rounded-[2.5rem] shadow-2xl shadow-pan-carbon/15"
-          >
+          <div className="relative h-full w-full overflow-hidden rounded-[2.5rem] shadow-2xl shadow-pan-carbon/15">
             <img
               src="/images/productos/pan-de-agua.jpg"
               alt="Pan de agua recién horneado de Panadería Ronceros"
               className="h-full w-full object-cover"
             />
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-pan-carbon/15 via-transparent to-transparent" />
-          </motion.div>
+          </div>
           <motion.div
             animate={{ y: [0, -10, 0] }}
             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}

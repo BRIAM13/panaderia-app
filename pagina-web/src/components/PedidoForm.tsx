@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Loader2, ShoppingBag } from "lucide-react";
 import { PRODUCTOS } from "../data/config";
@@ -12,6 +12,14 @@ import {
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
 const NOMBRES_DISPONIBLES = new Set(PRODUCTOS.map((p) => p.nombreEnCatalogo));
+
+const FRASES_SALUDO = [
+  "¡Hola! 👋",
+  "¿Ya probaste nuestro pan?",
+  "Recién horneado hoy 🍞",
+  "¡Haz tu pedido!",
+  "Pan de siempre, hecho en familia",
+];
 
 // Pan vendido por unidad (Pan de Agua/Francés) tiene un pedido mínimo — el
 // pan de hamburguesa no aplica, se vende por paquete de 12 a precio fijo.
@@ -35,10 +43,24 @@ export function PedidoForm() {
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<PedidoPublicoResultado | null>(null);
   const [mascotaAgitada, setMascotaAgitada] = useState(false);
+  const [mensajeMascota, setMensajeMascota] = useState<string | null>(null);
+  const mensajeTimeoutRef = useRef<number | undefined>(undefined);
+  const agitadoTimeoutRef = useRef<number | undefined>(undefined);
+
+  // Un clic nuevo (u otro disparador, como llegar a esta sección) siempre
+  // interrumpe el mensaje anterior en vez de sumarse — cancela el timeout
+  // pendiente para que no cierre el mensaje nuevo antes de tiempo.
+  function mostrarMensajeMascota(texto: string, duracionMs = 2200) {
+    window.clearTimeout(mensajeTimeoutRef.current);
+    setMensajeMascota(texto);
+    mensajeTimeoutRef.current = window.setTimeout(() => setMensajeMascota(null), duracionMs);
+  }
 
   function saludarMascota() {
+    window.clearTimeout(agitadoTimeoutRef.current);
     setMascotaAgitada(true);
-    window.setTimeout(() => setMascotaAgitada(false), 650);
+    agitadoTimeoutRef.current = window.setTimeout(() => setMascotaAgitada(false), 650);
+    mostrarMensajeMascota(FRASES_SALUDO[Math.floor(Math.random() * FRASES_SALUDO.length)]);
   }
 
   useEffect(() => {
@@ -141,6 +163,9 @@ export function PedidoForm() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
+          onViewportEnter={() =>
+            window.setTimeout(() => mostrarMensajeMascota("Realiza tu pedido aquí 👇", 4000), 700)
+          }
           transition={{ duration: 0.6, ease: EASE_PREMIUM }}
           className="text-center"
         >
@@ -162,7 +187,21 @@ export function PedidoForm() {
           </p>
         </motion.div>
 
-        <div className="relative mt-20 sm:mt-24">
+        <div className="relative mt-32 sm:mt-36">
+          <AnimatePresence>
+            {mensajeMascota && (
+              <motion.div
+                initial={{ opacity: 0, y: 8, scale: 0.85 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.85 }}
+                transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                className="absolute -top-14 right-6 z-10 -translate-y-full whitespace-nowrap rounded-2xl rounded-br-md bg-pan-crema-suave px-3.5 py-2 text-xs font-semibold text-pan-carbon shadow-lg shadow-pan-carbon/15 sm:-top-20 sm:right-10"
+              >
+                {mensajeMascota}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <motion.button
             type="button"
             onClick={saludarMascota}

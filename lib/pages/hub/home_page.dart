@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../../models/tienda_model.dart';
 import '../../models/usuario_sesion.dart';
 import '../../services/auth_service.dart';
 import '../../services/notificaciones_service.dart';
@@ -19,6 +20,8 @@ import '../hamburguesas/medios_pago_page.dart';
 import '../hamburguesas/nuevo_pedido_page.dart';
 import '../hamburguesas/pedidos_page.dart';
 import '../hamburguesas/trabajadores_page.dart';
+import '../horneados/horneados_home_page.dart';
+import '../panaderia/ajuste_precios_page.dart';
 import '../perfil/mi_perfil_page.dart';
 import '../sistema/token_api_peru_page.dart';
 import '../sistema/version_app_page.dart';
@@ -43,10 +46,23 @@ class _HomePageState extends State<HomePage> {
   final _misPedidosKey = GlobalKey<MisPedidosPendientesViewState>();
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  /// Slugs de las tiendas a las que este trabajador/admin tiene acceso
-  /// vigente — controla qué entradas de "Gestionar X" ve en el drawer.
+  /// Tiendas a las que este trabajador/admin tiene acceso vigente — controla
+  /// qué entradas de "Gestionar X" ve en el drawer, y le da a cada callback
+  /// `_abrirXHamburguesas`/`_abrirXPanaderia` el objeto `Tienda` que sus
+  /// páginas necesitan (esas páginas abren directo desde el drawer, sin
+  /// pasar por el Dashboard, que carga su propia lista por separado).
   /// SUPERADMIN las recibe todas desde el backend sin necesitar asignación.
-  Set<String> _misSlugsTiendas = {};
+  List<Tienda> _misTiendas = [];
+
+  Set<String> get _misSlugsTiendas =>
+      _misTiendas.map((t) => t.slug).toSet();
+
+  Tienda? _buscarMiTienda(String slug) {
+    for (final t in _misTiendas) {
+      if (t.slug == slug) return t;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -59,7 +75,7 @@ class _HomePageState extends State<HomePage> {
     try {
       final tiendas = await _tiendasService.misTiendas();
       if (!mounted) return;
-      setState(() => _misSlugsTiendas = tiendas.map((t) => t.slug).toSet());
+      setState(() => _misTiendas = tiendas);
     } catch (_) {
       // Silencioso: si falla, el drawer simplemente no muestra ninguna
       // entrada de gestión hasta que se pueda recargar (ej. sin conexión).
@@ -85,15 +101,21 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _abrirPedidosHamburguesas() {
-    pushSlideUpFade(context, (context) => const PedidosPage());
+    final tienda = _buscarMiTienda('hamburguesas');
+    if (tienda == null) return;
+    pushSlideUpFade(context, (context) => PedidosPage(tienda: tienda));
   }
 
   void _abrirNuevoPedidoHamburguesas() {
-    pushSlideUpFade(context, (context) => const NuevoPedidoPage());
+    final tienda = _buscarMiTienda('hamburguesas');
+    if (tienda == null) return;
+    pushSlideUpFade(context, (context) => NuevoPedidoPage(tienda: tienda));
   }
 
   void _abrirDeudasHamburguesas() {
-    pushSlideUpFade(context, (context) => const DeudasPage());
+    final tienda = _buscarMiTienda('hamburguesas');
+    if (tienda == null) return;
+    pushSlideUpFade(context, (context) => DeudasPage(tienda: tienda));
   }
 
   void _abrirMediosPagoHamburguesas() {
@@ -102,6 +124,30 @@ class _HomePageState extends State<HomePage> {
 
   void _abrirAjusteCostosHamburguesas() {
     pushSlideUpFade(context, (context) => const AjusteCostosPage());
+  }
+
+  void _abrirPedidosPanaderia() {
+    final tienda = _buscarMiTienda('panaderia');
+    if (tienda == null) return;
+    pushSlideUpFade(context, (context) => PedidosPage(tienda: tienda));
+  }
+
+  void _abrirNuevoPedidoPanaderia() {
+    final tienda = _buscarMiTienda('panaderia');
+    if (tienda == null) return;
+    pushSlideUpFade(context, (context) => NuevoPedidoPage(tienda: tienda));
+  }
+
+  void _abrirDeudasPanaderia() {
+    final tienda = _buscarMiTienda('panaderia');
+    if (tienda == null) return;
+    pushSlideUpFade(context, (context) => DeudasPage(tienda: tienda));
+  }
+
+  void _abrirAjustePreciosPanaderia() {
+    final tienda = _buscarMiTienda('panaderia');
+    if (tienda == null) return;
+    pushSlideUpFade(context, (context) => AjustePreciosPage(tienda: tienda));
   }
 
   /// El anuncio solo existe para monetizar a quienes SOLO son clientes —
@@ -151,6 +197,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _abrirGestion(String nombre, IconData icono) {
+    // Horneados ya tiene su propia pantalla de gestión (por ahora, solo
+    // "Registrar pedido") — el resto de tiendas sigue cayendo al
+    // placeholder genérico hasta que se construyan.
+    if (nombre == 'Horneados') {
+      pushSlideUpFade(context, (context) => const HorneadosHomePage());
+      return;
+    }
     pushSlideUpFade(
       context,
       (context) => TiendaPlaceholderPage(
@@ -201,6 +254,10 @@ class _HomePageState extends State<HomePage> {
       onAbrirDeudasHamburguesas: _abrirDeudasHamburguesas,
       onAbrirMediosPagoHamburguesas: _abrirMediosPagoHamburguesas,
       onAbrirAjusteCostosHamburguesas: _abrirAjusteCostosHamburguesas,
+      onAbrirPedidosPanaderia: _abrirPedidosPanaderia,
+      onAbrirNuevoPedidoPanaderia: _abrirNuevoPedidoPanaderia,
+      onAbrirDeudasPanaderia: _abrirDeudasPanaderia,
+      onAbrirAjustePreciosPanaderia: _abrirAjustePreciosPanaderia,
       onAbrirMiPerfil: _abrirMiPerfil,
       onAbrirMisPedidos: _abrirMisPedidos,
       onAbrirMisDeudas: _abrirMisDeudas,

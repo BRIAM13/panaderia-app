@@ -88,7 +88,7 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
       builder: (context) => AlertDialog(
         title: const Text('Cancelar pedido'),
         content: Text(
-          '¿Seguro que quieres cancelar el pedido #${pedido.idPedido}? Esta acción no se puede deshacer.',
+          '¿Seguro que quieres cancelar el pedido #${pedido.numeroPedidoDia}? Esta acción no se puede deshacer.',
         ),
         actions: [
           TextButton(
@@ -109,7 +109,7 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
       NotificacionesService.avisarCambioPedido();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pedido #${pedido.idPedido} cancelado.')),
+        SnackBar(content: Text('Pedido #${pedido.numeroPedidoDia} cancelado.')),
       );
       _cargar();
     } on ApiException catch (e) {

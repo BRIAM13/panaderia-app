@@ -25,3 +25,24 @@ class UpperCaseTextFormatter extends TextInputFormatter {
     );
   }
 }
+
+/// Restringe un campo de precio a dígitos y, como máximo, un único punto
+/// decimal — bloquea cualquier otro carácter (letras, signos, coma, un
+/// segundo punto) apenas se escribe, en vez de solo avisar al enviar el
+/// formulario. Para cantidades enteras usar en cambio
+/// `FilteringTextInputFormatter.digitsOnly` (de `package:flutter/services.dart`),
+/// que ya se usa en varios formularios de este proyecto (ej. DNI/RUC).
+class DecimalTextInputFormatter extends TextInputFormatter {
+  const DecimalTextInputFormatter();
+
+  static final RegExp _patron = RegExp(r'^\d*\.?\d*$');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (_patron.hasMatch(newValue.text)) return newValue;
+    return oldValue;
+  }
+}

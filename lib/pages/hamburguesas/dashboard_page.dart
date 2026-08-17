@@ -18,6 +18,9 @@ import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/premium_button.dart';
 import '../../widgets/tarjeta_3d.dart';
+import '../horneados/deudas_horneados_page.dart';
+import '../horneados/nuevo_pedido_horneados_page.dart';
+import '../horneados/pedidos_horneados_page.dart';
 import 'deudas_page.dart';
 import 'historial_ventas_page.dart';
 import 'nuevo_pedido_page.dart';
@@ -64,23 +67,54 @@ class _DashboardPageState extends State<DashboardPage> {
     super.dispose();
   }
 
+  /// Este Dashboard es tienda-agnóstico (el selector de abajo puede apuntar
+  /// a cualquier tienda asignada), pero Horneados tiene endpoints y pantallas
+  /// propias (campos custom — carne, presentación, aderezo) — sin esta rama,
+  /// tocar cualquiera de esas tarjetas con Horneados seleccionado abría la
+  /// pantalla de catálogo simple (vacía para Horneados, o mezclando datos de
+  /// la tienda equivocada). El resto (Hamburguesas, Panadería) comparte las
+  /// mismas páginas, parametrizadas por `_tiendaSeleccionada`.
+  bool get _esHorneados => _tiendaSeleccionada?.slug == 'horneados';
+
   void _abrirPedidos() {
-    pushSlideUpFade(context, (_) => const PedidosPage());
+    if (_esHorneados) {
+      pushSlideUpFade(context, (_) => const PedidosHorneadosPage());
+      return;
+    }
+    final tienda = _tiendaSeleccionada;
+    if (tienda == null) return;
+    pushSlideUpFade(context, (_) => PedidosPage(tienda: tienda));
   }
 
   /// Acceso directo a registrar un pedido nuevo desde el propio Dashboard —
   /// antes solo se llegaba entrando primero a Pedidos y tocando su botón
   /// flotante, dos pasos que no eran obvios para quien recién entra.
   Future<void> _abrirNuevoPedido() async {
+    if (_esHorneados) {
+      final registrado = await pushSlideUpFade<bool>(
+        context,
+        (_) => const NuevoPedidoHorneadosPage(),
+      );
+      if (registrado == true) _cargarResumen();
+      return;
+    }
+    final tienda = _tiendaSeleccionada;
+    if (tienda == null) return;
     final registrado = await pushSlideUpFade<bool>(
       context,
-      (_) => const NuevoPedidoPage(),
+      (_) => NuevoPedidoPage(tienda: tienda),
     );
     if (registrado == true) _cargarResumen();
   }
 
   void _abrirDeudas() {
-    pushSlideUpFade(context, (_) => const DeudasPage());
+    if (_esHorneados) {
+      pushSlideUpFade(context, (_) => const DeudasHorneadosPage());
+      return;
+    }
+    final tienda = _tiendaSeleccionada;
+    if (tienda == null) return;
+    pushSlideUpFade(context, (_) => DeudasPage(tienda: tienda));
   }
 
   /// Solo Admin/Superadmin pueden entrar al historial completo de ventas —

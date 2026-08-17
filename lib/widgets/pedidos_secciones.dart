@@ -462,6 +462,7 @@ class PedidoCard extends StatelessWidget {
                   ),
                 ],
               ),
+              NotaPedido(pedido: pedido),
               InfoAuditoriaPedido(pedido: pedido),
               if (mostrarAccionesSolicitud) ...[
                 const SizedBox(height: 10),
@@ -544,6 +545,53 @@ String _descripcionRegistro(Pedido pedido) {
   final rol = _etiquetaRolAuditoria(pedido.registradoPorRol);
   if (nombre == null) return rol;
   return '$nombre ($rol)';
+}
+
+/// Nota que dejó el cliente al registrar el pedido — si vino de la página
+/// web pública, acá también va su celular de contacto (ver `notaWeb` en
+/// publicoController.js). No se muestra nada si el pedido no tiene notas.
+class NotaPedido extends StatelessWidget {
+  const NotaPedido({super.key, required this.pedido});
+
+  final Pedido pedido;
+
+  @override
+  Widget build(BuildContext context) {
+    final notas = pedido.notas;
+    if (notas == null || notas.trim().isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.secondaryContainer.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.sticky_note_2_outlined,
+              size: 15,
+              color: AppColors.secondary,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                notas,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Quién registró/confirmó/canceló/entregó el pedido — el backend solo

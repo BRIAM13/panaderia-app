@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/solicitud_pago_model.dart';
+import '../../models/tienda_model.dart';
 import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
@@ -11,16 +12,19 @@ import '../../utils/fecha_pedido_utils.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/pedidos_secciones.dart';
 import '../../widgets/tarjeta_3d.dart';
 
-/// Deudas pendientes (pedidos ENTREGADO con EstadoPago=DEUDA) de las
-/// tiendas asignadas al personal, agrupadas por cliente con su total —
-/// arriba de todo, los pagos que el cliente ya reportó (o generó un QR
-/// para) desde su propia app, esperando confirmación. El pago sin reporte
-/// digital solo puede confirmarse a mano (efectivo/Yape ya recibido en
-/// persona).
+/// Deudas pendientes (pedidos ENTREGADO con EstadoPago=DEUDA) de una tienda
+/// de catálogo simple (Hamburguesas o Panadería), agrupadas por cliente con
+/// su total — arriba de todo, los pagos que el cliente ya reportó (o generó
+/// un QR para) desde su propia app, esperando confirmación. El pago sin
+/// reporte digital solo puede confirmarse a mano (efectivo/Yape ya recibido
+/// en persona).
 class DeudasPage extends StatefulWidget {
-  const DeudasPage({super.key});
+  const DeudasPage({super.key, required this.tienda});
+
+  final Tienda tienda;
 
   @override
   State<DeudasPage> createState() => _DeudasPageState();
@@ -48,7 +52,7 @@ class _DeudasPageState extends State<DeudasPage> {
     });
     try {
       final resultados = await Future.wait([
-        _pedidosService.listarDeudas(),
+        _pedidosService.listarDeudas(idTienda: widget.tienda.idTienda),
         _solicitudesPagoService.listarPendientes(),
       ]);
       setState(() {
@@ -127,7 +131,7 @@ class _DeudasPageState extends State<DeudasPage> {
       builder: (context) => AlertDialog(
         title: const Text('Marcar deuda como pagada'),
         content: Text(
-          '¿Confirmas que el pedido #${pedido.idPedido} por S/ ${pedido.total.toStringAsFixed(2)} ya fue pagado por el cliente?',
+          '¿Confirmas que el pedido #${pedido.numeroPedidoDia} por S/ ${pedido.total.toStringAsFixed(2)} ya fue pagado por el cliente?',
         ),
         actions: [
           TextButton(
@@ -149,7 +153,7 @@ class _DeudasPageState extends State<DeudasPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Deuda del pedido #${pedido.idPedido} saldada.'),
+          content: Text('Deuda del pedido #${pedido.numeroPedidoDia} saldada.'),
         ),
       );
       _cargar();
@@ -434,7 +438,7 @@ class _GrupoDeudaCliente extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Pedido #${pedido.idPedido} · S/ ${pedido.total.toStringAsFixed(2)}',
+                              'Pedido #${pedido.numeroPedidoDia} · S/ ${pedido.total.toStringAsFixed(2)}',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -457,6 +461,7 @@ class _GrupoDeudaCliente extends StatelessWidget {
                                   color: AppColors.textSecondary,
                                 ),
                               ),
+                            NotaPedido(pedido: pedido),
                           ],
                         ),
                       ),

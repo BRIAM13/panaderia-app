@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../../models/tienda_model.dart';
 import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
@@ -13,13 +14,15 @@ import '../../widgets/page_transitions.dart';
 import '../../widgets/pedidos_secciones.dart';
 import 'nuevo_pedido_page.dart';
 
-/// Dashboard de Pedidos para el personal: primero "Por confirmar"
-/// (solicitados por clientes, esperando aceptar/rechazar según stock),
-/// después el resto agrupado en Atrasados / Hoy / Próximos / Sin fecha.
-/// Muestra TODOS los pedidos de las tiendas asignadas — para la vista del
-/// propio cliente ver `MisPedidosPendientesPage`.
+/// Dashboard de Pedidos para el personal de una tienda de catálogo simple
+/// (Hamburguesas o Panadería — Horneados tiene su propia página): primero
+/// "Por confirmar" (solicitados por clientes, esperando aceptar/rechazar
+/// según stock), después el resto agrupado en Atrasados / Hoy / Próximos /
+/// Sin fecha. Para la vista del propio cliente ver `MisPedidosPendientesPage`.
 class PedidosPage extends StatefulWidget {
-  const PedidosPage({super.key});
+  const PedidosPage({super.key, required this.tienda});
+
+  final Tienda tienda;
 
   @override
   State<PedidosPage> createState() => _PedidosPageState();
@@ -60,7 +63,9 @@ class _PedidosPageState extends State<PedidosPage> {
     }
 
     try {
-      final pedidos = await _pedidosService.listar();
+      final pedidos = await _pedidosService.listar(
+        idTienda: widget.tienda.idTienda,
+      );
       if (mounted) setState(() => _pedidos = pedidos);
     } on ApiException catch (e) {
       if (!silencioso) setState(() => _error = e.mensaje);
@@ -76,7 +81,7 @@ class _PedidosPageState extends State<PedidosPage> {
   Future<void> _nuevoPedido() async {
     final registrado = await pushSlideUpFade<bool>(
       context,
-      (_) => const NuevoPedidoPage(),
+      (_) => NuevoPedidoPage(tienda: widget.tienda),
     );
     if (registrado == true) _cargar();
   }
@@ -87,7 +92,7 @@ class _PedidosPageState extends State<PedidosPage> {
       NotificacionesService.avisarCambioPedido();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pedido #${pedido.idPedido} confirmado.')),
+        SnackBar(content: Text('Pedido #${pedido.numeroPedidoDia} confirmado.')),
       );
       _cargar();
     } on ApiException catch (e) {
@@ -104,7 +109,7 @@ class _PedidosPageState extends State<PedidosPage> {
       builder: (context) => AlertDialog(
         title: const Text('Rechazar pedido'),
         content: Text(
-          '¿Seguro que quieres rechazar el pedido #${pedido.idPedido}? Se avisará al cliente y no podrá deshacerse.',
+          '¿Seguro que quieres rechazar el pedido #${pedido.numeroPedidoDia}? Se avisará al cliente y no podrá deshacerse.',
         ),
         actions: [
           TextButton(
@@ -125,7 +130,7 @@ class _PedidosPageState extends State<PedidosPage> {
       NotificacionesService.avisarCambioPedido();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pedido #${pedido.idPedido} rechazado.')),
+        SnackBar(content: Text('Pedido #${pedido.numeroPedidoDia} rechazado.')),
       );
       _cargar();
     } on ApiException catch (e) {
@@ -142,7 +147,7 @@ class _PedidosPageState extends State<PedidosPage> {
       builder: (context) => AlertDialog(
         title: const Text('Marcar como entregado'),
         content: Text(
-          '¿El pedido #${pedido.idPedido} se pagó al momento de entregarlo?',
+          '¿El pedido #${pedido.numeroPedidoDia} se pagó al momento de entregarlo?',
         ),
         actions: [
           TextButton(
@@ -170,8 +175,8 @@ class _PedidosPageState extends State<PedidosPage> {
         SnackBar(
           content: Text(
             pagado
-                ? 'Pedido #${pedido.idPedido} entregado y pagado.'
-                : 'Pedido #${pedido.idPedido} entregado — queda como deuda.',
+                ? 'Pedido #${pedido.numeroPedidoDia} entregado y pagado.'
+                : 'Pedido #${pedido.numeroPedidoDia} entregado — queda como deuda.',
           ),
         ),
       );
@@ -190,7 +195,7 @@ class _PedidosPageState extends State<PedidosPage> {
       builder: (context) => AlertDialog(
         title: const Text('Cancelar pedido'),
         content: Text(
-          '¿Seguro que quieres cancelar el pedido #${pedido.idPedido}? '
+          '¿Seguro que quieres cancelar el pedido #${pedido.numeroPedidoDia}? '
           'Se avisará al cliente y no podrá deshacerse.',
         ),
         actions: [
@@ -212,7 +217,7 @@ class _PedidosPageState extends State<PedidosPage> {
       NotificacionesService.avisarCambioPedido();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pedido #${pedido.idPedido} cancelado.')),
+        SnackBar(content: Text('Pedido #${pedido.numeroPedidoDia} cancelado.')),
       );
       _cargar();
     } on ApiException catch (e) {

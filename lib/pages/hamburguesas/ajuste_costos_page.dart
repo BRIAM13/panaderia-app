@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../services/api_client.dart';
 import '../../services/configuraciones_service.dart';
+import '../../utils/text_formatters.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/premium_button.dart';
 
@@ -146,6 +147,7 @@ class _AjusteCostosPageState extends State<AjusteCostosPage> {
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
+                        inputFormatters: const [DecimalTextInputFormatter()],
                         decoration: const InputDecoration(
                           labelText: 'Precio del paquete (S/)',
                           prefixIcon: Icon(Icons.sell_outlined),

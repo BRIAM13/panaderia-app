@@ -3,8 +3,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/tienda_model.dart';
-import '../../models/tienda_resumen_model.dart';
 import '../../services/api_client.dart';
+import '../../services/horneados_service.dart';
 import '../../services/pedidos_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
@@ -13,16 +13,17 @@ import '../../widgets/contador_animado.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/pedidos_secciones.dart';
+import '../../widgets/selector_fecha_calendario.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../widgets/tarjeta_3d.dart';
 
 /// Historial completo de ventas de una tienda (solo ADMIN/SUPERADMIN,
 /// abierto desde la tarjeta "Ventas de hoy" del Dashboard) — reemplaza a la
-/// sección "Historial" que antes vivía dentro de Pedidos. Muestra los
-/// pedidos ya resueltos de forma jerárquica: primero los completados y
-/// pagados, después los que quedaron como deuda, luego los cancelados, y
-/// por último los rechazados (menos relevantes, se conservan para no
-/// perder ese historial).
+/// sección "Historial" que antes vivía dentro de Pedidos. Por defecto
+/// muestra solo lo resuelto HOY, agrupado en secciones plegadas
+/// (Completados y pagados / Con deuda / Cancelados / Rechazados) que se
+/// despliegan al tocarlas; el botón "Ver todo" cambia a ver el histórico
+/// completo sin filtrar por fecha.
 class HistorialVentasPage extends StatefulWidget {
   const HistorialVentasPage({super.key, required this.tienda});
 
@@ -34,20 +35,27 @@ class HistorialVentasPage extends StatefulWidget {
 
 class _HistorialVentasPageState extends State<HistorialVentasPage> {
   final _pedidosService = PedidosService();
+  final _horneadosService = HorneadosService();
   final _tiendasService = TiendasService();
 
   bool _cargando = true;
   String? _error;
   List<Pedido> _pedidos = [];
-  TiendaResumen? _resumen;
   List<DateTime> _fechasConDatos = [];
+  List<DateTime> _fechasConDeuda = [];
 
-  /// Día que muestran las tarjetas "Cobrado"/"Deuda del día" — hoy por
-  /// defecto. El historial de abajo no se filtra por esto: sigue mostrando
-  /// todos los pedidos resueltos, sin importar qué día se esté mirando
-  /// arriba.
   DateTime _fechaSeleccionada = DateTime.now();
-  bool _cargandoResumen = false;
+
+  /// true: ignora [_fechaSeleccionada] y muestra todo el histórico. Se
+  /// activa con el botón junto al selector de fecha.
+  bool _verTodo = false;
+
+  /// Títulos de las secciones actualmente desplegadas — todas empiezan
+  /// plegadas (solo el encabezado con el conteo) para no abrumar con la
+  /// lista completa apenas se entra a la pantalla.
+  final Set<String> _seccionesExpandidas = {};
+
+  bool get _esHorneados => widget.tienda.slug == 'horneados';
 
   @override
   void initState() {
@@ -62,20 +70,15 @@ class _HistorialVentasPageState extends State<HistorialVentasPage> {
     });
     try {
       final resultados = await Future.wait([
-        _pedidosService.listar(),
-        _tiendasService.resumen(widget.tienda.idTienda),
+        _cargarPedidosDeTienda(),
         _tiendasService.fechasConVentas(widget.tienda.idTienda),
       ]);
       if (!mounted) return;
-      final pedidos = resultados[0] as List<Pedido>;
       setState(() {
-        _pedidos = pedidos
-            .where(
-              (p) => p.idTienda == widget.tienda.idTienda && p.esFinalizado,
-            )
-            .toList();
-        _resumen = resultados[1] as TiendaResumen;
-        _fechasConDatos = resultados[2] as List<DateTime>;
+        _pedidos = resultados[0] as List<Pedido>;
+        final fechas = resultados[1] as FechasConVentas;
+        _fechasConDatos = fechas.fechas;
+        _fechasConDeuda = fechas.fechasConDeuda;
       });
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.mensaje);
@@ -88,52 +91,56 @@ class _HistorialVentasPageState extends State<HistorialVentasPage> {
     }
   }
 
+  /// El endpoint de listado es distinto por tienda: Horneados tiene su
+  /// propio servicio dedicado (campos propios — carne, presentación,
+  /// aderezo); el resto (Hamburguesas, Panadería) comparte `/pedidos`,
+  /// filtrado por `idTienda`.
+  Future<List<Pedido>> _cargarPedidosDeTienda() async {
+    if (_esHorneados) {
+      final horneados = await _horneadosService.listarPedidos();
+      return horneados.map((h) => h.pedido).toList();
+    }
+    return _pedidosService.listar(idTienda: widget.tienda.idTienda);
+  }
+
   bool _mismoDia(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
   Future<void> _seleccionarFecha() async {
-    if (_fechasConDatos.isEmpty) return;
-    final primero = _fechasConDatos.reduce((a, b) => a.isBefore(b) ? a : b);
-    final ultimo = _fechasConDatos.reduce((a, b) => a.isAfter(b) ? a : b);
-
-    final elegida = await showDatePicker(
+    final elegida = await mostrarSelectorFechaVentas(
       context: context,
-      initialDate: _fechaSeleccionada,
-      firstDate: primero,
-      lastDate: ultimo.isAfter(DateTime.now()) ? ultimo : DateTime.now(),
-      // Solo se puede elegir un día con al menos una venta registrada — el
-      // resto del calendario queda deshabilitado.
-      selectableDayPredicate: (dia) =>
-          _fechasConDatos.any((f) => _mismoDia(f, dia)),
-      helpText: 'Elige un día con ventas registradas',
+      fechaSeleccionada: _fechaSeleccionada,
+      fechasHabilitadas: _fechasConDatos,
+      fechasConDeuda: _fechasConDeuda,
     );
-    if (elegida == null || _mismoDia(elegida, _fechaSeleccionada)) return;
-
+    if (elegida == null) return;
     setState(() {
       _fechaSeleccionada = elegida;
-      _cargandoResumen = true;
+      _verTodo = false;
     });
-    try {
-      final resumen = await _tiendasService.resumen(
-        widget.tienda.idTienda,
-        fecha: elegida,
-      );
-      if (mounted) setState(() => _resumen = resumen);
-    } catch (_) {
-      // Silencioso: si falla, las tarjetas se quedan con el día anterior
-      // hasta que se pueda reintentar.
-    } finally {
-      if (mounted) setState(() => _cargandoResumen = false);
-    }
   }
 
-  List<Pedido> _filtrarYOrdenar(bool Function(Pedido) filtro) {
-    final lista = _pedidos.where(filtro).toList()
-      ..sort(
-        (a, b) => (b.fechaEntregaReal ?? b.fechaCreacion).compareTo(
-          a.fechaEntregaReal ?? a.fechaCreacion,
-        ),
-      );
+  void _alternarVerTodo() => setState(() => _verTodo = !_verTodo);
+
+  void _alternarSeccion(String titulo) {
+    setState(() {
+      if (!_seccionesExpandidas.remove(titulo)) {
+        _seccionesExpandidas.add(titulo);
+      }
+    });
+  }
+
+  List<Pedido> _filtrar(bool Function(Pedido) filtroEstado) {
+    final lista = _pedidos.where((p) {
+      if (!filtroEstado(p)) return false;
+      if (_verTodo) return true;
+      final fecha = p.fechaEntregaReal ?? p.fechaCreacion;
+      return _mismoDia(fecha, _fechaSeleccionada);
+    }).toList()..sort(
+      (a, b) => (b.fechaEntregaReal ?? b.fechaCreacion).compareTo(
+        a.fechaEntregaReal ?? a.fechaCreacion,
+      ),
+    );
     return lista;
   }
 
@@ -168,140 +175,154 @@ class _HistorialVentasPageState extends State<HistorialVentasPage> {
       return EstadoError(mensaje: _error!, onReintentar: _cargar);
     }
 
-    final pagados = _filtrarYOrdenar(
+    final pagados = _filtrar(
       (p) => p.estado == 'ENTREGADO' && p.estadoPago == 'PAGADO',
     );
-    final deuda = _filtrarYOrdenar(
+    final deuda = _filtrar(
       (p) => p.estado == 'ENTREGADO' && p.estadoPago == 'DEUDA',
     );
-    final cancelados = _filtrarYOrdenar((p) => p.estado == 'CANCELADO');
-    final rechazados = _filtrarYOrdenar((p) => p.estado == 'RECHAZADO');
+    final cancelados = _filtrar((p) => p.estado == 'CANCELADO');
+    final rechazados = _filtrar((p) => p.estado == 'RECHAZADO');
 
-    if (pagados.isEmpty &&
-        deuda.isEmpty &&
-        cancelados.isEmpty &&
-        rechazados.isEmpty) {
-      return EstadoVacio(
-        icono: Icons.receipt_long_rounded,
-        titulo: 'Todavía no hay ventas en el historial',
-        subtitulo:
-            'Los pedidos entregados, cancelados o rechazados de esta '
-            'tienda van a aparecer acá.',
-        onRefrescar: _cargar,
-      );
-    }
-
-    final resumen = _resumen;
+    final cobradoCantidad = pagados.length;
+    final cobradoTotal = pagados.fold(0.0, (a, p) => a + p.total);
+    final deudaCantidad = deuda.length;
+    final deudaTotal = deuda.fold(0.0, (a, p) => a + p.total);
 
     return RefreshIndicator(
       onRefresh: _cargar,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
         children: [
-          if (resumen != null) ...[
-            _SelectorFecha(
+          Row(
+            children: [
+              Expanded(
+                child: _SelectorFecha(
                   fecha: _fechaSeleccionada,
+                  verTodo: _verTodo,
                   habilitado: _fechasConDatos.isNotEmpty,
                   onTap: _seleccionarFecha,
-                )
-                .animate()
-                .fadeIn(delay: 60.ms, duration: 300.ms)
-                .moveX(begin: -12, end: 0),
-            const SizedBox(height: 10),
-            // AnimatedSwitcher hace que las dos tarjetas entren con una
-            // transición cada vez que cambia el día elegido, no solo la
-            // primera vez que carga la pantalla.
-            AnimatedSwitcher(
-              duration: 420.ms,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position:
-                      Tween<Offset>(
-                        begin: const Offset(0, 0.08),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutCubic,
-                        ),
-                      ),
-                  child: child,
                 ),
               ),
-              child: Opacity(
-                key: ValueKey(
-                  _fechaSeleccionada.toIso8601String().split('T').first,
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: _alternarVerTodo,
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: _verTodo
+                      ? AppColors.primary.withValues(alpha: 0.12)
+                      : null,
                 ),
-                opacity: _cargandoResumen ? 0.5 : 1,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _TarjetaMontoDia(
-                        titulo: 'Cobrado',
-                        icono: Icons.trending_up_rounded,
-                        colores: const [
-                          AppColors.primary,
-                          AppColors.secondary,
-                        ],
-                        cantidad: resumen.cobradoDiaCantidad,
-                        total: resumen.cobradoDiaTotal,
-                        etiquetaCantidad: 'cobrado(s)',
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _TarjetaMontoDia(
-                        titulo: 'Deuda del día',
-                        icono: Icons.account_balance_wallet_rounded,
-                        colores: const [
-                          Color(0xFFC62828),
-                          Color(0xFFE57373),
-                        ],
-                        cantidad: resumen.deudaDiaCantidad,
-                        total: resumen.deudaDiaTotal,
-                        etiquetaCantidad: 'con deuda',
-                      ),
-                    ),
-                  ],
-                ),
+                child: Text(_verTodo ? 'Ver por día' : 'Ver todo'),
               ),
-            ).animate().fadeIn(delay: 100.ms, duration: 450.ms),
-            const SizedBox(height: 24),
-            Text(
-              'Historial completo',
-              style: Theme.of(context).textTheme.titleMedium,
-            ).animate().fadeIn(delay: 140.ms, duration: 300.ms),
-            const SizedBox(height: 12),
+            ],
+          ).animate().fadeIn(delay: 60.ms, duration: 300.ms),
+          const SizedBox(height: 14),
+          AnimatedSwitcher(
+            duration: 380.ms,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.08),
+                  end: Offset.zero,
+                ).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                ),
+                child: child,
+              ),
+            ),
+            child: Row(
+              key: ValueKey(
+                _verTodo
+                    ? 'todo'
+                    : _fechaSeleccionada.toIso8601String().split('T').first,
+              ),
+              children: [
+                Expanded(
+                  child: _TarjetaMontoDia(
+                    titulo: _verTodo ? 'Cobrado (total)' : 'Cobrado',
+                    icono: Icons.trending_up_rounded,
+                    colores: const [AppColors.primary, AppColors.secondary],
+                    cantidad: cobradoCantidad,
+                    total: cobradoTotal,
+                    etiquetaCantidad: 'cobrado(s)',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _TarjetaMontoDia(
+                    titulo: _verTodo ? 'Deuda (total)' : 'Deuda del día',
+                    icono: Icons.account_balance_wallet_rounded,
+                    colores: const [Color(0xFFC62828), Color(0xFFE57373)],
+                    cantidad: deudaCantidad,
+                    total: deudaTotal,
+                    etiquetaCantidad: 'con deuda',
+                  ),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(delay: 100.ms, duration: 450.ms),
+          const SizedBox(height: 20),
+          if (pagados.isEmpty &&
+              deuda.isEmpty &&
+              cancelados.isEmpty &&
+              rechazados.isEmpty)
+            // Sin onRefrescar a propósito: EstadoVacio arma su propio
+            // RefreshIndicator+LayoutBuilder(constraints.maxHeight) pensado
+            // para ser el cuerpo ENTERO de la pantalla — anidado adentro de
+            // este ListView (que ya tiene su propio RefreshIndicator más
+            // arriba, junto al selector de fecha) esa altura queda infinita
+            // y el contenido se renderiza superpuesto.
+            Padding(
+              padding: const EdgeInsets.only(top: 20),
+              child: EstadoVacio(
+                icono: Icons.receipt_long_rounded,
+                titulo: _verTodo
+                    ? 'Todavía no hay ventas en el historial'
+                    : 'No hay ventas resueltas este día',
+                subtitulo: _verTodo
+                    ? 'Los pedidos entregados, cancelados o rechazados de esta tienda van a aparecer acá.'
+                    : 'Prueba "Ver todo" o elige otro día en el calendario.',
+              ),
+            )
+          else ...[
+            _SeccionHistorial(
+              titulo: 'Completados y pagados',
+              subtitulo: 'Entregados y ya cobrados',
+              icono: Icons.check_circle_rounded,
+              color: const Color(0xFF2E7D32),
+              pedidos: pagados,
+              expandida: _seccionesExpandidas.contains('Completados y pagados'),
+              onToggle: () => _alternarSeccion('Completados y pagados'),
+            ),
+            _SeccionHistorial(
+              titulo: 'Con deuda',
+              subtitulo: 'Entregados, el cliente todavía debe',
+              icono: Icons.account_balance_wallet_rounded,
+              color: const Color(0xFFC62828),
+              pedidos: deuda,
+              expandida: _seccionesExpandidas.contains('Con deuda'),
+              onToggle: () => _alternarSeccion('Con deuda'),
+            ),
+            _SeccionHistorial(
+              titulo: 'Cancelados',
+              subtitulo: 'No llegaron a entregarse',
+              icono: Icons.block_rounded,
+              color: const Color(0xFF6D4C41),
+              pedidos: cancelados,
+              expandida: _seccionesExpandidas.contains('Cancelados'),
+              onToggle: () => _alternarSeccion('Cancelados'),
+            ),
+            _SeccionHistorial(
+              titulo: 'Rechazados',
+              subtitulo: 'El personal no los aceptó',
+              icono: Icons.cancel_rounded,
+              color: AppColors.textSecondary,
+              pedidos: rechazados,
+              expandida: _seccionesExpandidas.contains('Rechazados'),
+              onToggle: () => _alternarSeccion('Rechazados'),
+            ),
           ],
-          _SeccionHistorial(
-            titulo: 'Completados y pagados',
-            subtitulo: 'Entregados y ya cobrados',
-            icono: Icons.check_circle_rounded,
-            color: const Color(0xFF2E7D32),
-            pedidos: pagados,
-          ),
-          _SeccionHistorial(
-            titulo: 'Con deuda',
-            subtitulo: 'Entregados, el cliente todavía debe',
-            icono: Icons.account_balance_wallet_rounded,
-            color: const Color(0xFFC62828),
-            pedidos: deuda,
-          ),
-          _SeccionHistorial(
-            titulo: 'Cancelados',
-            subtitulo: 'No llegaron a entregarse',
-            icono: Icons.block_rounded,
-            color: const Color(0xFF6D4C41),
-            pedidos: cancelados,
-          ),
-          _SeccionHistorial(
-            titulo: 'Rechazados',
-            subtitulo: 'El personal no los aceptó',
-            icono: Icons.cancel_rounded,
-            color: AppColors.textSecondary,
-            pedidos: rechazados,
-          ),
         ],
       ),
     );
@@ -361,6 +382,9 @@ class _EsqueletoTarjeta extends StatelessWidget {
   }
 }
 
+/// Sección plegable: el encabezado (con el conteo) siempre se ve; la lista
+/// de tarjetas solo se arma y se muestra cuando [expandida] es true — así
+/// el historial no abruma con todo desglosado apenas se abre la pantalla.
 class _SeccionHistorial extends StatelessWidget {
   const _SeccionHistorial({
     required this.titulo,
@@ -368,6 +392,8 @@ class _SeccionHistorial extends StatelessWidget {
     required this.icono,
     required this.color,
     required this.pedidos,
+    required this.expandida,
+    required this.onToggle,
   });
 
   final String titulo;
@@ -375,6 +401,8 @@ class _SeccionHistorial extends StatelessWidget {
   final IconData icono;
   final Color color;
   final List<Pedido> pedidos;
+  final bool expandida;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -382,52 +410,77 @@ class _SeccionHistorial extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icono, color: color, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                titulo,
-                style: theme.textTheme.titleMedium?.copyWith(color: color),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: onToggle,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Icon(icono, color: color, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      titulo,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${pedidos.length}',
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    AnimatedRotation(
+                      turns: expandida ? 0.5 : 0,
+                      duration: 220.ms,
+                      child: Icon(
+                        Icons.expand_more_rounded,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
-                child: Text(
-                  '${pedidos.length}',
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 2),
           Padding(
             padding: const EdgeInsets.only(left: 28),
             child: Text(subtitulo, style: theme.textTheme.bodyMedium),
           ),
-          const SizedBox(height: 10),
-          ...pedidos.asMap().entries.map(
-            (entry) => _TarjetaVentaHistorial(
-                  pedido: entry.value,
-                  colorSeccion: color,
-                )
-                .animate(delay: (40 * entry.key).ms)
-                .fadeIn(duration: 260.ms)
-                .moveY(begin: 10, end: 0)
-                .flipH(begin: 0.1, end: 0, duration: 320.ms),
-          ),
+          if (expandida) ...[
+            const SizedBox(height: 10),
+            ...pedidos.asMap().entries.map(
+              (entry) => _TarjetaVentaHistorial(
+                    pedido: entry.value,
+                    colorSeccion: color,
+                  )
+                  .animate(delay: (40 * entry.key).ms)
+                  .fadeIn(duration: 260.ms)
+                  .moveY(begin: 10, end: 0)
+                  .flipH(begin: 0.1, end: 0, duration: 320.ms),
+            ),
+          ],
         ],
       ),
     );
@@ -492,11 +545,24 @@ class _TarjetaVentaHistorial extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          cliente.nombreParaMostrar,
-                          style: theme.textTheme.titleMedium,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                cliente.nombreParaMostrar,
+                                style: theme.textTheme.titleMedium,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              '#${pedido.numeroPedidoDia}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                         if (nombreComercial != null)
                           Text(
@@ -525,6 +591,7 @@ class _TarjetaVentaHistorial extends StatelessWidget {
                   ),
                 ],
               ),
+              NotaPedido(pedido: pedido),
               InfoAuditoriaPedido(pedido: pedido),
             ],
           ),
@@ -534,17 +601,19 @@ class _TarjetaVentaHistorial extends StatelessWidget {
   }
 }
 
-/// Chip que muestra el día elegido para "Cobrado"/"Deuda del día" y abre el
-/// selector de fecha al tocarlo — solo permite elegir días con ventas
-/// registradas (ver [_HistorialVentasPageState._seleccionarFecha]).
+/// Chip que muestra el día elegido (o "Todo el historial" si [verTodo] está
+/// activo) y abre el calendario al tocarlo — solo permite elegir días con
+/// ventas registradas (ver [_HistorialVentasPageState._seleccionarFecha]).
 class _SelectorFecha extends StatelessWidget {
   const _SelectorFecha({
     required this.fecha,
+    required this.verTodo,
     required this.habilitado,
     required this.onTap,
   });
 
   final DateTime fecha;
+  final bool verTodo;
   final bool habilitado;
   final VoidCallback onTap;
 
@@ -557,7 +626,9 @@ class _SelectorFecha extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final etiqueta = _esHoy
+    final etiqueta = verTodo
+        ? 'Todo el historial'
+        : _esHoy
         ? 'Hoy, ${DateFormat('d \'de\' MMMM', 'es').format(fecha)}'
         : DateFormat('EEEE d \'de\' MMMM', 'es').format(fecha);
 
@@ -610,9 +681,9 @@ class _SelectorFecha extends StatelessWidget {
   }
 }
 
-/// Tarjeta compacta de dinero para el día elegido (cobrado o deuda) — dos
-/// de estas van lado a lado arriba del historial. El ícono con pulso
-/// continuo le da ese aire "vivo", sin exagerar.
+/// Tarjeta compacta de dinero (cobrado o deuda) — dos de estas van lado a
+/// lado arriba del historial. El ícono con pulso continuo le da ese aire
+/// "vivo", sin exagerar.
 class _TarjetaMontoDia extends StatelessWidget {
   const _TarjetaMontoDia({
     required this.titulo,

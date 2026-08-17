@@ -655,6 +655,7 @@ class _CamposSecundariosTrabajador extends StatelessWidget {
         TextFormField(
           controller: salarioController,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: const [DecimalTextInputFormatter()],
           decoration: const InputDecoration(
             labelText: 'Salario (S/, opcional)',
             prefixIcon: Icon(Icons.payments_outlined),

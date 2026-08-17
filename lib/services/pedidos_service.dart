@@ -53,6 +53,10 @@ class PedidoClienteResumen {
 class PedidoResultado {
   const PedidoResultado({
     required this.idPedido,
+    required this.numeroPedidoDia,
+    this.tienda,
+    this.producto,
+    this.tipoPedido,
     required this.precioUnitario,
     required this.total,
     required this.fechaEntrega,
@@ -63,6 +67,10 @@ class PedidoResultado {
   factory PedidoResultado.fromJson(Map<String, dynamic> json) =>
       PedidoResultado(
         idPedido: json['idPedido'] as int,
+        numeroPedidoDia: json['numeroPedidoDia'] as int? ?? 0,
+        tienda: json['tienda'] as String?,
+        producto: json['producto'] as String?,
+        tipoPedido: json['tipoPedido'] as String?,
         precioUnitario: (json['precioUnitario'] as num).toDouble(),
         total: (json['total'] as num).toDouble(),
         fechaEntrega: json['fechaEntrega'] != null
@@ -77,11 +85,56 @@ class PedidoResultado {
       );
 
   final int idPedido;
+
+  /// Correlativo #1, #2... que empieza de nuevo cada día calendario (hora
+  /// de Perú), independiente por tienda — es lo que se le muestra al
+  /// personal/cliente ("Pedido #N"), nunca [idPedido] (la PK real, que
+  /// sigue siendo lo único válido para llamar a /pedidos/:id/...).
+  final int numeroPedidoDia;
+
+  /// Solo vienen en la respuesta de [PedidosService.crearComoCliente] (ver
+  /// crearMiPedido en pedidosController.js) — [PedidosService.crear] (el
+  /// personal negociando en el momento) no los incluye.
+  final String? tienda;
+  final String? producto;
+  final String? tipoPedido;
   final double precioUnitario;
   final double total;
   final DateTime? fechaEntrega;
   final DateTime fechaCreacion;
   final PedidoClienteResumen cliente;
+}
+
+/// Un producto del catálogo de autoservicio — mismo catálogo que ve un
+/// visitante sin cuenta en la página web (GET /publico/catalogo), reusado
+/// acá porque no necesita token y evita duplicar la lista de productos con
+/// precio fijo en dos lugares.
+class ProductoAutoservicio {
+  const ProductoAutoservicio({
+    required this.idProducto,
+    required this.nombre,
+    required this.precioUnitario,
+    required this.esPaquete,
+  });
+
+  factory ProductoAutoservicio.fromJson(Map<String, dynamic> json) =>
+      ProductoAutoservicio(
+        idProducto: json['idProducto'] as int,
+        nombre: json['nombre'] as String,
+        precioUnitario: (json['precioUnitario'] as num).toDouble(),
+        esPaquete: json['esPaquete'] as bool? ?? false,
+      );
+
+  final int idProducto;
+  final String nombre;
+
+  /// Precio del paquete de 12 (pan de hamburguesa) o de la unidad (resto del
+  /// catálogo) — ver [esPaquete].
+  final double precioUnitario;
+
+  /// true: se vende por paquete de 12 a precio fijo (pan de hamburguesa), no
+  /// por unidad suelta como el resto del catálogo.
+  final bool esPaquete;
 }
 
 class PedidosService {
@@ -94,6 +147,7 @@ class PedidosService {
 
   Future<PedidoResultado> crear({
     required int idCliente,
+    required int idProducto,
     required String tipoPedido,
     required int cantidad,
     required double precioUnitario,
@@ -103,6 +157,7 @@ class PedidosService {
     final token = await _storage.obtenerAccessToken();
     final data = await _api.post('/pedidos', {
       'idCliente': idCliente,
+      'idProducto': idProducto,
       'tipoPedido': tipoPedido,
       'cantidad': cantidad,
       'precioUnitario': precioUnitario,
@@ -112,9 +167,11 @@ class PedidosService {
     return PedidoResultado.fromJson(data);
   }
 
-  Future<List<Pedido>> listar() async {
+  /// Pedidos de UNA tienda de catálogo simple (Hamburguesas o Panadería) —
+  /// Horneados tiene su propio servicio dedicado (`HorneadosService`).
+  Future<List<Pedido>> listar({required int idTienda}) async {
     final token = await _storage.obtenerAccessToken();
-    final data = await _api.get('/pedidos', token: token);
+    final data = await _api.get('/pedidos?idTienda=$idTienda', token: token);
     final lista = data['pedidos'] as List<dynamic>? ?? const [];
     return lista
         .map((e) => Pedido.fromJson(e as Map<String, dynamic>))
@@ -133,24 +190,35 @@ class PedidosService {
   }
 
   /// Autoservicio (rol CLIENTE): el propio cliente registra su pedido. El
-  /// precio siempre sale del catálogo de la tienda — nadie lo negocia. Nace
+  /// precio siempre sale del catálogo del producto elegido — nadie lo
+  /// negocia; la tienda y el tipo de pedido (paquete/unidad) se derivan en
+  /// el backend a partir de [idProducto], no hace falta enviarlos. Nace
   /// como "solicitado", a la espera de que el personal lo confirme.
   Future<PedidoResultado> crearComoCliente({
-    required int idTienda,
-    required String tipoPedido,
+    required int idProducto,
     required int cantidad,
     DateTime? fechaEntrega,
     String? notas,
   }) async {
     final token = await _storage.obtenerAccessToken();
     final data = await _api.post('/pedidos/mi-pedido', {
-      'idTienda': idTienda,
-      'tipoPedido': tipoPedido,
+      'idProducto': idProducto,
       'cantidad': cantidad,
       'fechaEntrega': fechaEntrega?.toUtc().toIso8601String(),
       'notas': notas,
     }, token: token);
     return PedidoResultado.fromJson(data);
+  }
+
+  /// Catálogo de autoservicio (mismo que ve un visitante sin cuenta en la
+  /// página web) — sin token: cualquier cliente autenticado lo ve igual que
+  /// uno anónimo, no hay nada sensible en un catálogo de precios públicos.
+  Future<List<ProductoAutoservicio>> catalogoAutoservicio() async {
+    final data = await _api.get('/publico/catalogo');
+    final lista = data['productos'] as List<dynamic>? ?? const [];
+    return lista
+        .map((e) => ProductoAutoservicio.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// Personal: acepta un pedido solicitado por un cliente.
@@ -182,10 +250,14 @@ class PedidosService {
     await _api.put('/pedidos/$idPedido/cancelar', const {}, token: token);
   }
 
-  /// Personal: pedidos entregados con deuda pendiente, de sus tiendas.
-  Future<List<Pedido>> listarDeudas() async {
+  /// Personal: pedidos entregados con deuda pendiente, de UNA tienda de
+  /// catálogo simple (Hamburguesas o Panadería).
+  Future<List<Pedido>> listarDeudas({required int idTienda}) async {
     final token = await _storage.obtenerAccessToken();
-    final data = await _api.get('/pedidos/deudas', token: token);
+    final data = await _api.get(
+      '/pedidos/deudas?idTienda=$idTienda',
+      token: token,
+    );
     final lista = data['pedidos'] as List<dynamic>? ?? const [];
     return lista
         .map((e) => Pedido.fromJson(e as Map<String, dynamic>))
@@ -219,6 +291,7 @@ class PedidosService {
 class Pedido {
   const Pedido({
     required this.idPedido,
+    required this.numeroPedidoDia,
     required this.idCliente,
     required this.idTienda,
     required this.tienda,
@@ -243,6 +316,7 @@ class Pedido {
 
   factory Pedido.fromJson(Map<String, dynamic> json) => Pedido(
     idPedido: json['idPedido'] as int,
+    numeroPedidoDia: json['numeroPedidoDia'] as int? ?? 0,
     idCliente: json['idCliente'] as int,
     idTienda: json['idTienda'] as int?,
     tienda: json['tienda'] as String?,
@@ -276,6 +350,12 @@ class Pedido {
   );
 
   final int idPedido;
+
+  /// Correlativo #1, #2... que empieza de nuevo cada día calendario (hora
+  /// de Perú), independiente por tienda — es lo que se muestra al personal/
+  /// cliente ("Pedido #N"), nunca [idPedido] (la PK real que identifica el
+  /// pedido en /pedidos/:id/...).
+  final int numeroPedidoDia;
   final int idCliente;
   final int? idTienda;
   final String? tienda;

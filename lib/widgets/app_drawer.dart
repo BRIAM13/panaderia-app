@@ -26,6 +26,10 @@ class AppDrawer extends StatelessWidget {
     required this.onAbrirDeudasHamburguesas,
     required this.onAbrirMediosPagoHamburguesas,
     required this.onAbrirAjusteCostosHamburguesas,
+    required this.onAbrirPedidosPanaderia,
+    required this.onAbrirNuevoPedidoPanaderia,
+    required this.onAbrirDeudasPanaderia,
+    required this.onAbrirAjustePreciosPanaderia,
     required this.onAbrirMiPerfil,
     required this.onAbrirMisPedidos,
     required this.onAbrirMisDeudas,
@@ -45,6 +49,10 @@ class AppDrawer extends StatelessWidget {
   final VoidCallback onAbrirDeudasHamburguesas;
   final VoidCallback onAbrirMediosPagoHamburguesas;
   final VoidCallback onAbrirAjusteCostosHamburguesas;
+  final VoidCallback onAbrirPedidosPanaderia;
+  final VoidCallback onAbrirNuevoPedidoPanaderia;
+  final VoidCallback onAbrirDeudasPanaderia;
+  final VoidCallback onAbrirAjustePreciosPanaderia;
   final VoidCallback onAbrirMiPerfil;
   final VoidCallback onAbrirMisPedidos;
   final VoidCallback onAbrirMisDeudas;
@@ -72,6 +80,10 @@ class AppDrawer extends StatelessWidget {
         onAbrirDeudasHamburguesas: onAbrirDeudasHamburguesas,
         onAbrirMediosPagoHamburguesas: onAbrirMediosPagoHamburguesas,
         onAbrirAjusteCostosHamburguesas: onAbrirAjusteCostosHamburguesas,
+        onAbrirPedidosPanaderia: onAbrirPedidosPanaderia,
+        onAbrirNuevoPedidoPanaderia: onAbrirNuevoPedidoPanaderia,
+        onAbrirDeudasPanaderia: onAbrirDeudasPanaderia,
+        onAbrirAjustePreciosPanaderia: onAbrirAjustePreciosPanaderia,
         onAbrirMiPerfil: onAbrirMiPerfil,
         onAbrirMisPedidos: onAbrirMisPedidos,
         onAbrirMisDeudas: onAbrirMisDeudas,
@@ -104,6 +116,10 @@ class AppDrawerContenido extends StatefulWidget {
     required this.onAbrirDeudasHamburguesas,
     required this.onAbrirMediosPagoHamburguesas,
     required this.onAbrirAjusteCostosHamburguesas,
+    required this.onAbrirPedidosPanaderia,
+    required this.onAbrirNuevoPedidoPanaderia,
+    required this.onAbrirDeudasPanaderia,
+    required this.onAbrirAjustePreciosPanaderia,
     required this.onAbrirMiPerfil,
     required this.onAbrirMisPedidos,
     required this.onAbrirMisDeudas,
@@ -123,6 +139,10 @@ class AppDrawerContenido extends StatefulWidget {
   final VoidCallback onAbrirDeudasHamburguesas;
   final VoidCallback onAbrirMediosPagoHamburguesas;
   final VoidCallback onAbrirAjusteCostosHamburguesas;
+  final VoidCallback onAbrirPedidosPanaderia;
+  final VoidCallback onAbrirNuevoPedidoPanaderia;
+  final VoidCallback onAbrirDeudasPanaderia;
+  final VoidCallback onAbrirAjustePreciosPanaderia;
   final VoidCallback onAbrirMiPerfil;
   final VoidCallback onAbrirMisPedidos;
   final VoidCallback onAbrirMisDeudas;
@@ -208,19 +228,75 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
     ];
   }
 
+  /// Acciones de Panadería — mismo nivel operativo que Hamburguesas
+  /// (Pedidos/Nuevo pedido/Deudas), reusando Clientes y Métodos de pago
+  /// (ninguno de los dos es realmente "de Hamburguesas": Clientes es global
+  /// y Métodos de pago ya deja elegir la tienda internamente). "Ajustar
+  /// precios" reemplaza al "Ajuste de costos" de Hamburguesas (que edita el
+  /// precio del PAQUETE de 12, un concepto que Panadería no tiene): en vez
+  /// de un único valor global, deja elegir cualquier pan del catálogo y
+  /// cambiar su precio por unidad.
+  List<_FilaMenu> _accionesPanaderia(UsuarioSesion usuario) {
+    final esAdmin = usuario.rol == 'ADMIN' || usuario.rol == 'SUPERADMIN';
+    final esSuperAdmin = usuario.rol == 'SUPERADMIN';
+    return [
+      _FilaMenu(
+        icono: Icons.groups_rounded,
+        titulo: 'Clientes',
+        onTap: widget.onAbrirClientesHamburguesas,
+        delay: 0,
+      ),
+      _FilaMenu(
+        icono: Icons.receipt_long_rounded,
+        titulo: 'Pedidos',
+        onTap: widget.onAbrirPedidosPanaderia,
+        delay: 0,
+      ),
+      _FilaMenu(
+        icono: Icons.add_shopping_cart_rounded,
+        titulo: 'Nuevo pedido',
+        onTap: widget.onAbrirNuevoPedidoPanaderia,
+        delay: 0,
+      ),
+      _FilaMenu(
+        icono: Icons.account_balance_wallet_rounded,
+        titulo: 'Deudas',
+        onTap: widget.onAbrirDeudasPanaderia,
+        delay: 0,
+      ),
+      if (esSuperAdmin)
+        _FilaMenu(
+          icono: Icons.qr_code_2_rounded,
+          titulo: 'Métodos de pago',
+          onTap: widget.onAbrirMediosPagoHamburguesas,
+          delay: 0,
+        ),
+      if (esAdmin)
+        _FilaMenu(
+          icono: Icons.price_change_rounded,
+          titulo: 'Ajustar precios',
+          onTap: widget.onAbrirAjustePreciosPanaderia,
+          delay: 0,
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final usuario = widget.usuario;
 
     // Solo se listan acá las tiendas con acceso real ya construido en la
-    // app (Hamburguesas completa, Horneados con su pantalla "Próximamente")
-    // — Panadería/Mercadería/Pastelería todavía no tienen nada que mostrar
-    // en el drawer de personal, aunque ya existan como tienda.
+    // app (Hamburguesas y Panadería completas, Horneados con su pantalla
+    // "Próximamente") — Mercadería/Pastelería todavía no tienen nada que
+    // mostrar en el drawer de personal, aunque ya existan como tienda.
     final tieneHamburguesas = widget.misSlugsTiendas.contains('hamburguesas');
     final tieneHorneados = widget.misSlugsTiendas.contains('horneados');
+    final tienePanaderia = widget.misSlugsTiendas.contains('panaderia');
     final cantidadTiendas =
-        (tieneHamburguesas ? 1 : 0) + (tieneHorneados ? 1 : 0);
+        (tieneHamburguesas ? 1 : 0) +
+        (tieneHorneados ? 1 : 0) +
+        (tienePanaderia ? 1 : 0);
 
     Widget seccionHamburguesas({required bool anidadaEnTiendas}) {
       final acciones = _accionesHamburguesas(usuario);
@@ -240,6 +316,26 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
         expandido: _abiertas.contains('hamburguesas'),
         onTap: () => _alternar('hamburguesas'),
         delay: 70,
+        hijos: acciones,
+      );
+    }
+
+    Widget seccionPanaderia({required bool anidadaEnTiendas}) {
+      final acciones = _accionesPanaderia(usuario);
+      if (!anidadaEnTiendas) {
+        return Column(
+          children: [
+            const _EncabezadoSeccion(texto: 'PANADERÍA'),
+            ...acciones,
+          ],
+        );
+      }
+      return _FilaMenuExpandible(
+        icono: Icons.bakery_dining_rounded,
+        titulo: 'Panadería',
+        expandido: _abiertas.contains('panaderia'),
+        onTap: () => _alternar('panaderia'),
+        delay: 85,
         hijos: acciones,
       );
     }
@@ -378,6 +474,8 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                     if (cantidadTiendas == 1) ...[
                       if (tieneHamburguesas)
                         seccionHamburguesas(anidadaEnTiendas: false),
+                      if (tienePanaderia)
+                        seccionPanaderia(anidadaEnTiendas: false),
                       if (tieneHorneados) ...[
                         const _EncabezadoSeccion(texto: 'HORNEADOS'),
                         filaHorneados(),
@@ -392,6 +490,8 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                         hijos: [
                           if (tieneHamburguesas)
                             seccionHamburguesas(anidadaEnTiendas: true),
+                          if (tienePanaderia)
+                            seccionPanaderia(anidadaEnTiendas: true),
                           if (tieneHorneados) filaHorneados(),
                         ],
                       ),

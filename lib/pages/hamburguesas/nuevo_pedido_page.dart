@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/cliente_model.dart';
+import '../../models/tienda_model.dart';
 import '../../services/api_client.dart';
 import '../../services/clientes_service.dart';
 import '../../services/configuraciones_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
+import '../../services/tiendas_service.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../utils/text_formatters.dart';
 import '../../utils/texto_utils.dart';
@@ -21,12 +24,17 @@ const _claveConfigPrecioPaquete = 'PRECIO_PAQUETE';
 const _precioPaqueteRespaldo =
     '3.50'; // si la configuración no carga por algún motivo
 
-/// Registro de un nuevo pedido de pan de hamburguesa: unidades sueltas o
-/// paquetes de 12. Inicia en "Paquetes" (mayor volumen de ventas) con el
-/// precio sugerido desde Configuraciones, pero tanto la cantidad como el
-/// precio son editables — el vendedor puede negociar un precio especial.
+/// Registro de un nuevo pedido a nombre de un cliente, en una tienda de
+/// catálogo simple (Hamburguesas o Panadería — Horneados tiene su propia
+/// página con sus campos propios). Hamburguesas mantiene su formulario de
+/// siempre (unidades sueltas o paquetes de 12, precio sugerido desde
+/// Configuraciones); el resto (Panadería) elige un producto de su catálogo,
+/// con el precio precargado desde ahí. En ambos casos la cantidad y el
+/// precio quedan editables — el vendedor puede negociar un precio especial.
 class NuevoPedidoPage extends StatefulWidget {
-  const NuevoPedidoPage({super.key});
+  const NuevoPedidoPage({super.key, required this.tienda});
+
+  final Tienda tienda;
 
   @override
   State<NuevoPedidoPage> createState() => _NuevoPedidoPageState();
@@ -40,12 +48,20 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
   final _clientesService = ClientesService();
   final _configuracionesService = ConfiguracionesService();
   final _pedidosService = PedidosService();
+  final _tiendasService = TiendasService();
 
   bool _cargandoDatos = true;
   String? _errorCarga;
 
   List<Cliente> _clientes = [];
   String _precioPaqueteSugerido = _precioPaqueteRespaldo;
+
+  /// Catálogo de la tienda — para Hamburguesas trae un solo producto
+  /// (implícito, no se muestra selector); para Panadería, varios.
+  List<ProductoAutoservicio> _productos = [];
+  ProductoAutoservicio? _productoSeleccionado;
+
+  bool get _esHamburguesas => widget.tienda.slug == 'hamburguesas';
 
   Cliente? _clienteSeleccionado;
   int _tipoPedidoIndex = 1; // 0 = UNIDADES, 1 = PAQUETES (por defecto)
@@ -84,14 +100,20 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
     try {
       final resultados = await Future.wait([
         _clientesService.listar(),
-        _configuracionesService.obtener(_claveConfigPrecioPaquete),
+        _tiendasService.listarProductos(widget.tienda.idTienda),
+        _esHamburguesas
+            ? _configuracionesService.obtener(_claveConfigPrecioPaquete)
+            : Future.value(_precioPaqueteRespaldo),
       ]);
       final clientes = resultados[0] as List<Cliente>;
-      final precioPaquete = resultados[1] as String;
+      final productos = resultados[1] as List<ProductoAutoservicio>;
+      final precioPaquete = resultados[2] as String;
 
       setState(() {
         _clientes = clientes;
+        _productos = productos;
         _precioPaqueteSugerido = precioPaquete;
+        _productoSeleccionado = productos.isNotEmpty ? productos.first : null;
       });
       _aplicarValoresPorDefecto();
     } on ApiException catch (e) {
@@ -105,10 +127,18 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
     }
   }
 
-  /// Precarga cantidad=1 y el precio sugerido, solo tiene sentido para
-  /// "Paquetes"; "Unidades" siempre arranca vacío para forzar un ingreso
-  /// manual (son pedidos especiales, no hay precio de catálogo fijo).
+  /// Hamburguesas: precarga cantidad=1 y el precio sugerido, solo tiene
+  /// sentido para "Paquetes"; "Unidades" siempre arranca vacío para forzar
+  /// un ingreso manual (son pedidos especiales, sin precio de catálogo).
+  /// Resto de tiendas (Panadería): precarga cantidad=1 y el precio del
+  /// producto elegido — siempre hay un precio de catálogo de referencia.
   void _aplicarValoresPorDefecto() {
+    if (!_esHamburguesas) {
+      _cantidadController.text = '1';
+      _precioController.text = (_productoSeleccionado?.precioUnitario ?? 0)
+          .toStringAsFixed(2);
+      return;
+    }
     if (_tipoPedidoIndex == 1) {
       _cantidadController.text = '1';
       _precioController.text = _precioPaqueteSugerido;
@@ -123,29 +153,44 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
     _aplicarValoresPorDefecto();
   }
 
-  bool get _esPaquete => _tipoPedidoIndex == 1;
+  void _cambiarProducto(ProductoAutoservicio? producto) {
+    setState(() => _productoSeleccionado = producto);
+    _aplicarValoresPorDefecto();
+  }
+
+  bool get _esPaquete => _esHamburguesas && _tipoPedidoIndex == 1;
 
   int get _cantidad => int.tryParse(_cantidadController.text) ?? 0;
 
-  /// Para "Paquetes" es un precio por paquete; para "Unidades" el campo
-  /// representa directamente el total del pedido (sin multiplicar), por
-  /// eso el getter se llama distinto según el contexto de uso.
+  /// Cuando el precio es "por unidad" el total se calcula multiplicando por
+  /// la cantidad. Solo Hamburguesas en "Unidades" (pedido especial, sin
+  /// catálogo) es la excepción: ahí el vendedor escribe directamente el
+  /// total del pedido, sin multiplicar.
+  bool get _precioEsPorUnidad => !_esHamburguesas || _esPaquete;
+
   double get _valorIngresado =>
       double.tryParse(_precioController.text.replaceAll(',', '.')) ?? 0;
 
   double get _total =>
-      _esPaquete ? _valorIngresado * _cantidad : _valorIngresado;
+      _precioEsPorUnidad ? _valorIngresado * _cantidad : _valorIngresado;
 
   /// Precio por unidad que se envía al backend (que siempre calcula
-  /// total = precioUnitario × cantidad). En "Unidades" el vendedor ingresa
-  /// el total final directamente, así que aquí se deriva el equivalente
-  /// por unidad para que ese cálculo reproduzca el total exacto que se
-  /// mostró en pantalla.
+  /// total = precioUnitario × cantidad). En Hamburguesas "Unidades" el
+  /// vendedor ingresa el total final directamente, así que aquí se deriva
+  /// el equivalente por unidad para que ese cálculo reproduzca el total
+  /// exacto que se mostró en pantalla.
   double get _precioUnitarioParaEnviar {
-    if (_esPaquete) return _valorIngresado;
+    if (_precioEsPorUnidad) return _valorIngresado;
     if (_cantidad <= 0) return 0;
     return double.parse((_valorIngresado / _cantidad).toStringAsFixed(2));
   }
+
+  /// Hamburguesas solo tiene un producto implícito (el primero — y único —
+  /// del catálogo cargado); el resto de tiendas usa el elegido en el
+  /// selector.
+  int? get _idProductoParaEnviar => _esHamburguesas
+      ? (_productos.isNotEmpty ? _productos.first.idProducto : null)
+      : _productoSeleccionado?.idProducto;
 
   /// Con fecha (siempre trae un valor por defecto: hoy) ya cuenta como
   /// "pedido con fecha programada", aunque no se elija una hora específica
@@ -199,6 +244,11 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
       setState(() => _error = 'Selecciona un cliente para el pedido.');
       return;
     }
+    final idProducto = _idProductoParaEnviar;
+    if (idProducto == null) {
+      setState(() => _error = 'Selecciona un producto para el pedido.');
+      return;
+    }
     // La fecha ya viene precargada con hoy, y por sí sola ya cuenta como
     // "entrega programada" (no hace falta elegir una hora específica). Si
     // SÍ se eligió hora, recién ahí tiene sentido comparar el instante
@@ -223,7 +273,8 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
     try {
       final resultado = await _pedidosService.crear(
         idCliente: _clienteSeleccionado!.idCliente,
-        tipoPedido: _tiposPedido[_tipoPedidoIndex],
+        idProducto: idProducto,
+        tipoPedido: _esHamburguesas ? _tiposPedido[_tipoPedidoIndex] : 'UNIDADES',
         cantidad: _cantidad,
         precioUnitario: _precioUnitarioParaEnviar,
         fechaEntrega: fechaHora,
@@ -263,7 +314,7 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
           color: const Color(0xFF2E7D32),
           size: 36,
         ),
-        title: Text('Pedido #${resultado.idPedido} registrado'),
+        title: Text('Pedido #${resultado.numeroPedidoDia} registrado'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -356,24 +407,47 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
                             setState(() => _clienteSeleccionado = c),
                       ),
                       const SizedBox(height: 24),
-                      Text(
-                        'Tipo de pedido',
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      SegmentedSwitch(
-                        opciones: const [
-                          'Unidades individuales',
-                          'Paquetes de 12 panes',
-                        ],
-                        indiceSeleccionado: _tipoPedidoIndex,
-                        onChanged: _cambiarTipoPedido,
-                      ),
-                      if (!esPaquete) ...[
-                        const SizedBox(height: 8),
+                      if (_esHamburguesas) ...[
                         Text(
-                          'Pedido especial: ingresa manualmente la cantidad y el precio a cobrar por unidad.',
-                          style: theme.textTheme.bodyMedium,
+                          'Tipo de pedido',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        SegmentedSwitch(
+                          opciones: const [
+                            'Unidades individuales',
+                            'Paquetes de 12 panes',
+                          ],
+                          indiceSeleccionado: _tipoPedidoIndex,
+                          onChanged: _cambiarTipoPedido,
+                        ),
+                        if (!esPaquete) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Pedido especial: ingresa manualmente la cantidad y el precio a cobrar por unidad.',
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ],
+                      ] else ...[
+                        Text('Producto', style: theme.textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<ProductoAutoservicio>(
+                          initialValue: _productoSeleccionado,
+                          items: _productos
+                              .map(
+                                (p) => DropdownMenuItem(
+                                  value: p,
+                                  child: Text(
+                                    p.nombre,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _cambiarProducto,
+                          decoration: const InputDecoration(
+                            prefixIcon: Icon(Icons.inventory_2_rounded),
+                          ),
                         ),
                       ],
                       const SizedBox(height: 20),
@@ -384,8 +458,13 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
                             child: TextFormField(
                               controller: _cantidadController,
                               keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                               decoration: InputDecoration(
-                                labelText: esPaquete
+                                labelText: !_esHamburguesas
+                                    ? 'Cantidad'
+                                    : esPaquete
                                     ? 'Cantidad de paquetes'
                                     : 'Cantidad de unidades',
                                 prefixIcon: const Icon(Icons.numbers_rounded),
@@ -407,8 +486,13 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
                                   const TextInputType.numberWithOptions(
                                     decimal: true,
                                   ),
+                              inputFormatters: const [
+                                DecimalTextInputFormatter(),
+                              ],
                               decoration: InputDecoration(
-                                labelText: esPaquete
+                                labelText: !_esHamburguesas
+                                    ? 'Precio unitario (S/)'
+                                    : esPaquete
                                     ? 'Precio del paquete (S/)'
                                     : 'Precio Total del Pedido (S/)',
                                 prefixIcon: const Icon(Icons.sell_outlined),
@@ -480,7 +564,7 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (esPaquete) ...[
+                            if (_precioEsPorUnidad) ...[
                               Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
