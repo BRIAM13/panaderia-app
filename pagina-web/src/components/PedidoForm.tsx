@@ -13,6 +13,13 @@ import {
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
 const NOMBRES_DISPONIBLES = new Set(PRODUCTOS.map((p) => p.nombreEnCatalogo));
 
+// Pan vendido por unidad (Pan de Agua/Francés) tiene un pedido mínimo — el
+// pan de hamburguesa no aplica, se vende por paquete de 12 a precio fijo.
+// Mismo mínimo que valida el backend (crearPedidoPublico), así el cliente
+// ve el aviso antes de intentar enviar un pedido que el servidor va a
+// rechazar igual.
+const CANTIDAD_MINIMA_UNIDAD = 50;
+
 export function PedidoForm() {
   const [productos, setProductos] = useState<ProductoPublico[]>([]);
   const [cargandoProductos, setCargandoProductos] = useState(true);
@@ -51,6 +58,16 @@ export function PedidoForm() {
   const cantidadNum = Number(cantidad) || 0;
   const total = productoSeleccionado ? productoSeleccionado.precioUnitario * cantidadNum : 0;
 
+  // Al cambiar de producto, la cantidad vuelve a un valor sensato para ese
+  // producto — 1 para paquetes de hamburguesa, el mínimo de venta (50) para
+  // pan por unidad — así nadie tiene que adivinarlo ni tropezar con el
+  // error de "cantidad insuficiente" apenas elige el pan.
+  useEffect(() => {
+    if (!productoSeleccionado) return;
+    setCantidad(productoSeleccionado.esPaquete ? "1" : `${CANTIDAD_MINIMA_UNIDAD}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idProducto]);
+
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -69,6 +86,10 @@ export function PedidoForm() {
     }
     if (!Number.isInteger(cantidadNum) || cantidadNum <= 0) {
       setError("Ingresa una cantidad válida.");
+      return;
+    }
+    if (!esPaquete && cantidadNum < CANTIDAD_MINIMA_UNIDAD) {
+      setError(`El pedido mínimo es de ${CANTIDAD_MINIMA_UNIDAD} panes.`);
       return;
     }
 
@@ -97,7 +118,7 @@ export function PedidoForm() {
     setResultado(null);
     setDni("");
     setTelefono("");
-    setCantidad("1");
+    setCantidad(esPaquete ? "1" : `${CANTIDAD_MINIMA_UNIDAD}`);
     setNotas("");
   }
 
@@ -171,14 +192,10 @@ export function PedidoForm() {
                     maxLength={8}
                     value={dni}
                     onChange={(e) => setDni(e.target.value.replace(/\D/g, ""))}
-                    placeholder="12345678"
+                    placeholder="Ingresa tu DNI"
                     required
                     className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
-                  <p className="mt-1 text-xs text-pan-carbon-suave">
-                    Lo verificamos con RENIEC para confirmar tu nombre, así que no hace falta que lo
-                    escribas.
-                  </p>
                 </div>
 
                 <div>
@@ -191,7 +208,7 @@ export function PedidoForm() {
                     maxLength={9}
                     value={telefono}
                     onChange={(e) => setTelefono(e.target.value.replace(/\D/g, ""))}
-                    placeholder="987654321"
+                    placeholder="Ingresa tu número de celular"
                     required
                     className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
@@ -213,27 +230,31 @@ export function PedidoForm() {
                     {!cargandoProductos &&
                       productos.map((p) => (
                         <option key={p.idProducto} value={p.idProducto}>
-                          {p.nombre}{" "}
-                          {p.esPaquete
-                            ? `(S/ ${p.precioUnitario.toFixed(2)} el paquete de 12)`
-                            : `(S/ ${p.precioUnitario.toFixed(2)} cada uno)`}
+                          {p.nombre}
                         </option>
                       ))}
                   </select>
                   {errorCatalogo && <p className="mt-1.5 text-xs text-red-700">{errorCatalogo}</p>}
+                  {productoSeleccionado && (
+                    <p className="mt-1.5 text-xs text-pan-carbon-suave">
+                      {esPaquete
+                        ? `Cada paquete trae 12 panes de hamburguesa y cuesta S/ ${productoSeleccionado.precioUnitario.toFixed(2)}, sin importar cuántos paquetes pidas.`
+                        : `Pedido mínimo: ${CANTIDAD_MINIMA_UNIDAD} panes.`}
+                    </p>
+                  )}
                 </div>
 
                 <div>
                   <label htmlFor="cantidad" className="mb-1.5 block text-sm font-medium text-pan-carbon">
-                    {esPaquete ? "Cantidad de paquetes (12 unidades cada uno)" : "Cantidad"}
+                    {esPaquete ? "Cantidad de paquetes (12 unidades de pan en cada paquete)" : "Cantidad"}
                   </label>
                   <input
                     id="cantidad"
                     inputMode="numeric"
-                    maxLength={3}
+                    maxLength={4}
                     value={cantidad}
                     onChange={(e) => setCantidad(e.target.value.replace(/\D/g, ""))}
-                    placeholder="1"
+                    placeholder={esPaquete ? "Ingresa la cantidad de paquetes" : "Ingresa la cantidad unitaria"}
                     required
                     className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
