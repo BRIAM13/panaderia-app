@@ -1,5 +1,6 @@
 import { Navbar } from "./components/Navbar";
 import { ScrollProgress } from "./components/ScrollProgress";
+import { Mascota } from "./components/Mascota";
 import { Hero } from "./components/Hero";
 import { Nosotros } from "./components/Nosotros";
 import { Menu } from "./components/Menu";
@@ -22,6 +23,7 @@ function App() {
         <Ubicacion />
       </main>
       <Footer />
+      <Mascota />
     </div>
   );
 }

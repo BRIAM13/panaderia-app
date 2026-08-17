@@ -1,4 +1,4 @@
-import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { motion } from "framer-motion";
 import { PRODUCTOS, type ProductoMenu } from "../data/config";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
@@ -33,42 +33,20 @@ export function Menu() {
   );
 }
 
-/** Tarjeta con inclinación 3D que sigue al cursor — mismo espíritu que el
- * efecto "Tarjeta3D" ya usado en toda la app móvil (lib/widgets/tarjeta_3d.dart),
- * ahora también en la web, para que el pan se sienta "tocable". */
+/** Tarjeta que entra en 3D al aparecer en pantalla (se "endereza" al hacer
+ * scroll), en vez de inclinarse con el mouse — el efecto va ligado a la
+ * navegación por la página, no al cursor. */
 function TarjetaProducto({ producto, index }: { producto: ProductoMenu; index: number }) {
-  const tiltX = useMotionValue(0);
-  const tiltY = useMotionValue(0);
-  const spring = { stiffness: 260, damping: 22 };
-  const rotateX = useSpring(useTransform(tiltY, [-0.5, 0.5], [10, -10]), spring);
-  const rotateY = useSpring(useTransform(tiltX, [-0.5, 0.5], [-10, 10]), spring);
-
-  function manejarMovimiento(e: React.MouseEvent<HTMLDivElement>) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    tiltX.set((e.clientX - rect.left) / rect.width - 0.5);
-    tiltY.set((e.clientY - rect.top) / rect.height - 0.5);
-  }
-
-  function resetear() {
-    tiltX.set(0);
-    tiltY.set(0);
-  }
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: 32, rotateX: 20 }}
+      whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
       viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.5, ease: EASE_PREMIUM, delay: index * 0.08 }}
-      style={{ perspective: 800 }}
-      onMouseMove={manejarMovimiento}
-      onMouseLeave={resetear}
-      className="group"
+      transition={{ duration: 0.6, ease: EASE_PREMIUM, delay: index * 0.08 }}
+      style={{ perspective: 800, transformStyle: "preserve-3d" }}
+      className="group h-full"
     >
-      <motion.div
-        style={{ rotateX, rotateY }}
-        className="shine-sweep overflow-hidden rounded-3xl bg-pan-crema-suave shadow-sm shadow-pan-carbon/5 transition-shadow duration-300 hover:shadow-2xl hover:shadow-pan-carbon/15"
-      >
+      <div className="shine-sweep flex h-full flex-col overflow-hidden rounded-3xl bg-pan-crema-suave shadow-sm shadow-pan-carbon/5 transition-shadow duration-300 hover:shadow-2xl hover:shadow-pan-carbon/15">
         <div className="aspect-square w-full overflow-hidden bg-pan-terracota-suave/40">
           <img
             src={producto.imagen}
@@ -76,13 +54,13 @@ function TarjetaProducto({ producto, index }: { producto: ProductoMenu; index: n
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
           />
         </div>
-        <div className="p-5" style={{ transform: "translateZ(20px)" }}>
+        <div className="flex flex-1 flex-col p-5">
           <h3 className="font-[family-name:var(--font-display-panaderia)] text-lg font-semibold text-pan-carbon">
             {producto.nombre}
           </h3>
           <p className="mt-1 text-sm text-pan-carbon-suave">{producto.descripcion}</p>
         </div>
-      </motion.div>
+      </div>
     </motion.div>
   );
 }

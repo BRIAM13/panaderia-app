@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Loader2, ShoppingBag } from "lucide-react";
 import { PRODUCTOS } from "../data/config";
+import { EVENTO_PEDIDO_ENVIADO } from "../lib/eventos";
 import {
   ApiError,
   crearPedidoPublico,
@@ -100,6 +101,7 @@ export function PedidoForm() {
         notas: notas.trim() || undefined,
       });
       setResultado(resultado);
+      window.dispatchEvent(new Event(EVENTO_PEDIDO_ENVIADO));
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.errores?.join(" ") || err.message);
