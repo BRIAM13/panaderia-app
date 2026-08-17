@@ -215,6 +215,10 @@ async function enviarPushLimpiandoInvalidos(tokens, { titulo, cuerpo, datos }) {
 // fuera: precio variable o catálogo todavía no armado.
 const SLUGS_AUTOSERVICIO = ['hamburguesas', 'panaderia'];
 
+// Pan vendido por unidad (Pan de Agua/Francés) tiene un pedido mínimo — el
+// pan de hamburguesa no aplica, se vende por paquete de 12 a precio fijo.
+const CANTIDAD_MINIMA_UNIDAD = 50;
+
 /**
  * Autoservicio (rol CLIENTE): el propio cliente registra su pedido, eligiendo
  * un producto del catálogo de una tienda habilitada para autoservicio — a
@@ -276,6 +280,13 @@ async function crearMiPedido(req, res, next) {
     // crearPedidoPublico en publicoController.js).
     const esPaquete = slugTienda === 'hamburguesas';
     const tipoPedido = esPaquete ? 'PAQUETES' : 'UNIDADES';
+
+    if (!esPaquete && cantidad < CANTIDAD_MINIMA_UNIDAD) {
+      await transaction.rollback();
+      return res.status(400).json({
+        mensaje: `El pedido mínimo de ${productoNombre} es ${CANTIDAD_MINIMA_UNIDAD} unidades.`,
+      });
+    }
 
     let precioUnitarioFinal = productoResult.recordset[0].PrecioUnitario;
     if (esPaquete) {

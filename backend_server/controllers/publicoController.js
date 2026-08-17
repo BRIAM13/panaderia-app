@@ -11,6 +11,13 @@ const { notificarPersonalTienda, SELECT_PEDIDOS_BASE, mapearFilaPedido } = requi
 // producto+cantidad como este.
 const SLUGS_TIENDA_PUBLICA = ['hamburguesas', 'panaderia'];
 
+// Pan vendido por unidad (Pan de Agua/Francés) tiene un pedido mínimo — el
+// pan de hamburguesa no aplica, se vende por paquete de 12 a precio fijo.
+// Misma regla que CANTIDAD_MINIMA_UNIDAD en pedidosController.js
+// (crearMiPedido), para que el mínimo no dependa de qué canal usó el
+// cliente (página web o app).
+const CANTIDAD_MINIMA_UNIDAD = 50;
+
 /**
  * Límite simple en memoria (sin dependencia nueva): esta es la única ruta
  * de todo el backend sin JWT, y cada intento puede disparar una consulta
@@ -112,13 +119,21 @@ async function crearPedidoPublico(req, res, next) {
       await transaction.rollback();
       return res.status(400).json({ mensaje: 'Ese producto ya no está disponible para pedir en línea.' });
     }
-    const { IdTienda: idTienda, Slug: slugTienda } = productoResult.recordset[0];
+    const { Nombre: nombreProducto, IdTienda: idTienda, Slug: slugTienda } = productoResult.recordset[0];
 
     // El pan de hamburguesa se vende por paquete de 12 a precio fijo (no por
     // unidad suelta) — mismo precio y mismo TipoPedido que usa el personal
     // en la app (ver crearMiPedido en pedidosController.js).
     const esPaquete = slugTienda === 'hamburguesas';
     const tipoPedido = esPaquete ? 'PAQUETES' : 'UNIDADES';
+
+    if (!esPaquete && cantidadNum < CANTIDAD_MINIMA_UNIDAD) {
+      await transaction.rollback();
+      return res.status(400).json({
+        mensaje: `El pedido mínimo de ${nombreProducto} es ${CANTIDAD_MINIMA_UNIDAD} unidades.`,
+      });
+    }
+
     const precioUnitario = esPaquete
       ? (await obtenerPrecioPaquete(pool)) ?? productoResult.recordset[0].PrecioUnitario
       : productoResult.recordset[0].PrecioUnitario;
