@@ -1,6 +1,12 @@
 import { useRef } from "react";
-import { motion, useScroll, useTransform } from "framer-motion";
-import { ArrowRight, MapPin } from "lucide-react";
+import {
+  motion,
+  useMotionValue,
+  useScroll,
+  useSpring,
+  useTransform,
+} from "framer-motion";
+import { ArrowRight, ChevronDown, MapPin } from "lucide-react";
 import { SITE, UBICACION } from "../data/config";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
@@ -11,15 +17,60 @@ export function Hero() {
   const yImagen = useTransform(scrollYProgress, [0, 1], [0, 90]);
   const opacidad = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
 
+  // Inclinación 3D de la foto según la posición del cursor dentro de la
+  // tarjeta — sutil (rango chico) para que se sienta premium, no un efecto
+  // de feria. Con `useSpring` el regreso al reposo es suave, no un salto.
+  const tiltX = useMotionValue(0);
+  const tiltY = useMotionValue(0);
+  const rotateX = useSpring(useTransform(tiltY, [-0.5, 0.5], [8, -8]), {
+    stiffness: 200,
+    damping: 20,
+  });
+  const rotateY = useSpring(useTransform(tiltX, [-0.5, 0.5], [-8, 8]), {
+    stiffness: 200,
+    damping: 20,
+  });
+
+  function manejarMovimiento(e: React.MouseEvent<HTMLDivElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    tiltX.set((e.clientX - rect.left) / rect.width - 0.5);
+    tiltY.set((e.clientY - rect.top) / rect.height - 0.5);
+  }
+
+  function resetearInclinacion() {
+    tiltX.set(0);
+    tiltY.set(0);
+  }
+
   return (
     <section
       ref={ref}
       className="relative overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-28"
     >
-      {/* Manchas de color de fondo, muy suaves — solo textura, nunca compiten con el contenido. */}
+      {/* Manchas de color de fondo con deriva lenta y continua — textura
+          "viva" de fondo, nunca tan rápida como para competir con el
+          contenido. */}
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-pan-terracota-suave/50 blur-3xl" />
-        <div className="absolute top-1/3 -right-32 h-96 w-96 rounded-full bg-pan-bronce-suave/50 blur-3xl" />
+        <motion.div
+          animate={{ x: [0, 30, -10, 0], y: [0, -20, 10, 0] }}
+          transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-pan-terracota-suave/50 blur-3xl"
+        />
+        <motion.div
+          animate={{ x: [0, -25, 15, 0], y: [0, 20, -15, 0] }}
+          transition={{ duration: 26, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute top-1/3 -right-32 h-96 w-96 rounded-full bg-pan-bronce-suave/50 blur-3xl"
+        />
+        <motion.div
+          animate={{ scale: [1, 1.15, 1] }}
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute top-8 right-[18%] h-3 w-3 rounded-full bg-pan-oro/70 blur-[1px]"
+        />
+        <motion.div
+          animate={{ scale: [1, 1.25, 1] }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1.2 }}
+          className="absolute top-1/2 left-[8%] h-2 w-2 rounded-full bg-pan-terracota/50 blur-[1px]"
+        />
       </div>
 
       <motion.div style={{ opacity: opacidad }} className="mx-auto grid max-w-6xl items-center gap-12 px-6 lg:grid-cols-2">
@@ -61,36 +112,75 @@ export function Hero() {
             transition={{ duration: 0.7, ease: EASE_PREMIUM, delay: 0.18 }}
             className="mt-8 flex flex-wrap gap-4"
           >
-            <a
+            <motion.a
               href="#pedido"
-              className="inline-flex items-center gap-2 rounded-full bg-pan-terracota px-6 py-3.5 font-semibold text-pan-crema shadow-lg shadow-pan-terracota/20 transition-transform hover:scale-105"
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              className="inline-flex items-center gap-2 rounded-full bg-pan-terracota px-6 py-3.5 font-semibold text-pan-crema shadow-lg shadow-pan-terracota/20 transition-shadow hover:shadow-xl hover:shadow-pan-terracota/30"
             >
               Hacer un pedido
               <ArrowRight className="h-4 w-4" />
-            </a>
-            <a
+            </motion.a>
+            <motion.a
               href="#menu"
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.97 }}
               className="inline-flex items-center gap-2 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-6 py-3.5 font-semibold text-pan-carbon transition-colors hover:bg-pan-crema-muted"
             >
               Ver nuestro pan
-            </a>
+            </motion.a>
           </motion.div>
         </div>
 
         <motion.div
-          style={{ y: yImagen }}
+          style={{ y: yImagen, perspective: 1000 }}
           initial={{ opacity: 0, scale: 0.94 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, ease: EASE_PREMIUM, delay: 0.15 }}
-          className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-[2.5rem] shadow-2xl shadow-pan-carbon/15"
+          onMouseMove={manejarMovimiento}
+          onMouseLeave={resetearInclinacion}
+          className="relative mx-auto aspect-square w-full max-w-md [transform-style:preserve-3d]"
         >
-          <img
-            src="/images/productos/pan-de-agua.jpg"
-            alt="Pan de agua recién horneado de Panadería Ronceros"
-            className="h-full w-full object-cover"
-          />
+          <motion.div
+            style={{ rotateX, rotateY }}
+            className="relative h-full w-full overflow-hidden rounded-[2.5rem] shadow-2xl shadow-pan-carbon/15"
+          >
+            <img
+              src="/images/productos/pan-de-agua.jpg"
+              alt="Pan de agua recién horneado de Panadería Ronceros"
+              className="h-full w-full object-cover"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-pan-carbon/15 via-transparent to-transparent" />
+          </motion.div>
+          <motion.div
+            animate={{ y: [0, -10, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute -bottom-5 -left-5 rounded-2xl bg-pan-crema-suave px-4 py-3 shadow-lg shadow-pan-carbon/10 sm:-left-8"
+          >
+            <p className="font-[family-name:var(--font-display-panaderia)] text-sm font-semibold text-pan-carbon">
+              Horneado hoy
+            </p>
+            <p className="text-xs text-pan-carbon-suave">Fresco cada mañana</p>
+          </motion.div>
         </motion.div>
       </motion.div>
+
+      <motion.a
+        href="#nosotros"
+        style={{ opacity: opacidad }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6, delay: 0.6 }}
+        aria-label="Bajar a la siguiente sección"
+        className="absolute inset-x-0 bottom-6 mx-auto hidden w-fit text-pan-carbon-suave/70 transition-colors hover:text-pan-terracota sm:block"
+      >
+        <motion.div
+          animate={{ y: [0, 8, 0] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <ChevronDown className="h-6 w-6" />
+        </motion.div>
+      </motion.a>
     </section>
   );
 }

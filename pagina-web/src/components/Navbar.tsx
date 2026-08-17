@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useMotionValueEvent, useScroll } from "framer-motion";
 import { Menu as MenuIcon, X, User } from "lucide-react";
 import { SITE } from "../data/config";
 
@@ -12,18 +12,30 @@ const ENLACES = [
 
 export function Navbar() {
   const [abierto, setAbierto] = useState(false);
+  const [conSombra, setConSombra] = useState(false);
+  const { scrollY } = useScroll();
+
+  // Solo se eleva con sombra una vez que el contenido empieza a pasar por
+  // debajo — recién ahí tiene sentido que se "despegue" visualmente.
+  useMotionValueEvent(scrollY, "change", (valor) => {
+    setConSombra(valor > 8);
+  });
 
   return (
     <motion.header
       initial={{ opacity: 0, y: -16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      className="fixed inset-x-0 top-0 z-50 border-b border-pan-bronce-suave/60 bg-pan-crema/85 backdrop-blur-md"
+      className={`fixed inset-x-0 top-0 z-50 border-b bg-pan-crema/85 backdrop-blur-md transition-shadow duration-300 ${
+        conSombra
+          ? "border-pan-bronce-suave shadow-md shadow-pan-carbon/5"
+          : "border-pan-bronce-suave/60 shadow-none"
+      }`}
     >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <a
           href="#"
-          className="font-[family-name:var(--font-display-panaderia)] text-xl font-semibold text-pan-carbon"
+          className="font-[family-name:var(--font-display-panaderia)] text-xl font-semibold text-pan-carbon transition-colors hover:text-pan-terracota"
         >
           {SITE.nombre}
         </a>
@@ -33,9 +45,10 @@ export function Navbar() {
             <a
               key={enlace.href}
               href={enlace.href}
-              className="text-sm font-medium text-pan-carbon-suave transition-colors hover:text-pan-terracota"
+              className="group relative text-sm font-medium text-pan-carbon-suave transition-colors hover:text-pan-terracota"
             >
               {enlace.texto}
+              <span className="absolute -bottom-1 left-0 h-[1.5px] w-0 bg-pan-terracota transition-all duration-300 group-hover:w-full" />
             </a>
           ))}
           {/* /app/ es la app Flutter completa (login, mis pedidos, mis

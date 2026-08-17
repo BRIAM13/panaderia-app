@@ -1,4 +1,5 @@
 import { Navbar } from "./components/Navbar";
+import { ScrollProgress } from "./components/ScrollProgress";
 import { Hero } from "./components/Hero";
 import { Nosotros } from "./components/Nosotros";
 import { Menu } from "./components/Menu";
@@ -10,6 +11,7 @@ import { Footer } from "./components/Footer";
 function App() {
   return (
     <div className="min-h-screen bg-pan-crema">
+      <ScrollProgress />
       <Navbar />
       <main>
         <Hero />

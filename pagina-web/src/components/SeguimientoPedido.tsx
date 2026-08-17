@@ -77,15 +77,18 @@ export function SeguimientoPedido() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-80px" }}
         transition={{ duration: 0.6, ease: EASE_PREMIUM }}
-        className="mx-auto max-w-4xl overflow-hidden rounded-3xl bg-pan-terracota shadow-lg shadow-pan-terracota/20"
+        className="mx-auto max-w-4xl overflow-hidden rounded-3xl bg-gradient-to-br from-pan-terracota to-pan-terracota-profundo shadow-lg shadow-pan-terracota/20"
       >
         <button
           onClick={alternar}
-          className="flex w-full flex-col items-center gap-6 px-8 py-12 text-center sm:flex-row sm:text-left"
+          className="group flex w-full flex-col items-center gap-6 px-8 py-12 text-center sm:flex-row sm:text-left"
         >
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-pan-crema">
+          <motion.div
+            whileHover={{ rotate: -8, scale: 1.05 }}
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-pan-crema"
+          >
             <PackageSearch className="h-7 w-7" />
-          </div>
+          </motion.div>
           <div className="flex-1">
             <h3 className="font-[family-name:var(--font-display-panaderia)] text-2xl font-semibold text-pan-crema">
               ¿Ya hiciste un pedido antes?
@@ -95,7 +98,7 @@ export function SeguimientoPedido() {
               confirmarlo.
             </p>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-pan-crema px-6 py-3.5 font-semibold text-pan-terracota transition-transform hover:scale-105">
+          <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-pan-crema px-6 py-3.5 font-semibold text-pan-terracota shadow-md transition-transform duration-300 group-hover:scale-105">
             {abierto ? "Cerrar" : "Ver mi pedido"}
           </span>
         </button>

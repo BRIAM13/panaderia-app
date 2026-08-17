@@ -28,7 +28,7 @@ export function PedidoForm() {
   const [dni, setDni] = useState("");
   const [telefono, setTelefono] = useState("");
   const [idProducto, setIdProducto] = useState<number | "">("");
-  const [cantidad, setCantidad] = useState("1");
+  const [cantidad, setCantidad] = useState("");
   const [notas, setNotas] = useState("");
 
   const [enviando, setEnviando] = useState(false);
@@ -58,14 +58,11 @@ export function PedidoForm() {
   const cantidadNum = Number(cantidad) || 0;
   const total = productoSeleccionado ? productoSeleccionado.precioUnitario * cantidadNum : 0;
 
-  // Al cambiar de producto, la cantidad vuelve a un valor sensato para ese
-  // producto — 1 para paquetes de hamburguesa, el mínimo de venta (50) para
-  // pan por unidad — así nadie tiene que adivinarlo ni tropezar con el
-  // error de "cantidad insuficiente" apenas elige el pan.
+  // Al cambiar de producto, la cantidad se limpia — el campo queda vacío
+  // con un placeholder que ya indica qué escribir (ver más abajo), en vez
+  // de arrastrar una cantidad que valía para el pan anterior.
   useEffect(() => {
-    if (!productoSeleccionado) return;
-    setCantidad(productoSeleccionado.esPaquete ? "1" : `${CANTIDAD_MINIMA_UNIDAD}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setCantidad("");
   }, [idProducto]);
 
   async function enviar(e: React.FormEvent) {
@@ -118,7 +115,7 @@ export function PedidoForm() {
     setResultado(null);
     setDni("");
     setTelefono("");
-    setCantidad(esPaquete ? "1" : `${CANTIDAD_MINIMA_UNIDAD}`);
+    setCantidad("");
     setNotas("");
   }
 
@@ -132,9 +129,15 @@ export function PedidoForm() {
           transition={{ duration: 0.6, ease: EASE_PREMIUM }}
           className="text-center"
         >
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-pan-terracota-suave/60 text-pan-terracota">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.6, rotate: -20 }}
+            whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6, ease: EASE_PREMIUM }}
+            className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-pan-terracota-suave/60 text-pan-terracota"
+          >
             <ShoppingBag className="h-7 w-7" />
-          </div>
+          </motion.div>
           <h2 className="font-[family-name:var(--font-display-panaderia)] text-4xl font-semibold text-pan-carbon sm:text-5xl">
             Haz tu pedido
           </h2>
@@ -149,7 +152,7 @@ export function PedidoForm() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.6, ease: EASE_PREMIUM, delay: 0.1 }}
-          className="mt-10 rounded-3xl bg-pan-crema-suave p-6 shadow-sm shadow-pan-carbon/5 sm:p-8"
+          className="mt-10 rounded-3xl border border-pan-bronce-suave/50 bg-pan-crema-suave p-6 shadow-md shadow-pan-carbon/5 sm:p-8"
         >
           <AnimatePresence mode="wait">
             {resultado ? (
@@ -159,7 +162,13 @@ export function PedidoForm() {
                 animate={{ opacity: 1, scale: 1 }}
                 className="py-6 text-center"
               >
-                <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" />
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 260, damping: 15, delay: 0.1 }}
+                >
+                  <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" />
+                </motion.div>
                 <h3 className="mt-4 font-[family-name:var(--font-display-panaderia)] text-2xl font-semibold text-pan-carbon">
                   Pedido #{resultado.numeroPedidoDia} recibido
                 </h3>
@@ -238,7 +247,7 @@ export function PedidoForm() {
                   {productoSeleccionado && (
                     <p className="mt-1.5 text-xs text-pan-carbon-suave">
                       {esPaquete
-                        ? `Cada paquete trae 12 panes de hamburguesa y cuesta S/ ${productoSeleccionado.precioUnitario.toFixed(2)}, sin importar cuántos paquetes pidas.`
+                        ? "Cada paquete trae 12 panes de hamburguesa."
                         : `Pedido mínimo: ${CANTIDAD_MINIMA_UNIDAD} panes.`}
                     </p>
                   )}
@@ -246,7 +255,7 @@ export function PedidoForm() {
 
                 <div>
                   <label htmlFor="cantidad" className="mb-1.5 block text-sm font-medium text-pan-carbon">
-                    {esPaquete ? "Cantidad de paquetes (12 unidades de pan en cada paquete)" : "Cantidad"}
+                    {esPaquete ? "Cantidad de paquetes" : "Cantidad"}
                   </label>
                   <input
                     id="cantidad"
@@ -254,7 +263,7 @@ export function PedidoForm() {
                     maxLength={4}
                     value={cantidad}
                     onChange={(e) => setCantidad(e.target.value.replace(/\D/g, ""))}
-                    placeholder={esPaquete ? "Ingresa la cantidad de paquetes" : "Ingresa la cantidad unitaria"}
+                    placeholder={esPaquete ? "Ingresa cantidad de paquetes" : "Ingresa cantidad de panes"}
                     required
                     className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
@@ -275,18 +284,25 @@ export function PedidoForm() {
                 </div>
 
                 {productoSeleccionado && cantidadNum > 0 && (
-                  <div className="flex items-center justify-between rounded-xl bg-pan-terracota-suave/40 px-4 py-3">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                    className="flex items-center justify-between rounded-xl bg-pan-terracota-suave/40 px-4 py-3"
+                  >
                     <span className="text-sm font-medium text-pan-carbon">Total estimado</span>
                     <span className="text-lg font-semibold text-pan-terracota">S/ {total.toFixed(2)}</span>
-                  </div>
+                  </motion.div>
                 )}
 
                 {error && <p className="text-sm font-medium text-red-700">{error}</p>}
 
-                <button
+                <motion.button
                   type="submit"
                   disabled={enviando || cargandoProductos}
-                  className="flex w-full items-center justify-center gap-2 rounded-full bg-pan-terracota px-6 py-3.5 font-semibold text-pan-crema shadow-lg shadow-pan-terracota/20 transition-transform hover:scale-[1.02] disabled:opacity-60 disabled:hover:scale-100"
+                  whileHover={enviando ? undefined : { scale: 1.02, y: -1 }}
+                  whileTap={enviando ? undefined : { scale: 0.98 }}
+                  className="flex w-full items-center justify-center gap-2 rounded-full bg-pan-terracota px-6 py-3.5 font-semibold text-pan-crema shadow-lg shadow-pan-terracota/20 transition-shadow hover:shadow-xl hover:shadow-pan-terracota/30 disabled:opacity-60"
                 >
                   {enviando ? (
                     <>
@@ -296,7 +312,7 @@ export function PedidoForm() {
                   ) : (
                     "Enviar pedido"
                   )}
-                </button>
+                </motion.button>
               </motion.form>
             )}
           </AnimatePresence>

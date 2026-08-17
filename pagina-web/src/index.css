@@ -4,22 +4,6 @@
   --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
 
-  /* Carbón premium — nunca negro puro, siempre con un matiz azulado. Se
-     conserva para la sección "Descargar la app" (herramienta de gestión,
-     no vitrina de la panadería) a propósito: ese contraste oscuro/tech
-     contra el resto cálido de la página marca que es "otra cosa". */
-  --color-carbon-950: #08090c;
-  --color-carbon-900: #0e1013;
-  --color-carbon-800: #15171c;
-  --color-carbon-700: #1e2128;
-  --color-carbon-600: #2a2e37;
-  --color-carbon-400: #6b7280;
-  --color-carbon-200: #d4d6db;
-
-  /* Acentos eléctricos — se usan angostos: bordes, glow, estados activos. */
-  --color-neon-green: #39ffb0;
-  --color-cyber-violet: #a855f7;
-
   /* Paleta cálida de la panadería — mismos tonos que la app móvil
      (lib/theme/app_theme.dart), para que la marca se vea igual en los dos
      lugares. */
@@ -33,6 +17,13 @@
   --color-pan-bronce-suave: #f1ddb6;
   --color-pan-carbon: #2b2118;
   --color-pan-carbon-suave: #6b5b4c;
+
+  /* Acentos que enriquecen la paleta cálida sin salirse de ella — un dorado
+     más vivo para brillos/detalles, y un terracota más profundo para dar
+     contraste extra en degradados y sombras. Se usan angostos, nunca como
+     color de fondo grande. */
+  --color-pan-oro: #e0a940;
+  --color-pan-terracota-profundo: #7a2e10;
 
   --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -75,16 +66,32 @@ body {
   color: transparent;
 }
 
-.text-gradient-neon {
-  background: linear-gradient(90deg, var(--color-neon-green), var(--color-cyber-violet));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* Fondo con degradado suave tipo "mesh" — reemplaza los bloques de color
+   plano entre secciones por una transición más orgánica, sin volverse un
+   patrón repetitivo. */
+.bg-mesh-panaderia {
+  background-image:
+    radial-gradient(ellipse 80% 60% at 15% 0%, var(--color-pan-terracota-suave) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 60% at 100% 100%, var(--color-pan-bronce-suave) 0%, transparent 55%);
+  background-color: var(--color-pan-crema-muted);
 }
 
-.grid-noise {
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-  background-size: 64px 64px;
+/* Barrido de brillo diagonal, pensado para pasar una sola vez sobre una
+   tarjeta al hacer hover (ver Menu.tsx) — un detalle premium sutil, no un
+   loop infinito que distraiga. */
+.shine-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.shine-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.45) 50%, transparent 60%);
+  transform: translateX(-120%);
+  transition: transform 0.9s var(--ease-premium);
+  pointer-events: none;
+}
+.shine-sweep:hover::after {
+  transform: translateX(120%);
 }
