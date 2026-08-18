@@ -237,12 +237,20 @@ class _LoginPageState extends State<LoginPage> {
               ),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
+                  constraints: BoxConstraints(
+                    maxWidth: 440,
+                    // Con la altura acotada al espacio real de la ventana,
+                    // el formulario (ya compactado para escritorio) entra
+                    // completo sin scroll en pantallas normales de laptop
+                    // — y si alguna vez no entra (ventana muy baja), el
+                    // SingleChildScrollView de adentro se encarga solo, en
+                    // vez de que la página entera tenga que desplazarse.
+                    maxHeight: constraints.maxHeight - 24,
+                  ),
                   child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 32),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 36,
-                      vertical: 16,
+                      vertical: 12,
                     ),
                     decoration: BoxDecoration(
                       color: AppColors.background,
@@ -274,18 +282,18 @@ class _LoginPageState extends State<LoginPage> {
     return SingleChildScrollView(
           padding: EdgeInsets.symmetric(
             horizontal: esEscritorio ? 0 : 28,
-            vertical: 24,
+            vertical: esEscritorio ? 8 : 24,
           ),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 24),
+                SizedBox(height: esEscritorio ? 4 : 24),
                 Center(
                       child: SizedBox(
-                        width: 210,
-                        height: 210,
+                        width: esEscritorio ? 132 : 210,
+                        height: esEscritorio ? 132 : 210,
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
@@ -296,11 +304,11 @@ class _LoginPageState extends State<LoginPage> {
                             // si el personaje proyectara sombra sobre el
                             // fondo de la propia app.
                             Positioned(
-                              top: 16,
+                              top: esEscritorio ? 10 : 16,
                               child: ImageFiltered(
                                 imageFilter: ImageFilter.blur(
-                                  sigmaX: 10,
-                                  sigmaY: 10,
+                                  sigmaX: esEscritorio ? 6 : 10,
+                                  sigmaY: esEscritorio ? 6 : 10,
                                 ),
                                 child: ColorFiltered(
                                   colorFilter: ColorFilter.mode(
@@ -309,16 +317,16 @@ class _LoginPageState extends State<LoginPage> {
                                   ),
                                   child: Image.asset(
                                     'assets/icon/app_icon_foreground.png',
-                                    width: 190,
-                                    height: 190,
+                                    width: esEscritorio ? 118 : 190,
+                                    height: esEscritorio ? 118 : 190,
                                   ),
                                 ),
                               ),
                             ),
                             Image.asset(
                               'assets/icon/app_icon_foreground.png',
-                              width: 190,
-                              height: 190,
+                              width: esEscritorio ? 118 : 190,
+                              height: esEscritorio ? 118 : 190,
                             ),
                           ],
                         ),
@@ -378,7 +386,7 @@ class _LoginPageState extends State<LoginPage> {
                       .fadeIn(duration: 300.ms)
                       .moveY(begin: 8, end: 0),
                 ],
-                const SizedBox(height: 32),
+                SizedBox(height: esEscritorio ? 16 : 32),
                 AutofillGroup(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -522,7 +530,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ).animate().fadeIn(delay: 320.ms, duration: 300.ms),
                 ],
-                const SizedBox(height: 28),
+                SizedBox(height: esEscritorio ? 12 : 28),
                 const _CreditoDesarrollador()
                     .animate()
                     .fadeIn(delay: 380.ms, duration: 300.ms),
