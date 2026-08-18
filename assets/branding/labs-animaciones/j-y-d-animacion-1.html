@@ -1,0 +1,166 @@
+<title>Ronceros Labs — Animado</title>
+<style>
+  :root {
+    --fondo: #F4F4F2;
+    --fondo-suave: #FAFAF9;
+    --texto: #141414;
+    --texto-suave: #6B6B68;
+    --borde: #E2E2DF;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--texto);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  .envoltorio { max-width: 900px; margin: 0 auto; padding: 64px 32px 96px; }
+  header .etiqueta {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--texto);
+    background: var(--borde);
+    padding: 6px 14px;
+    border-radius: 100px;
+    margin-bottom: 20px;
+  }
+  header h1 { font-size: clamp(2rem, 4vw, 2.6rem); font-weight: 800; margin: 0 0 12px; letter-spacing: -0.01em; }
+  header p { max-width: 620px; color: var(--texto-suave); font-size: 1.02rem; margin: 0 0 48px; }
+
+  .bloque { margin-bottom: 56px; }
+  .bloque-cabecera {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .bloque-cabecera h2 { font-size: 1.15rem; margin: 0; }
+  .bloque-cabecera span { font-size: 0.82rem; color: var(--texto-suave); }
+
+  .escenario {
+    background: #141414;
+    border-radius: 20px;
+    padding: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 24px rgba(20,20,20,0.14);
+    position: relative;
+  }
+  .escenario svg { width: 100%; max-width: 560px; height: auto; }
+
+  .reproducir {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: #F4F4F2;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 100px;
+    cursor: pointer;
+  }
+  .reproducir:hover { background: rgba(255,255,255,0.16); }
+
+  /* --- Animación J: subrayado --- */
+  .j-texto { opacity: 0; transform: translateY(10px); }
+  .j-barra { transform: scaleX(0); transform-origin: left center; }
+  .anim-j.jugar .j-texto { animation: jTexto 0.6s cubic-bezier(0.16,1,0.3,1) forwards; }
+  .anim-j.jugar .j-barra { animation: jBarra 0.55s cubic-bezier(0.16,1,0.3,1) 0.45s forwards; }
+  @keyframes jTexto { to { opacity: 1; transform: translateY(0); } }
+  @keyframes jBarra { to { transform: scaleX(1); } }
+
+  /* --- Animación D: anillo tipo circuito --- */
+  .d-r { opacity: 0; transform: translateX(-6px); }
+  .d-resto { opacity: 0; }
+  .d-anillo { stroke-dasharray: 189; stroke-dashoffset: 189; }
+  .d-labs { opacity: 0; transform: translateY(8px); }
+  .d-glow { opacity: 0; }
+  .anim-d.jugar .d-r { animation: dFade 0.35s ease-out forwards; }
+  .anim-d.jugar .d-anillo { animation: dAnillo 0.5s cubic-bezier(0.4,0,0.2,1) 0.3s forwards; }
+  .anim-d.jugar .d-resto { animation: dFadeSimple 0.4s ease-out 0.65s forwards; }
+  .anim-d.jugar .d-labs { animation: dTexto 0.45s cubic-bezier(0.16,1,0.3,1) 0.95s forwards; }
+  .anim-d.jugar .d-glow { animation: dGlow 0.7s ease-out 0.75s forwards; }
+  @keyframes dFade { to { opacity: 1; transform: translateX(0); } }
+  @keyframes dFadeSimple { to { opacity: 1; } }
+  @keyframes dAnillo { to { stroke-dashoffset: 0; } }
+  @keyframes dTexto { to { opacity: 1; transform: translateY(0); } }
+  @keyframes dGlow { 0% { opacity: 0; } 40% { opacity: 0.9; } 100% { opacity: 0; } }
+
+  footer.nota {
+    margin-top: 8px;
+    padding-top: 22px;
+    border-top: 1px solid var(--borde);
+    font-size: 0.85rem;
+    color: var(--texto-suave);
+  }
+</style>
+
+<div class="envoltorio">
+  <header>
+    <span class="etiqueta">Animación — Ronceros Labs</span>
+    <h1>J y D, en movimiento</h1>
+    <p>Cada una con un carácter de animación distinto — dale play a las dos y compáralas. Se repiten solas cada pocos segundos, o usa el botón para volver a verlas.</p>
+  </header>
+
+  <div class="bloque">
+    <div class="bloque-cabecera">
+      <h2>J — Subrayado</h2>
+      <span>Trazo rápido y seguro: el texto aparece, la línea se dibuja de un solo gesto.</span>
+    </div>
+    <div class="escenario">
+      <svg class="anim-j jugar" viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="gJ" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient></defs>
+        <text class="j-texto" x="50" y="110" font-family="'Segoe UI', Arial, sans-serif" font-size="50" font-weight="700" fill="#F4F4F2" style="letter-spacing: 1px">RONCEROS LABS</text>
+        <rect class="j-barra" x="398" y="124" width="150" height="6" rx="3" fill="url(#gJ)"/>
+      </svg>
+      <button class="reproducir" data-target=".anim-j">↻ Reproducir</button>
+    </div>
+  </div>
+
+  <div class="bloque">
+    <div class="bloque-cabecera">
+      <h2>D — Anillo</h2>
+      <span>Armado secuencial: la R aparece, el anillo se dibuja como un circuito, el resto completa.</span>
+    </div>
+    <div class="escenario">
+      <svg class="anim-d jugar" viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gD" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient>
+          <radialGradient id="gGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#F4F4F2" stop-opacity="0.9"/><stop offset="100%" stop-color="#F4F4F2" stop-opacity="0"/></radialGradient>
+        </defs>
+        <text class="d-r" x="60" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="72" font-weight="700" fill="#F4F4F2" style="letter-spacing: 2px">R</text>
+        <circle class="d-glow" cx="145" cy="118" r="34" fill="url(#gGlow)"/>
+        <circle class="d-anillo" cx="145" cy="118" r="30" fill="none" stroke="url(#gD)" stroke-width="9" stroke-linecap="round" transform="rotate(-90 145 118)"/>
+        <text class="d-resto" x="185" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="72" font-weight="700" fill="#F4F4F2" style="letter-spacing: 2px">NCEROS</text>
+        <text class="d-labs" x="60" y="200" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="700" fill="url(#gD)" style="letter-spacing: 14px">LABS</text>
+      </svg>
+      <button class="reproducir" data-target=".anim-d">↻ Reproducir</button>
+    </div>
+  </div>
+
+  <footer class="nota">
+    Ambas duran menos de 1.5 segundos — pensadas para un splash de app, donde nadie quiere esperar. Dime cuál te convence (o si quieres mezclar: el trazo de la J con el diseño de la D, por ejemplo) y con esa cerramos el sello definitivo.
+  </footer>
+</div>
+
+<script>
+  function reiniciar(selector) {
+    document.querySelectorAll(selector).forEach((el) => {
+      el.classList.remove('jugar');
+      void el.offsetWidth;
+      el.classList.add('jugar');
+    });
+  }
+  document.querySelectorAll('.reproducir').forEach((btn) => {
+    btn.addEventListener('click', () => reiniciar(btn.dataset.target));
+  });
+  setInterval(() => { reiniciar('.anim-j'); }, 4000);
+  setInterval(() => { reiniciar('.anim-d'); }, 4500);
+</script>

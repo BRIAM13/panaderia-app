@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220">
+  <defs><linearGradient id="gI" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient></defs>
+  <rect width="640" height="220" fill="#141414"/>
+  <text x="50" y="110" font-family="'Segoe UI', Arial, sans-serif" font-size="66" font-weight="800" fill="#F4F4F2" style="letter-spacing: -1px">Ronceros</text>
+  <text x="53" y="168" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="400" fill="url(#gI)" style="letter-spacing: 12px">L A B S</text>
+</svg>

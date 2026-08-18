@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="240" viewBox="0 0 640 240">
+  <defs><linearGradient id="gD" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient></defs>
+  <rect width="640" height="240" fill="#141414"/>
+  <text x="60" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="72" font-weight="700" fill="#F4F4F2" style="letter-spacing: 2px">R</text>
+  <circle cx="145" cy="118" r="30" fill="none" stroke="url(#gD)" stroke-width="9"/>
+  <text x="185" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="72" font-weight="700" fill="#F4F4F2" style="letter-spacing: 2px">NCEROS</text>
+  <text x="60" y="200" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="700" fill="url(#gD)" style="letter-spacing: 14px">LABS</text>
+</svg>

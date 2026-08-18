@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="200" viewBox="0 0 640 200">
+  <defs><linearGradient id="gF" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient></defs>
+  <rect width="640" height="200" fill="#141414"/>
+  <text x="50" y="122" font-family="'Segoe UI', Arial, sans-serif" font-size="54" font-weight="700" fill="#F4F4F2" style="letter-spacing: 1px">RONCEROS</text>
+  <circle cx="428" cy="106" r="9" fill="url(#gF)"/>
+  <text x="452" y="122" font-family="'Segoe UI', Arial, sans-serif" font-size="54" font-weight="700" fill="url(#gF)" style="letter-spacing: 1px">LABS</text>
+</svg>

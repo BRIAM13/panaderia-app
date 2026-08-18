@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="200" viewBox="0 0 640 200">
+  <defs><linearGradient id="gG" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient></defs>
+  <rect width="640" height="200" fill="#141414"/>
+  <text x="50" y="120" font-family="'Consolas', 'Courier New', monospace" font-size="44" font-weight="700" fill="#F4F4F2" style="letter-spacing: 1px">ronceros_labs</text>
+  <rect x="472" y="80" width="20" height="44" fill="url(#gG)"/>
+</svg>

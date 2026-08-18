@@ -1,0 +1,299 @@
+<title>Ronceros Labs — Tres Animaciones</title>
+<style>
+  :root {
+    --fondo: #F4F4F2;
+    --texto: #141414;
+    --texto-suave: #6B6B68;
+    --borde: #E2E2DF;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--texto);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  .envoltorio { max-width: 1080px; margin: 0 auto; padding: 64px 32px 100px; }
+  header .etiqueta {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--texto);
+    background: var(--borde);
+    padding: 6px 14px;
+    border-radius: 100px;
+    margin-bottom: 20px;
+  }
+  header h1 { font-size: clamp(2rem, 4vw, 2.6rem); font-weight: 800; margin: 0 0 12px; letter-spacing: -0.01em; }
+  header p { max-width: 640px; color: var(--texto-suave); font-size: 1.02rem; margin: 0 0 48px; }
+
+  .seccion { margin-bottom: 64px; }
+  .seccion h2 { font-size: 1.3rem; margin: 0 0 4px; }
+  .seccion .sub { color: var(--texto-suave); font-size: 0.9rem; margin: 0 0 22px; }
+
+  .rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  .tarjeta {
+    background: #141414;
+    border-radius: 20px;
+    padding: 30px 20px 20px;
+    box-shadow: 0 8px 24px rgba(20,20,20,0.14);
+    position: relative;
+  }
+  .tarjeta .escenario { display: flex; align-items: center; justify-content: center; min-height: 100px; }
+  .tarjeta svg { width: 100%; max-width: 420px; height: auto; }
+  .tarjeta .pie {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .tarjeta .pie .nombre { color: #F4F4F2; font-size: 0.85rem; font-weight: 600; }
+  .tarjeta .pie .desc { color: #ACACA8; font-size: 0.76rem; text-align: right; max-width: 170px; }
+  .reproducir {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: #F4F4F2;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 100px;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: 10px;
+  }
+  .reproducir:hover { background: rgba(255,255,255,0.16); }
+
+  footer.nota { margin-top: 8px; padding-top: 22px; border-top: 1px solid var(--borde); font-size: 0.85rem; color: var(--texto-suave); }
+</style>
+
+<div class="envoltorio">
+  <header>
+    <span class="etiqueta">Ronceros Labs</span>
+    <h1>Tres animaciones, dos diseños</h1>
+    <p>Cada tarjeta se reproduce sola una vez al cargar — dale a "↻" para volver a verla cuando quieras.</p>
+  </header>
+
+  <section class="seccion">
+    <h2>J — Subrayado</h2>
+    <p class="sub">Tres formas distintas de llegar al mismo resultado final.</p>
+    <div class="rejilla">
+
+      <div class="tarjeta">
+        <div class="escenario">
+          <svg class="j1 jugar" viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="gJ1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient></defs>
+            <text class="j1-texto" x="50" y="110" font-family="'Segoe UI', Arial, sans-serif" font-size="50" font-weight="700" fill="#F4F4F2" style="letter-spacing: 1px">RONCEROS LABS</text>
+            <rect class="j1-barra" x="398" y="124" width="150" height="6" rx="3" fill="url(#gJ1)"/>
+          </svg>
+        </div>
+        <div class="pie">
+          <span class="nombre">J1 · Trazo rápido</span>
+          <button class="reproducir" data-target=".j1">↻</button>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <div class="escenario">
+          <svg class="j2 jugar" viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="gJ2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient>
+              <clipPath id="clipJ2"><rect class="j2-clip" x="0" y="0" width="0" height="180"/></clipPath>
+            </defs>
+            <g clip-path="url(#clipJ2)">
+              <text x="50" y="110" font-family="'Consolas', 'Courier New', monospace" font-size="46" font-weight="700" fill="#F4F4F2" style="letter-spacing: 1px">RONCEROS_LABS</text>
+            </g>
+            <rect class="j2-cursor" x="50" y="76" width="18" height="40" fill="url(#gJ2)"/>
+            <rect class="j2-barra" x="398" y="124" width="150" height="6" rx="3" fill="url(#gJ2)"/>
+          </svg>
+        </div>
+        <div class="pie">
+          <span class="nombre">J2 · Máquina de escribir</span>
+          <button class="reproducir" data-target=".j2">↻</button>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <div class="escenario">
+          <svg class="j3 jugar" viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="gJ3" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient>
+              <linearGradient id="gBrillo" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0"/>
+                <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.9"/>
+                <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+              </linearGradient>
+              <clipPath id="clipBarra"><rect x="398" y="124" width="150" height="6" rx="3"/></clipPath>
+            </defs>
+            <text class="j3-texto" x="50" y="110" font-family="'Segoe UI', Arial, sans-serif" font-size="50" font-weight="700" fill="#F4F4F2" style="letter-spacing: 1px">RONCEROS LABS</text>
+            <rect class="j3-barra" x="398" y="124" width="150" height="6" rx="3" fill="url(#gJ3)"/>
+            <g clip-path="url(#clipBarra)">
+              <rect class="j3-brillo" x="358" y="118" width="60" height="18" fill="url(#gBrillo)"/>
+            </g>
+          </svg>
+        </div>
+        <div class="pie">
+          <span class="nombre">J3 · Deslizar + brillo</span>
+          <button class="reproducir" data-target=".j3">↻</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="seccion">
+    <h2>D — Anillo</h2>
+    <p class="sub">Tu favorito por ahora — tres personalidades distintas para el mismo anillo.</p>
+    <div class="rejilla">
+
+      <div class="tarjeta">
+        <div class="escenario">
+          <svg class="d1 jugar" viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="gD1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient>
+              <radialGradient id="gGlow1" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#F4F4F2" stop-opacity="0.9"/><stop offset="100%" stop-color="#F4F4F2" stop-opacity="0"/></radialGradient>
+            </defs>
+            <text class="d1-r" x="60" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="72" font-weight="700" fill="#F4F4F2" style="letter-spacing: 2px">R</text>
+            <circle class="d1-glow" cx="145" cy="118" r="34" fill="url(#gGlow1)"/>
+            <circle class="d1-anillo" cx="145" cy="118" r="30" fill="none" stroke="url(#gD1)" stroke-width="9" stroke-linecap="round" transform="rotate(-90 145 118)"/>
+            <text class="d1-resto" x="185" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="72" font-weight="700" fill="#F4F4F2" style="letter-spacing: 2px">NCEROS</text>
+            <text class="d1-labs" x="60" y="200" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="700" fill="url(#gD1)" style="letter-spacing: 14px">LABS</text>
+          </svg>
+        </div>
+        <div class="pie">
+          <span class="nombre">D1 · Circuito</span>
+          <button class="reproducir" data-target=".d1">↻</button>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <div class="escenario">
+          <svg class="d2 jugar" viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="gD2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient></defs>
+            <text class="d2-texto" x="60" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="72" font-weight="700" fill="#F4F4F2" style="letter-spacing: 2px">R</text>
+            <circle class="d2-anillo" cx="145" cy="118" r="30" fill="none" stroke="url(#gD2)" stroke-width="9"/>
+            <text class="d2-texto2" x="185" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="72" font-weight="700" fill="#F4F4F2" style="letter-spacing: 2px">NCEROS</text>
+            <text class="d2-labs" x="60" y="200" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="700" fill="url(#gD2)" style="letter-spacing: 14px">LABS</text>
+          </svg>
+        </div>
+        <div class="pie">
+          <span class="nombre">D2 · Giro y asiento</span>
+          <button class="reproducir" data-target=".d2">↻</button>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <div class="escenario">
+          <svg class="d3 jugar" viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="gD3" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient></defs>
+            <text class="d3-r" x="60" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="72" font-weight="700" fill="#F4F4F2" style="letter-spacing: 2px">R</text>
+            <circle class="d3-anillo" cx="145" cy="118" r="30" fill="none" stroke="url(#gD3)" stroke-width="9"/>
+            <text class="d3-resto" x="185" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="72" font-weight="700" fill="#F4F4F2" style="letter-spacing: 2px">NCEROS</text>
+            <text class="d3-labs" x="60" y="200" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="700" fill="url(#gD3)" style="letter-spacing: 14px">LABS</text>
+          </svg>
+        </div>
+        <div class="pie">
+          <span class="nombre">D3 · Pulso</span>
+          <button class="reproducir" data-target=".d3">↻</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <footer class="nota">
+    Los seis diseños y esta página quedaron guardados en <code>assets/branding/</code> del proyecto. Dime cuál te convenció (por número: J1, J2, J3, D1, D2 o D3) y esa es la definitiva.
+  </footer>
+</div>
+
+<style>
+  /* J1 */
+  .j1-texto { opacity: 0; transform: translateY(10px); }
+  .j1-barra { transform: scaleX(0); transform-origin: left center; }
+  .j1.jugar .j1-texto { animation: j1Texto 0.6s cubic-bezier(0.16,1,0.3,1) forwards; }
+  .j1.jugar .j1-barra { animation: j1Barra 0.55s cubic-bezier(0.16,1,0.3,1) 0.45s forwards; }
+  @keyframes j1Texto { to { opacity: 1; transform: translateY(0); } }
+  @keyframes j1Barra { to { transform: scaleX(1); } }
+
+  /* J2 - typewriter wipe */
+  .j2-clip { }
+  .j2-cursor { opacity: 0; }
+  .j2-barra { transform: scaleX(0); transform-origin: left center; }
+  .j2.jugar .j2-clip { animation: j2Clip 0.85s steps(24) forwards; }
+  .j2.jugar .j2-cursor { animation: j2Cursor 0.3s steps(2) 3, j2CursorGo 0.01s 0.9s forwards; }
+  .j2.jugar .j2-barra { animation: j1Barra 0.2s ease-out 1.0s forwards; }
+  @keyframes j2Clip { to { width: 640px; } }
+  @keyframes j2Cursor { 50% { opacity: 0; } 0%, 100% { opacity: 1; } }
+  @keyframes j2CursorGo { to { opacity: 0; } }
+
+  /* J3 - slide up + shine */
+  .j3-texto { opacity: 0; transform: translateY(22px); }
+  .j3-barra { transform: scaleX(0); transform-origin: left center; }
+  .j3-brillo { transform: translateX(-120px); opacity: 0; }
+  .j3.jugar .j3-texto { animation: j3Texto 0.5s cubic-bezier(0.16,1,0.3,1) forwards; }
+  .j3.jugar .j3-barra { animation: j1Barra 0.45s cubic-bezier(0.16,1,0.3,1) 0.35s forwards; }
+  .j3.jugar .j3-brillo { animation: j3Brillo 0.6s ease-out 0.85s forwards; }
+  @keyframes j3Texto { to { opacity: 1; transform: translateY(0); } }
+  @keyframes j3Brillo { 0% { opacity: 0; transform: translateX(-120px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateX(180px); } }
+
+  /* D1 - circuito (igual que antes) */
+  .d1-r { opacity: 0; transform: translateX(-6px); }
+  .d1-resto { opacity: 0; }
+  .d1-anillo { stroke-dasharray: 189; stroke-dashoffset: 189; }
+  .d1-labs { opacity: 0; transform: translateY(8px); }
+  .d1-glow { opacity: 0; }
+  .d1.jugar .d1-r { animation: dFade 0.35s ease-out forwards; }
+  .d1.jugar .d1-anillo { animation: d1Anillo 0.5s cubic-bezier(0.4,0,0.2,1) 0.3s forwards; }
+  .d1.jugar .d1-resto { animation: dFadeSimple 0.4s ease-out 0.65s forwards; }
+  .d1.jugar .d1-labs { animation: dTexto 0.45s cubic-bezier(0.16,1,0.3,1) 0.95s forwards; }
+  .d1.jugar .d1-glow { animation: dGlow 0.7s ease-out 0.75s forwards; }
+  @keyframes dFade { to { opacity: 1; transform: translateX(0); } }
+  @keyframes dFadeSimple { to { opacity: 1; } }
+  @keyframes d1Anillo { to { stroke-dashoffset: 0; } }
+  @keyframes dTexto { to { opacity: 1; transform: translateY(0); } }
+  @keyframes dGlow { 0% { opacity: 0; } 40% { opacity: 0.9; } 100% { opacity: 0; } }
+
+  /* D2 - giro y asiento */
+  .d2-anillo { opacity: 0; transform-origin: 145px 118px; transform: rotate(340deg) scale(0.4); }
+  .d2-texto, .d2-texto2, .d2-labs { opacity: 0; }
+  .d2.jugar .d2-anillo { animation: d2Giro 0.75s cubic-bezier(0.2,0.8,0.2,1) forwards; }
+  .d2.jugar .d2-texto { animation: dFadeSimple 0.4s ease-out 0.15s forwards; }
+  .d2.jugar .d2-texto2 { animation: dFadeSimple 0.4s ease-out 0.15s forwards; }
+  .d2.jugar .d2-labs { animation: dTexto 0.45s cubic-bezier(0.16,1,0.3,1) 0.5s forwards; }
+  @keyframes d2Giro { 0% { opacity: 0; transform: rotate(340deg) scale(0.4); } 60% { opacity: 1; } 100% { opacity: 1; transform: rotate(0deg) scale(1); } }
+
+  /* D3 - pulso */
+  .d3-anillo { opacity: 0; transform-origin: 145px 118px; transform: scale(0.85); }
+  .d3-r { opacity: 0; }
+  .d3-resto { opacity: 0; }
+  .d3-labs { opacity: 0; transform: translateY(8px); }
+  .d3.jugar .d3-anillo { animation: d3Pulso 1.1s cubic-bezier(0.4,0,0.2,1) forwards; }
+  .d3.jugar .d3-r { animation: dFadeSimple 0.3s ease-out 0.15s forwards; }
+  .d3.jugar .d3-resto { animation: dFadeSimple 0.3s ease-out 0.55s forwards; }
+  .d3.jugar .d3-labs { animation: dTexto 0.4s cubic-bezier(0.16,1,0.3,1) 0.85s forwards; }
+  @keyframes d3Pulso {
+    0% { opacity: 0.3; transform: scale(0.85); }
+    20% { opacity: 0.7; transform: scale(1.1); }
+    35% { transform: scale(0.95); }
+    50% { opacity: 1; transform: scale(1.08); }
+    65% { transform: scale(0.98); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+</style>
+
+<script>
+  function reiniciar(selector) {
+    document.querySelectorAll(selector).forEach((el) => {
+      el.classList.remove('jugar');
+      void el.offsetWidth;
+      el.classList.add('jugar');
+    });
+  }
+  document.querySelectorAll('.reproducir').forEach((btn) => {
+    btn.addEventListener('click', () => reiniciar(btn.dataset.target));
+  });
+</script>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="180" viewBox="0 0 640 180">
+  <defs><linearGradient id="gJ" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient></defs>
+  <rect width="640" height="180" fill="#141414"/>
+  <text x="50" y="110" font-family="'Segoe UI', Arial, sans-serif" font-size="50" font-weight="700" fill="#F4F4F2" style="letter-spacing: 1px">RONCEROS LABS</text>
+  <rect x="398" y="124" width="150" height="6" rx="3" fill="url(#gJ)"/>
+</svg>

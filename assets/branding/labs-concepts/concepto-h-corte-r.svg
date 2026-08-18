@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="200" viewBox="0 0 640 200">
+  <defs><linearGradient id="gH" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E4E4E2"/><stop offset="100%" stop-color="#8C8C88"/></linearGradient></defs>
+  <rect width="640" height="200" fill="#141414"/>
+  <text x="50" y="130" font-family="'Segoe UI', Arial, sans-serif" font-size="60" font-weight="800" style="letter-spacing: 1px">
+    <tspan fill="url(#gH)">R</tspan><tspan fill="#F4F4F2">ONCEROS</tspan>
+  </text>
+  <text x="50" y="178" font-family="'Segoe UI', Arial, sans-serif" font-size="26" font-weight="700" fill="url(#gH)" style="letter-spacing: 10px">LABS</text>
+</svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+  <defs>
+    <linearGradient id="gB" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C08A3E"/>
+      <stop offset="100%" stop-color="#B5451B"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="240" fill="#2B2118"/>
+  <circle cx="120" cy="120" r="88" fill="none" stroke="url(#gB)" stroke-width="3"/>
+  <circle cx="120" cy="120" r="74" fill="url(#gB)"/>
+  <text x="120" y="140" text-anchor="middle" font-family="Georgia, serif" font-size="80" font-weight="700" fill="#FDF6EC">R</text>
+  <path id="curveTop" d="M 46 120 A 74 74 0 0 1 194 120" fill="none"/>
+  <text font-family="'Segoe UI', Arial, sans-serif" font-size="13" font-weight="700" fill="#F1DDB6" style="letter-spacing: 4px">
+    <textPath href="#curveTop" startOffset="50%" text-anchor="middle">RONCEROS LABS</textPath>
+  </text>
+</svg>

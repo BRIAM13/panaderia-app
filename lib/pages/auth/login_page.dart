@@ -287,16 +287,15 @@ class _LoginPageState extends State<LoginPage> {
                         height: 84,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [scheme.primary, scheme.secondary],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                          border: Border.all(
+                            color: scheme.primary.withValues(alpha: 0.18),
+                            width: 2,
                           ),
                         ),
-                        child: const Icon(
-                          Icons.bakery_dining_rounded,
-                          color: Colors.white,
-                          size: 40,
+                        clipBehavior: Clip.antiAlias,
+                        child: Image.asset(
+                          'assets/icon/app_icon.png',
+                          fit: BoxFit.cover,
                         ),
                       ),
                     )

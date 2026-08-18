@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.5+7
+version: 1.1.6+8
 
 environment:
   sdk: ^3.11.5
@@ -104,14 +104,14 @@ dev_dependencies:
   # no se usa en tiempo de ejecución de la app.
   flutter_launcher_icons: ^0.14.3
 
-# Config de flutter_launcher_icons — ícono de Panadería Ronceros (pan
-# estilizado sobre degradado terracota/bronce, la paleta de marca).
+# Config de flutter_launcher_icons — ícono de Panadería Ronceros (el
+# panadero con el pan, ilustración de marca).
 flutter_launcher_icons:
   android: true
   ios: true
   remove_alpha_ios: true
   image_path: "assets/icon/app_icon.png"
-  adaptive_icon_background: "#B5451B"
+  adaptive_icon_background: "#FFE7CD"
   adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
   # Antes solo se generaba para Android/iOS — la versión Web se quedó con
   # el favicon y los íconos de PWA por defecto de Flutter (se notaba en la
@@ -119,8 +119,8 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: "assets/icon/app_icon.png"
-    background_color: "#B5451B"
-    theme_color: "#B5451B"
+    background_color: "#FFE7CD"
+    theme_color: "#FFE7CD"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -132,6 +132,12 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # El mismo maestro que usa flutter_launcher_icons para generar el ícono
+  # de la app — se reusa también dentro de la UI (login, splash) para que
+  # el panadero aparezca igual en todos lados, sin duplicar el archivo.
+  assets:
+    - assets/icon/app_icon.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
