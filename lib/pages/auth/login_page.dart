@@ -153,7 +153,7 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final autenticado = await _biometricService.autenticar(
-        razon: 'Confirma tu huella para ingresar a Corporación Ronceros',
+        razon: 'Confirma tu huella para ingresar a Panadería Ronceros',
       );
       if (!autenticado) return;
 
@@ -308,7 +308,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                 const SizedBox(height: 20),
                 Text(
-                      'Corporación Ronceros',
+                      'Panadería Ronceros',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.titleLarge,
                     )

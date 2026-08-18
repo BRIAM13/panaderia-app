@@ -56,11 +56,11 @@ export function Navbar() {
               <span className="absolute -bottom-1 left-0 h-[1.5px] w-0 bg-pan-terracota transition-all duration-300 group-hover:w-full" />
             </a>
           ))}
-          {/* /app/ es la app Flutter completa (login, mis pedidos, mis
-              deudas, hacer pedido nuevo, cancelar) — se reusa tal cual en
-              vez de duplicar esa lógica acá. */}
+          {/* app.panaderiaronceros.com es la app Flutter completa (login,
+              mis pedidos, mis deudas, hacer pedido nuevo, cancelar) — se
+              reusa tal cual en vez de duplicar esa lógica acá. */}
           <a
-            href="/app/"
+            href="https://app.panaderiaronceros.com/"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-pan-carbon-suave transition-colors hover:text-pan-terracota"
           >
             <User className="h-4 w-4" />
@@ -68,7 +68,7 @@ export function Navbar() {
           </a>
           {ES_ANDROID && (
             <a
-              href="/downloads/CorporacionRonceros-latest.apk"
+              href="/downloads/PanaderiaRonceros-latest.apk"
               download
               className="boton-relleno inline-flex items-center gap-1.5 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-4 py-2 text-sm font-medium text-pan-carbon"
             >
@@ -111,7 +111,7 @@ export function Navbar() {
             </a>
           ))}
           <a
-            href="/app/"
+            href="https://app.panaderiaronceros.com/"
             onClick={() => setAbierto(false)}
             className="rounded-lg px-3 py-2.5 text-sm font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
           >
@@ -119,7 +119,7 @@ export function Navbar() {
           </a>
           {ES_ANDROID && (
             <a
-              href="/downloads/CorporacionRonceros-latest.apk"
+              href="/downloads/PanaderiaRonceros-latest.apk"
               download
               onClick={() => setAbierto(false)}
               className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"

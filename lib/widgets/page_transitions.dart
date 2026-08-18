@@ -40,3 +40,22 @@ class SlideUpFadeRoute<T> extends PageRouteBuilder<T> {
 Future<T?> pushSlideUpFade<T>(BuildContext context, WidgetBuilder builder) {
   return Navigator.of(context).push<T>(SlideUpFadeRoute<T>(builder: builder));
 }
+
+/// Ruta de puro desvanecimiento, sin desplazamiento — para transiciones
+/// entre pantallas de fondo sólido (ej. la marca del desarrollador al
+/// arrancar la app), donde un slide se vería como un salto brusco de color.
+class FadeRoute<T> extends PageRouteBuilder<T> {
+  FadeRoute({required WidgetBuilder builder, super.settings})
+    : super(
+        transitionDuration: const Duration(milliseconds: 400),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            builder(context),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            child: child,
+          );
+        },
+      );
+}

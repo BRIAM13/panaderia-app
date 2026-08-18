@@ -75,7 +75,7 @@ class _BiometricOfferSheetContent extends StatelessWidget {
                 .moveY(begin: 8, end: 0),
             const SizedBox(height: 10),
             Text(
-                  'La próxima vez podrás entrar a Corporación Ronceros solo con tu huella digital, sin escribir tu contraseña.',
+                  'La próxima vez podrás entrar a Panadería Ronceros solo con tu huella digital, sin escribir tu contraseña.',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium,
                 )

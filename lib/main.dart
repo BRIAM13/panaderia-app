@@ -7,7 +7,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'pages/auth/login_page.dart';
-import 'pages/splash/splash_page.dart';
+import 'pages/splash/marca_desarrollador_page.dart';
 import 'services/api_client.dart';
 import 'services/secure_storage_service.dart';
 import 'theme/app_theme.dart';
@@ -100,7 +100,7 @@ class PanaderiaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Corporación Ronceros',
+      title: 'Panadería Ronceros',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       theme: buildAppTheme(),
@@ -127,7 +127,7 @@ class PanaderiaApp extends StatelessWidget {
           child: child!,
         );
       },
-      home: const SplashPage(),
+      home: const MarcaDesarrolladorPage(),
     );
   }
 }

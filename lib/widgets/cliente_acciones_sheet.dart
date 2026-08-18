@@ -93,7 +93,7 @@ class _ClienteAccionesSheetContent extends StatelessWidget {
     if (telefono == null || telefono.isEmpty) return;
     final numero = _numeroWhatsApp(telefono);
     final mensaje = Uri.encodeComponent(
-      'Hola ${cliente.nombreParaMostrar}, te contactamos de Corporación Ronceros.',
+      'Hola ${cliente.nombreParaMostrar}, te contactamos de Panadería Ronceros.',
     );
     await launchUrl(
       Uri.parse('https://wa.me/$numero?text=$mensaje'),

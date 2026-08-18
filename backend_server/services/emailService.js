@@ -42,7 +42,7 @@ function codificarEncabezado(texto) {
 function construirMensajeMime(destinatario, asunto, cuerpoTexto, cuerpoHtml) {
   const limite = `limite_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const mensaje = [
-    `From: ${codificarEncabezado('Corporación Ronceros')} <${process.env.GOOGLE_SENDER_EMAIL}>`,
+    `From: ${codificarEncabezado('Panadería Ronceros')} <${process.env.GOOGLE_SENDER_EMAIL}>`,
     `To: ${destinatario}`,
     `Subject: ${codificarEncabezado(asunto)}`,
     'MIME-Version: 1.0',

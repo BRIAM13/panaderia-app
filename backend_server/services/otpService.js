@@ -23,7 +23,7 @@ function generarCodigo() {
 }
 
 function mensajeSms(codigo) {
-  return `Corporación Ronceros: tu código de verificación es ${codigo}. Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie.`;
+  return `Panadería Ronceros: tu código de verificación es ${codigo}. Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie.`;
 }
 
 /**
@@ -56,7 +56,7 @@ function mensajeEmailHtml(codigo) {
           <table role="presentation" width="440" cellpadding="0" cellspacing="0" style="max-width:440px;width:100%;background:#fff8f3;border-radius:20px;overflow:hidden;border:1px solid #f0ded0;" bgcolor="#fff8f3">
             <tr>
               <td style="background:#7a2e1a;padding:20px 28px;" bgcolor="#7a2e1a">
-                <span style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#ffffff;font-size:15px;font-weight:700;letter-spacing:0.3px;">Corporación Ronceros</span>
+                <span style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#ffffff;font-size:15px;font-weight:700;letter-spacing:0.3px;">Panadería Ronceros</span>
               </td>
             </tr>
             <tr>
@@ -103,7 +103,7 @@ function mensajeEmailHtml(codigo) {
             </tr>
             <tr>
               <td style="padding:14px 28px 28px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
-                <p style="margin:0 0 10px;color:#6b5849;font-size:13px;line-height:1.5;">Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie, ni siquiera con alguien que diga ser de Corporación Ronceros.</p>
+                <p style="margin:0 0 10px;color:#6b5849;font-size:13px;line-height:1.5;">Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie, ni siquiera con alguien que diga ser de Panadería Ronceros.</p>
                 <p style="margin:0;color:#9c8b7c;font-size:12px;line-height:1.5;">Si no solicitaste este código, ignora este correo — tu cuenta sigue segura.</p>
               </td>
             </tr>
@@ -119,11 +119,11 @@ function mensajeEmailHtml(codigo) {
 /** Alternativa en texto plano — la exige la especificación MIME (multipart/alternative) y mejora la entregabilidad; también es lo único que ven algunos lectores de pantalla y clientes de correo minimalistas. */
 function mensajeEmailTexto(codigo) {
   return [
-    'Corporación Ronceros',
+    'Panadería Ronceros',
     '',
     `Tu código de verificación es: ${codigo}`,
     '',
-    `Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie, ni siquiera con alguien que diga ser de Corporación Ronceros.`,
+    `Vence en ${MINUTOS_EXPIRACION} minutos. Nunca lo compartas con nadie, ni siquiera con alguien que diga ser de Panadería Ronceros.`,
     '',
     'Si no solicitaste este código, ignora este correo — tu cuenta sigue segura.',
   ].join('\n');

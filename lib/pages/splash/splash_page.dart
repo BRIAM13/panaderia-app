@@ -55,7 +55,7 @@ class _SplashPageState extends State<SplashPage> {
       final hardwareDisponible = await _biometricService.esDisponible();
       if (hardwareDisponible) {
         final autenticado = await _biometricService.autenticar(
-          razon: 'Inicia sesión en Corporación Ronceros',
+          razon: 'Inicia sesión en Panadería Ronceros',
         );
         if (!autenticado) {
           _irALogin();
@@ -109,7 +109,7 @@ class _SplashPageState extends State<SplashPage> {
             ).animate().fadeIn(duration: 300.ms),
             const SizedBox(height: 20),
             Text(
-              'Corporación Ronceros',
+              'Panadería Ronceros',
               style: theme.textTheme.titleLarge,
             ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
           ],

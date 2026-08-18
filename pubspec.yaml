@@ -104,7 +104,7 @@ dev_dependencies:
   # no se usa en tiempo de ejecución de la app.
   flutter_launcher_icons: ^0.14.3
 
-# Config de flutter_launcher_icons — ícono de Corporación Ronceros (pan
+# Config de flutter_launcher_icons — ícono de Panadería Ronceros (pan
 # estilizado sobre degradado terracota/bronce, la paleta de marca).
 flutter_launcher_icons:
   android: true

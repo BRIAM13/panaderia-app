@@ -1,0 +1,16 @@
+{
+  "redirects": [
+    {
+      "source": "/app/:path*",
+      "destination": "https://app.panaderiaronceros.com/:path*",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "app.panaderiaronceros.com" }],
+      "destination": "/app/:path*"
+    }
+  ]
+}

@@ -287,7 +287,7 @@ class _HomePageState extends State<HomePage> {
       child: Scaffold(
         key: _scaffoldKey,
         appBar: AppBar(
-          title: const Text('Corporación Ronceros'),
+          title: const Text('Panadería Ronceros'),
           automaticallyImplyLeading: !esEscritorio,
         ),
         drawer: esEscritorio ? null : Drawer(child: contenidoMenu),
