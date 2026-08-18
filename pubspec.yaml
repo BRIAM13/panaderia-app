@@ -138,6 +138,7 @@ flutter:
   # el panadero aparezca igual en todos lados, sin duplicar el archivo.
   assets:
     - assets/icon/app_icon.png
+    - assets/icon/app_icon_foreground.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

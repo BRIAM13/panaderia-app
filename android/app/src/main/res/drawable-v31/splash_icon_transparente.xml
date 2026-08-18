@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícono "vacío" para el splash nativo de Android 12+ (SplashScreen API):
+     sin esto, el sistema usa el ícono adaptativo de la app a un tamaño fijo
+     pequeño, centrado, y se ve como una miniatura perdida en medio de un
+     fondo de color — mal en cualquier ícono con ilustración detallada, no
+     solo el nuestro. Con este ícono transparente, el splash del sistema
+     queda como un fondo sólido liso que combina directo con la primera
+     pantalla real de la app (MarcaDesarrolladorPage). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@android:color/transparent" />
+</shape>

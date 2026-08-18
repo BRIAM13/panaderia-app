@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ (API 31+) dibuja su propio splash antes de que Flutter
+         cargue, usando el ícono adaptativo a tamaño fijo si no se le indica
+         lo contrario — con nuestra ilustración eso se veía como una
+         miniatura perdida en un fondo que no combinaba (ver
+         splash_icon_transparente). Acá se fuerza un fondo sólido liso, del
+         mismo color que la primera pantalla real (MarcaDesarrolladorPage),
+         sin ícono, para que la transición sea invisible. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowSplashScreenBackground">#141414</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_transparente</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#141414</item>
+    </style>
+</resources>
