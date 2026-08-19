@@ -22,12 +22,34 @@ export interface ProductoPublico {
   esPaquete: boolean;
 }
 
+/** Horario de pedido/recojo del pan vendido por unidad (Pan de Agua/
+ * Francés) — editable desde la app (ADMIN/SUPERADMIN de Panadería), nunca
+ * hardcodeado acá. Todas las horas vienen en formato "HH:mm", hora de
+ * Perú. No aplica al pan de hamburguesa (esPaquete). */
+export interface HorariosPanaderia {
+  horaLimitePedido: string;
+  horaRecojoMismoDia: string;
+  horaRecojoDiaSiguiente: string;
+}
+
+export interface CatalogoPublicoResultado {
+  productos: ProductoPublico[];
+  horarios: HorariosPanaderia;
+}
+
 export interface PedidoPublicoInput {
-  dni: string;
+  /** DNI (8 dígitos) o RUC (11 dígitos) — el backend distingue por el
+   * largo, mismo criterio que el registro manual de clientes en la app. */
+  documento: string;
   telefono: string;
   idProducto: number;
   cantidad: number;
   notas?: string;
+  /** "YYYY-MM-DDTHH:mm" en hora de Perú (sin zona horaria) — obligatorio
+   * solo para productos que no sean paquete (Pan de Agua/Francés); el
+   * backend vuelve a validar el rango horario permitido, nunca confía en
+   * lo que mande el cliente. */
+  fechaEntrega?: string;
 }
 
 export interface PedidoPublicoResultado {
@@ -50,10 +72,9 @@ async function manejarRespuesta<T>(respuesta: Response): Promise<T> {
   return data as T;
 }
 
-export async function obtenerCatalogoPublico(): Promise<ProductoPublico[]> {
+export async function obtenerCatalogoPublico(): Promise<CatalogoPublicoResultado> {
   const respuesta = await fetch(`${API_BASE_URL}/publico/catalogo`);
-  const data = await manejarRespuesta<{ productos: ProductoPublico[] }>(respuesta);
-  return data.productos;
+  return manejarRespuesta<CatalogoPublicoResultado>(respuesta);
 }
 
 export async function crearPedidoPublico(

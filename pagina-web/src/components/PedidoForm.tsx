@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Loader2, ShoppingBag } from "lucide-react";
 import { PRODUCTOS } from "../data/config";
@@ -6,9 +6,11 @@ import {
   ApiError,
   crearPedidoPublico,
   obtenerCatalogoPublico,
+  type HorariosPanaderia,
   type PedidoPublicoResultado,
   type ProductoPublico,
 } from "../services/api";
+import { calcularVentanaRecojo, horaMinimaParaFecha } from "../utils/horariosPan";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
 const NOMBRES_DISPONIBLES = new Set(PRODUCTOS.map((p) => p.nombreEnCatalogo));
@@ -30,14 +32,18 @@ const CANTIDAD_MINIMA_UNIDAD = 50;
 
 export function PedidoForm() {
   const [productos, setProductos] = useState<ProductoPublico[]>([]);
+  const [horarios, setHorarios] = useState<HorariosPanaderia | null>(null);
   const [cargandoProductos, setCargandoProductos] = useState(true);
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null);
 
-  const [dni, setDni] = useState("");
+  const [tipoDocumento, setTipoDocumento] = useState<"DNI" | "RUC">("DNI");
+  const [numeroDocumento, setNumeroDocumento] = useState("");
   const [telefono, setTelefono] = useState("");
   const [idProducto, setIdProducto] = useState<number | "">("");
   const [cantidad, setCantidad] = useState("");
   const [notas, setNotas] = useState("");
+  const [fechaRecojo, setFechaRecojo] = useState("");
+  const [horaRecojo, setHoraRecojo] = useState("");
 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,12 +71,13 @@ export function PedidoForm() {
 
   useEffect(() => {
     obtenerCatalogoPublico()
-      .then((lista) => {
+      .then(({ productos: lista, horarios: horariosCatalogo }) => {
         // Solo se ofrecen los panes que ya tienen foto y están en el menú
         // de arriba (ver PRODUCTOS en data/config.ts) — el resto sigue
         // existiendo en el sistema, pero todavía no se vende desde acá.
         const disponibles = lista.filter((p) => NOMBRES_DISPONIBLES.has(p.nombre));
         setProductos(disponibles);
+        setHorarios(horariosCatalogo);
         if (disponibles.length > 0) setIdProducto(disponibles[0].idProducto);
       })
       .catch(() =>
@@ -86,12 +93,36 @@ export function PedidoForm() {
   const cantidadNum = Number(cantidad) || 0;
   const total = productoSeleccionado ? productoSeleccionado.precioUnitario * cantidadNum : 0;
 
+  // Pan de Agua/Francés (no paquete) exige recojo dentro de un rango de
+  // horario — hasta la hora límite de pedido se puede recoger el mismo
+  // día, después el recojo pasa para el día siguiente (ver horariosPan.ts
+  // y, del lado del servidor, horariosPanaderia.js, la fuente real de la
+  // regla). El pan de hamburguesa (paquete) no tiene esta restricción.
+  const ventanaRecojo = useMemo(
+    () => (horarios ? calcularVentanaRecojo(horarios) : null),
+    [horarios],
+  );
+  const horaMinimaRecojo =
+    horarios && ventanaRecojo && fechaRecojo
+      ? horaMinimaParaFecha(fechaRecojo, ventanaRecojo, horarios)
+      : (ventanaRecojo?.horaMinima ?? "");
+
   // Al cambiar de producto, la cantidad se limpia — el campo queda vacío
   // con un placeholder que ya indica qué escribir (ver más abajo), en vez
   // de arrastrar una cantidad que valía para el pan anterior.
   useEffect(() => {
     setCantidad("");
   }, [idProducto]);
+
+  // Al entrar a un producto con restricción de horario (o al cargar los
+  // horarios por primera vez), la fecha/hora de recojo arranca siempre en
+  // el mínimo permitido en este momento — nunca en blanco ni en un valor
+  // que ya quedó inválido por el paso del tiempo.
+  useEffect(() => {
+    if (esPaquete || !ventanaRecojo || !horarios) return;
+    setFechaRecojo(ventanaRecojo.fechaMinima);
+    setHoraRecojo(horaMinimaParaFecha(ventanaRecojo.fechaMinima, ventanaRecojo, horarios));
+  }, [esPaquete, ventanaRecojo, horarios]);
 
   // El personaje festeja un instante cuando el pedido se confirma — un
   // gesto puntual, no una animación que se repite sola sin parar.
@@ -106,8 +137,14 @@ export function PedidoForm() {
     e.preventDefault();
     setError(null);
 
-    if (!/^\d{8}$/.test(dni.trim())) {
-      setError("Ingresa un DNI válido de 8 dígitos.");
+    const numeroDocumentoLimpio = numeroDocumento.trim();
+    const largoEsperado = tipoDocumento === "DNI" ? 8 : 11;
+    if (!new RegExp(`^\\d{${largoEsperado}}$`).test(numeroDocumentoLimpio)) {
+      setError(
+        tipoDocumento === "DNI"
+          ? "Ingresa un DNI válido de 8 dígitos."
+          : "Ingresa un RUC válido de 11 dígitos.",
+      );
       return;
     }
     if (!/^\d{9}$/.test(telefono.trim())) {
@@ -127,14 +164,37 @@ export function PedidoForm() {
       return;
     }
 
+    let fechaEntrega: string | undefined;
+    if (!esPaquete) {
+      if (!fechaRecojo || !horaRecojo) {
+        setError("Elige una fecha y hora de recojo.");
+        return;
+      }
+      // Se recalcula el mínimo justo antes de enviar — el formulario pudo
+      // quedar abierto el tiempo suficiente para cruzar la hora límite.
+      if (horarios) {
+        const ventanaActual = calcularVentanaRecojo(horarios);
+        const pisoHora = horaMinimaParaFecha(fechaRecojo, ventanaActual, horarios);
+        const yaNoDisponible =
+          fechaRecojo < ventanaActual.fechaMinima ||
+          (fechaRecojo === ventanaActual.fechaMinima && horaRecojo < pisoHora);
+        if (yaNoDisponible) {
+          setError("La hora de recojo elegida ya no está disponible. Actualiza la página e intenta de nuevo.");
+          return;
+        }
+      }
+      fechaEntrega = `${fechaRecojo}T${horaRecojo}`;
+    }
+
     setEnviando(true);
     try {
       const resultado = await crearPedidoPublico({
-        dni: dni.trim(),
+        documento: numeroDocumentoLimpio,
         telefono: telefono.trim(),
         idProducto: Number(idProducto),
         cantidad: cantidadNum,
         notas: notas.trim() || undefined,
+        fechaEntrega,
       });
       setResultado(resultado);
     } catch (err) {
@@ -150,7 +210,7 @@ export function PedidoForm() {
 
   function pedirOtroVez() {
     setResultado(null);
-    setDni("");
+    setNumeroDocumento("");
     setTelefono("");
     setCantidad("");
     setNotas("");
@@ -273,16 +333,33 @@ export function PedidoForm() {
                 className="space-y-5"
               >
                 <div>
-                  <label htmlFor="dni" className="mb-1.5 block text-sm font-medium text-pan-carbon">
-                    DNI
-                  </label>
+                  <label className="mb-1.5 block text-sm font-medium text-pan-carbon">Documento</label>
+                  <div className="mb-2 inline-flex rounded-full border border-pan-borde bg-pan-crema p-1">
+                    {(["DNI", "RUC"] as const).map((tipo) => (
+                      <button
+                        key={tipo}
+                        type="button"
+                        onClick={() => {
+                          setTipoDocumento(tipo);
+                          setNumeroDocumento("");
+                        }}
+                        className={`rounded-full px-5 py-1.5 text-sm font-semibold transition-colors ${
+                          tipoDocumento === tipo
+                            ? "bg-pan-terracota text-pan-crema"
+                            : "text-pan-carbon-suave hover:text-pan-carbon"
+                        }`}
+                      >
+                        {tipo}
+                      </button>
+                    ))}
+                  </div>
                   <input
-                    id="dni"
+                    id="documento"
                     inputMode="numeric"
-                    maxLength={8}
-                    value={dni}
-                    onChange={(e) => setDni(e.target.value.replace(/\D/g, ""))}
-                    placeholder="Ingresa tu DNI"
+                    maxLength={tipoDocumento === "DNI" ? 8 : 11}
+                    value={numeroDocumento}
+                    onChange={(e) => setNumeroDocumento(e.target.value.replace(/\D/g, ""))}
+                    placeholder={tipoDocumento === "DNI" ? "Ingresa tu DNI" : "Ingresa tu RUC"}
                     required
                     className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
@@ -333,6 +410,43 @@ export function PedidoForm() {
                     </p>
                   )}
                 </div>
+
+                {!esPaquete && horarios && ventanaRecojo && (
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-pan-carbon">Recojo</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input
+                        id="fecha-recojo"
+                        type="date"
+                        aria-label="Fecha de recojo"
+                        value={fechaRecojo}
+                        min={ventanaRecojo.fechaMinima}
+                        onChange={(e) => {
+                          const nuevaFecha = e.target.value;
+                          setFechaRecojo(nuevaFecha);
+                          setHoraRecojo(horaMinimaParaFecha(nuevaFecha, ventanaRecojo, horarios));
+                        }}
+                        required
+                        className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                      />
+                      <input
+                        id="hora-recojo"
+                        type="time"
+                        aria-label="Hora de recojo"
+                        value={horaRecojo}
+                        min={horaMinimaRecojo || undefined}
+                        onChange={(e) => setHoraRecojo(e.target.value)}
+                        required
+                        className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                      />
+                    </div>
+                    <p className="mt-1.5 text-xs text-pan-carbon-suave">
+                      {ventanaRecojo.esMismoDia
+                        ? `Pedidos hasta las ${horarios.horaLimitePedido} se recogen hoy mismo desde las ${horarios.horaRecojoMismoDia}. Después de esa hora, el recojo pasa para el día siguiente.`
+                        : `El horario de hoy ya cerró — el recojo es a partir de mañana, desde las ${horarios.horaRecojoDiaSiguiente}.`}
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <label htmlFor="cantidad" className="mb-1.5 block text-sm font-medium text-pan-carbon">
