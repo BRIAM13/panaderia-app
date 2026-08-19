@@ -19,7 +19,9 @@ function inicioDelDia(fecha: Date): Date {
   return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
 }
 
-function formatearBonito(clave: string): string {
+/** "YYYY-MM-DD" -> "Mié 19 de agosto". Exportada porque el resumen del
+ * pedido (pantalla de éxito en PedidoForm) reusa el mismo formato. */
+export function formatearFechaBonita(clave: string): string {
   const [y, m, d] = clave.split("-").map(Number);
   const fecha = new Date(y, m - 1, d);
   const diasCorto = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
@@ -100,7 +102,7 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
         }`}
       >
         <CalendarDays className="h-4 w-4 shrink-0 text-pan-terracota" />
-        <span>{valor ? formatearBonito(valor) : placeholder}</span>
+        <span>{valor ? formatearFechaBonita(valor) : placeholder}</span>
       </button>
 
       <SelectorModal

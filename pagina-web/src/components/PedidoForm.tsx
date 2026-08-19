@@ -11,7 +11,7 @@ import {
   type ProductoPublico,
 } from "../services/api";
 import { esMuyProntoHoy, estaFueraDeVentana, formatearHora12, horaMinimaHoy, hoyISO } from "../utils/horariosPan";
-import { SelectorFecha, type SelectorFechaHandle } from "./SelectorFecha";
+import { SelectorFecha, type SelectorFechaHandle, formatearFechaBonita } from "./SelectorFecha";
 import { SelectorHora, type SelectorHoraHandle } from "./SelectorHora";
 import { SelectorProducto } from "./SelectorProducto";
 
@@ -143,13 +143,23 @@ export function PedidoForm() {
     setHoraRecojo("");
   }, [idProducto]);
 
-  // Si el cliente ya había elegido una hora y después cambia la fecha a
-  // hoy (o el reloj avanza), esa hora puede quedar por debajo del nuevo
-  // piso de tolerancia — se limpia en vez de dejar un valor que el envío
-  // igual va a rechazar.
+  // Un mensaje de error queda pegado en pantalla si el cliente corrige el
+  // campo que lo causó pero nunca vuelve a presionar "Enviar pedido" —
+  // apenas toca cualquier campo, el error de la vez anterior se descarta
+  // para no confundirlo con uno nuevo.
+  useEffect(() => {
+    setError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipoDocumento, numeroDocumento, telefono, idProducto, cantidad, notas, fechaRecojo, horaRecojo]);
+
+  // Si el cliente ya había elegido una hora y el reloj avanza lo
+  // suficiente como para que ese horario ya no respete los minutos de
+  // tolerancia, en vez de borrarla (y dejarlo con el campo vacío otra
+  // vez) se adelanta justo lo necesario para seguir siendo válida — así
+  // nunca desaparece la hora que ya había elegido, solo se corrige.
   useEffect(() => {
     if (horarios && fechaRecojo && horaRecojo && esMuyProntoHoy(fechaRecojo, horaRecojo, horarios, ahora)) {
-      setHoraRecojo("");
+      setHoraRecojo(horaMinimaHoy(horarios, ahora));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fechaRecojo, horarios, ahora]);
@@ -362,6 +372,24 @@ export function PedidoForm() {
                 <p className="mt-3 text-lg font-semibold text-pan-terracota">
                   Total: S/ {resultado.total.toFixed(2)}
                 </p>
+
+                <div className="mx-auto mt-5 max-w-sm space-y-2.5 rounded-2xl bg-pan-crema px-5 py-4 text-left text-sm">
+                  <FilaDetallePedido etiqueta="Producto" valor={productoSeleccionado?.nombre ?? "—"} />
+                  <FilaDetallePedido
+                    etiqueta={esPaquete ? "Paquetes" : "Cantidad"}
+                    valor={cantidad || "—"}
+                  />
+                  <FilaDetallePedido etiqueta="Documento" valor={`${tipoDocumento} ${numeroDocumento}`} />
+                  <FilaDetallePedido etiqueta="Celular" valor={telefono} />
+                  {!esPaquete && fechaRecojo && horaRecojo && (
+                    <FilaDetallePedido
+                      etiqueta="Recojo"
+                      valor={`${formatearFechaBonita(fechaRecojo)}, ${formatearHora12(horaRecojo)}`}
+                    />
+                  )}
+                  {notas.trim() && <FilaDetallePedido etiqueta="Notas" valor={notas.trim()} />}
+                </div>
+
                 {fueraDeVentanaAlEnviar && (
                   <p className="mx-auto mt-4 max-w-sm rounded-xl bg-amber-50 px-4 py-3 text-left text-xs font-medium text-amber-800">
                     Como el horario elegido ya cerró, te confirmaremos por WhatsApp al número que dejaste
@@ -569,5 +597,16 @@ export function PedidoForm() {
         </div>
       </div>
     </section>
+  );
+}
+
+/** Una fila del resumen de "pedido recibido" — mismo formato etiqueta +
+ * valor para documento, producto, recojo, etc. */
+function FilaDetallePedido({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <span className="text-pan-carbon-suave">{etiqueta}</span>
+      <span className="text-right font-medium text-pan-carbon">{valor}</span>
+    </div>
   );
 }
