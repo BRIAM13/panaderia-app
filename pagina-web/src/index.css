@@ -15,7 +15,18 @@
   --color-pan-bronce: #c08a3e;
   --color-pan-bronce-suave: #f1ddb6;
   --color-pan-carbon: #2b2118;
-  --color-pan-carbon-suave: #6b5b4c;
+  /* Texto secundario/muted en todo el sitio. Más oscuro que el tono
+     original (#6b5b4c, 6:1 de contraste) para que párrafos, descripciones
+     y enlaces se lean con más peso sobre los fondos crema — el original se
+     sentía "lavado" en pantallas grandes de una sola tonalidad clara. */
+  --color-pan-carbon-suave: #544435;
+
+  /* Tono de borde dedicado — el bronce-suave original (#f1ddb6) es casi
+     idéntico al fondo crema (1.2:1 de contraste) y por eso tarjetas,
+     inputs y botones con contorno prácticamente no se distinguían del
+     fondo. bronce-suave se sigue usando tal cual como RELLENO suave
+     (chips, blobs decorativos); este color es solo para bordes visibles. */
+  --color-pan-borde: #af7a48;
 
   /* Acentos que enriquecen la paleta cálida sin salirse de ella — un dorado
      más vivo para brillos/detalles, y un terracota más profundo para dar
@@ -57,7 +68,7 @@ body {
   background: var(--color-pan-crema);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-pan-bronce-suave);
+  background: var(--color-pan-borde);
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {

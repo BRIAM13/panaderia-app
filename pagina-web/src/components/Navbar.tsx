@@ -34,8 +34,8 @@ export function Navbar() {
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       className={`fixed inset-x-0 top-0 z-50 border-b bg-pan-crema/85 backdrop-blur-md transition-shadow duration-300 ${
         conSombra
-          ? "border-pan-bronce-suave shadow-md shadow-pan-carbon/5"
-          : "border-pan-bronce-suave/60 shadow-none"
+          ? "border-pan-borde shadow-md shadow-pan-carbon/5"
+          : "border-pan-borde/60 shadow-none"
       }`}
     >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
@@ -75,7 +75,7 @@ export function Navbar() {
             <a
               href="/downloads/PanaderiaRonceros-latest.apk"
               download
-              className="boton-relleno inline-flex items-center gap-1.5 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-4 py-2 text-sm font-medium text-pan-carbon"
+              className="boton-relleno inline-flex items-center gap-1.5 rounded-full border border-pan-borde bg-pan-crema-suave px-4 py-2 text-sm font-medium text-pan-carbon"
             >
               <Download className="h-4 w-4" />
               Descargar app
@@ -107,7 +107,7 @@ export function Navbar() {
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
-          className="flex flex-col gap-1 border-t border-pan-bronce-suave/60 px-6 py-4 md:hidden"
+          className="flex flex-col gap-1 border-t border-pan-borde/60 px-6 py-4 md:hidden"
         >
           {ENLACES.map((enlace) => (
             <a

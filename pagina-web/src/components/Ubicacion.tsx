@@ -26,14 +26,14 @@ export function Ubicacion() {
           </h2>
           <p className="mt-4 text-lg text-pan-carbon-suave">{UBICACION.direccion}</p>
           <p className="text-lg text-pan-carbon-suave">{UBICACION.ciudad}</p>
-          <p className="mt-2 text-sm text-pan-carbon-suave">Referencia: {UBICACION.referencia}</p>
+          <p className="mt-2 text-sm text-pan-carbon-suave">{UBICACION.referencia}</p>
           <motion.a
             href={UBICACION.mapaUrl}
             target="_blank"
             rel="noopener noreferrer"
             whileHover={{ scale: 1.05, y: -2 }}
             whileTap={{ scale: 0.97 }}
-            className="boton-relleno mt-6 inline-flex items-center gap-2 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-5 py-2.5 text-sm font-semibold text-pan-carbon shadow-sm shadow-pan-carbon/5"
+            className="boton-relleno mt-6 inline-flex items-center gap-2 rounded-full border border-pan-borde bg-pan-crema-suave px-5 py-2.5 text-sm font-semibold text-pan-carbon shadow-sm shadow-pan-carbon/5"
           >
             Abrir en Google Maps
             <ExternalLink className="h-4 w-4" />

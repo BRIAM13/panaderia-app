@@ -103,7 +103,7 @@ export function Hero() {
               }}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.97 }}
-              className="boton-relleno inline-flex items-center gap-2 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-6 py-3.5 font-semibold text-pan-carbon"
+              className="boton-relleno inline-flex items-center gap-2 rounded-full border border-pan-borde bg-pan-crema-suave px-6 py-3.5 font-semibold text-pan-carbon"
             >
               Ver nuestro pan
             </motion.a>

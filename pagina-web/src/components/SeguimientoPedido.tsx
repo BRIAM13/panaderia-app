@@ -191,7 +191,7 @@ export function SeguimientoPedido() {
                           onChange={(e) => setDni(e.target.value.replace(/\D/g, ""))}
                           placeholder="Tu DNI, 8 dígitos"
                           required
-                          className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                          className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                         />
                         {error && <p className="mt-1.5 text-sm font-medium text-red-700">{error}</p>}
                       </div>

@@ -233,7 +233,7 @@ export function PedidoForm() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-80px" }}
             transition={{ duration: 0.6, ease: EASE_PREMIUM, delay: 0.1 }}
-            className="relative z-10 rounded-3xl border border-pan-bronce-suave/50 bg-pan-crema-suave p-6 shadow-md shadow-pan-carbon/5 sm:p-8"
+            className="relative z-10 rounded-3xl border border-pan-borde/50 bg-pan-crema-suave p-6 shadow-md shadow-pan-carbon/5 sm:p-8"
           >
           <AnimatePresence mode="wait">
             {resultado ? (
@@ -259,7 +259,7 @@ export function PedidoForm() {
                 </p>
                 <button
                   onClick={pedirOtroVez}
-                  className="boton-relleno mt-6 rounded-full border border-pan-bronce-suave px-5 py-2.5 text-sm font-semibold text-pan-carbon"
+                  className="boton-relleno mt-6 rounded-full border border-pan-borde px-5 py-2.5 text-sm font-semibold text-pan-carbon"
                 >
                   Hacer otro pedido
                 </button>
@@ -284,7 +284,7 @@ export function PedidoForm() {
                     onChange={(e) => setDni(e.target.value.replace(/\D/g, ""))}
                     placeholder="Ingresa tu DNI"
                     required
-                    className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                    className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
                 </div>
 
@@ -300,7 +300,7 @@ export function PedidoForm() {
                     onChange={(e) => setTelefono(e.target.value.replace(/\D/g, ""))}
                     placeholder="Ingresa tu número de celular"
                     required
-                    className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                    className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
                 </div>
 
@@ -314,7 +314,7 @@ export function PedidoForm() {
                     onChange={(e) => setIdProducto(Number(e.target.value))}
                     disabled={cargandoProductos || productos.length === 0}
                     required
-                    className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota disabled:opacity-60"
+                    className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota disabled:opacity-60"
                   >
                     {cargandoProductos && <option>Cargando productos…</option>}
                     {!cargandoProductos &&
@@ -346,7 +346,7 @@ export function PedidoForm() {
                     onChange={(e) => setCantidad(e.target.value.replace(/\D/g, ""))}
                     placeholder={esPaquete ? "Ingresa cantidad de paquetes" : "Ingresa cantidad de panes"}
                     required
-                    className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                    className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
                 </div>
 
@@ -360,7 +360,7 @@ export function PedidoForm() {
                     onChange={(e) => setNotas(e.target.value)}
                     rows={2}
                     placeholder="Ej: para recoger mañana temprano"
-                    className="w-full resize-none rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                    className="w-full resize-none rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
                 </div>
 

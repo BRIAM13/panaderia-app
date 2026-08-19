@@ -30,13 +30,16 @@ export const MISION_VISION = {
 
 export const UBICACION = {
   // Dirección real del local, la que se muestra al visitante.
-  direccion: "Calle Ayacucho 478",
+  direccion: "Calle Ayacucho, cuadra 4",
   ciudad: "Pisco, Perú",
-  referencia: "Frente a la gruta de la Virgen de Chapi",
-  // Google Maps no siempre ubica bien el 478 exacto, pero sí encuentra
-  // correctamente el 475 (misma cuadra, a un paso) — se usa ese número solo
-  // para que el mapa abra en el lugar correcto, aunque el texto que lee el
-  // cliente arriba siga mostrando la dirección real.
+  // El altar de la Virgen de Chapi está en la propia fachada del local —es
+  // de la familia— y es la referencia más fácil de reconocer desde la
+  // calle, mucho más que un número de puerta.
+  referencia: "Busca el altar de la Virgen de Chapi en la fachada: es nuestro y te ayuda a encontrarnos fácil.",
+  // Google Maps no ubica bien una dirección genérica tipo "cuadra 4", pero
+  // sí encuentra correctamente el 475 (esa misma cuadra, a un paso del
+  // altar) — se usa ese número solo para que el mapa abra en el lugar
+  // correcto, aunque el texto que lee el cliente arriba no lo mencione.
   mapaEmbedUrl: "https://www.google.com/maps?q=C.+Ayacucho+475,+Pisco,+Peru&output=embed",
   mapaUrl: "https://www.google.com/maps/search/?api=1&query=C.+Ayacucho+475,+Pisco,+Peru",
 };
