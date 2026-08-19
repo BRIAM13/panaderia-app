@@ -275,7 +275,7 @@ async function reportar(req, res, next) {
         await notificarPersonalDeTienda(info.IdTienda, {
           titulo: 'Pago reportado por el cliente',
           cuerpo: `${info.DescripcionNegocio || nombreCliente} reportó un pago de S/ ${Number(solicitud.MontoTotal).toFixed(2)}. Revisa y confirma.`,
-          datos: { tipo: 'PAGO_REPORTADO', idSolicitudPago: String(id) },
+          datos: { tipo: 'PAGO_REPORTADO', idTienda: String(info.IdTienda), idSolicitudPago: String(id) },
         });
       }
     } catch (_) {

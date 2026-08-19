@@ -60,6 +60,24 @@ async function verificarToken(req, res, next) {
       });
     }
 
+    // VISITOR es un rol de solo lectura (ej. para que Google Play o una
+    // pasarela de pagos como Culqi revisen la app sin poder tocar datos
+    // reales): cualquier método que no sea GET se rechaza de plano, sin
+    // importar qué ruta sea. Para las lecturas, se comporta exactamente
+    // como ADMIN (mismas pantallas, mismas tiendas asignadas en
+    // TrabajadorTiendas — a diferencia de SUPERADMIN, no tiene acceso
+    // implícito a todo) — así ninguna ruta individual necesita enterarse
+    // de que este rol existe.
+    if (rolActual === 'VISITOR') {
+      if (req.method !== 'GET') {
+        return res.status(403).json({
+          mensaje: 'Esta cuenta es de solo lectura y no puede modificar datos.',
+        });
+      }
+      req.usuario = { ...payload, rol: 'ADMIN', rolReal: 'VISITOR' };
+      return next();
+    }
+
     req.usuario = { ...payload, rol: rolActual };
     next();
   } catch (err) {

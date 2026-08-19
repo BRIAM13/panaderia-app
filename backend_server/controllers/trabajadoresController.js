@@ -77,7 +77,7 @@ function mayuscula(valor) {
  * además respeta quién creó a quién entre administradores).
  */
 function rolesQuePuedeAsignar(rolDelQueLlama) {
-  if (rolDelQueLlama === 'SUPERADMIN') return ['TRABAJADOR', 'ADMIN', 'SUPERADMIN'];
+  if (rolDelQueLlama === 'SUPERADMIN') return ['TRABAJADOR', 'ADMIN', 'SUPERADMIN', 'VISITOR'];
   if (rolDelQueLlama === 'ADMIN') return ['TRABAJADOR', 'ADMIN'];
   return [];
 }
@@ -121,7 +121,9 @@ function puedeModificarA({
  * nivel — TRABAJADOR y ADMIN — pero nunca a un SUPERADMIN; eso queda fuera
  * de su alcance por completo. SUPERADMIN ve a todos. */
 function rolesQuePuedeVer(rolDelQueLlama) {
-  return rolDelQueLlama === 'SUPERADMIN' ? ['TRABAJADOR', 'ADMIN', 'SUPERADMIN'] : ['TRABAJADOR', 'ADMIN'];
+  return rolDelQueLlama === 'SUPERADMIN'
+    ? ['TRABAJADOR', 'ADMIN', 'SUPERADMIN', 'VISITOR']
+    : ['TRABAJADOR', 'ADMIN'];
 }
 
 /**

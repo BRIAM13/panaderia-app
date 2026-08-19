@@ -18,7 +18,7 @@ async function listarAsignables(req, res, next) {
   try {
     const nombresPermitidos =
       req.usuario.rol === 'SUPERADMIN'
-        ? ['TRABAJADOR', 'ADMIN', 'SUPERADMIN']
+        ? ['TRABAJADOR', 'ADMIN', 'SUPERADMIN', 'VISITOR']
         : req.usuario.rol === 'ADMIN'
         ? ['TRABAJADOR', 'ADMIN']
         : [];
