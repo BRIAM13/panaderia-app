@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { ArrowRight, ChevronDown, MapPin } from "lucide-react";
 import { SITE, UBICACION } from "../data/config";
+import { desplazarASeccion } from "../utils/scroll";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
 
@@ -83,6 +84,10 @@ export function Hero() {
           >
             <motion.a
               href="#pedido"
+              onClick={(e) => {
+                e.preventDefault();
+                desplazarASeccion("pedido");
+              }}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.97 }}
               className="inline-flex items-center gap-2 rounded-full bg-pan-terracota px-6 py-3.5 font-semibold text-pan-crema shadow-lg shadow-pan-terracota/20 transition-shadow hover:shadow-xl hover:shadow-pan-terracota/30"
@@ -92,6 +97,10 @@ export function Hero() {
             </motion.a>
             <motion.a
               href="#menu"
+              onClick={(e) => {
+                e.preventDefault();
+                desplazarASeccion("menu");
+              }}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.97 }}
               className="boton-relleno inline-flex items-center gap-2 rounded-full border border-pan-bronce-suave bg-pan-crema-suave px-6 py-3.5 font-semibold text-pan-carbon"
@@ -131,6 +140,10 @@ export function Hero() {
 
       <motion.a
         href="#nosotros"
+        onClick={(e) => {
+          e.preventDefault();
+          desplazarASeccion("nosotros");
+        }}
         style={{ opacity: opacidad }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

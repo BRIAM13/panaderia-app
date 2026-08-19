@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, useMotionValueEvent, useScroll } from "framer-motion";
 import { Menu as MenuIcon, X, User, Download } from "lucide-react";
 import { SITE } from "../data/config";
+import { desplazarASeccion } from "../utils/scroll";
 
 const ENLACES = [
   { href: "#nosotros", texto: "Nosotros" },
@@ -50,6 +51,10 @@ export function Navbar() {
             <a
               key={enlace.href}
               href={enlace.href}
+              onClick={(e) => {
+                e.preventDefault();
+                desplazarASeccion(enlace.href.slice(1));
+              }}
               className="group relative text-sm font-medium text-pan-carbon-suave transition-colors hover:text-pan-terracota"
             >
               {enlace.texto}
@@ -78,6 +83,10 @@ export function Navbar() {
           )}
           <a
             href="#pedido"
+            onClick={(e) => {
+              e.preventDefault();
+              desplazarASeccion("pedido");
+            }}
             className="rounded-full bg-pan-terracota px-5 py-2.5 text-sm font-semibold text-pan-crema transition-transform hover:scale-105"
           >
             Pedir ahora
@@ -104,7 +113,11 @@ export function Navbar() {
             <a
               key={enlace.href}
               href={enlace.href}
-              onClick={() => setAbierto(false)}
+              onClick={(e) => {
+                e.preventDefault();
+                setAbierto(false);
+                desplazarASeccion(enlace.href.slice(1));
+              }}
               className="rounded-lg px-3 py-2.5 text-sm font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
             >
               {enlace.texto}
@@ -130,7 +143,11 @@ export function Navbar() {
           )}
           <a
             href="#pedido"
-            onClick={() => setAbierto(false)}
+            onClick={(e) => {
+              e.preventDefault();
+              setAbierto(false);
+              desplazarASeccion("pedido");
+            }}
             className="mt-2 rounded-full bg-pan-terracota px-5 py-2.5 text-center text-sm font-semibold text-pan-crema"
           >
             Pedir ahora
