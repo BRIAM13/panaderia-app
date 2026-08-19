@@ -217,13 +217,15 @@ async function consultarDni(req, res) {
   return res.status(200).json({ mensaje, ...resultado });
 }
 
-async function consultarRuc(req, res) {
-  const ruc = req.body.ruc ?? req.params.ruc;
-
-  if (!/^\d{11}$/.test(String(ruc || ''))) {
-    return res.status(400).json({ mensaje: 'El RUC debe tener 11 dígitos numéricos' });
-  }
-
+/**
+ * Núcleo de la consulta de RUC, sin la capa HTTP — mismo motivo que
+ * buscarPersonaPorDni: para que otros controllers (ver publicoController.js,
+ * el pedido web público cuando el cliente elige "RUC") puedan reusar
+ * exactamente la misma lógica (API real -> simulador de respaldo) sin pasar
+ * por una petición Express de por medio.
+ * Devuelve `fuente`: 'API_REAL' | 'SIMULADO' | 'NO_ENCONTRADO'.
+ */
+async function buscarEmpresaPorRuc(ruc) {
   const tokenApiPeru = await obtenerTokenApiPeru();
   if (tokenApiPeru) {
     const cliente = crearClienteApiPeru(tokenApiPeru);
@@ -231,8 +233,7 @@ async function consultarRuc(req, res) {
 
     if (resultado.estado === 'ENCONTRADO') {
       const { data } = resultado;
-      return res.status(200).json({
-        mensaje: 'Consulta real de SUNAT (apiperu.dev)',
+      return {
         fuente: 'API_REAL',
         ruc: data.data.ruc || ruc,
         razonSocial: data.data.nombre_o_razon_social,
@@ -243,24 +244,39 @@ async function consultarRuc(req, res) {
         direccion: limpiarValorSunat(data.data.direccion_completa || data.data.direccion),
         estado: data.data.estado || '',
         condicion: data.data.condicion || '',
-      });
+      };
     }
 
     if (resultado.estado === 'NO_ENCONTRADO') {
-      return res.status(404).json({
-        mensaje: 'Documento no encontrado. El RUC ingresado no se encuentra registrado o es inválido.',
-        encontrado: false,
-      });
+      return { fuente: 'NO_ENCONTRADO' };
     }
 
     console.warn('apiperu.dev /ruc no disponible, usando simulador:', resultado.error.message);
   }
 
-  return res.status(200).json({
-    mensaje: 'Consulta simulada de SUNAT (apiperu.dev no disponible)',
-    fuente: 'SIMULADO',
-    ...simularEmpresaPorRuc(String(ruc)),
-  });
+  return { fuente: 'SIMULADO', ...simularEmpresaPorRuc(String(ruc)) };
 }
 
-module.exports = { consultarDni, consultarRuc, buscarPersonaPorDni };
+async function consultarRuc(req, res) {
+  const ruc = req.body.ruc ?? req.params.ruc;
+
+  if (!/^\d{11}$/.test(String(ruc || ''))) {
+    return res.status(400).json({ mensaje: 'El RUC debe tener 11 dígitos numéricos' });
+  }
+
+  const resultado = await buscarEmpresaPorRuc(String(ruc));
+
+  if (resultado.fuente === 'NO_ENCONTRADO') {
+    return res.status(404).json({
+      mensaje: 'Documento no encontrado. El RUC ingresado no se encuentra registrado o es inválido.',
+      encontrado: false,
+    });
+  }
+
+  const mensaje = resultado.fuente === 'API_REAL'
+    ? 'Consulta real de SUNAT (apiperu.dev)'
+    : 'Consulta simulada de SUNAT (apiperu.dev no disponible)';
+  return res.status(200).json({ mensaje, ...resultado });
+}
+
+module.exports = { consultarDni, consultarRuc, buscarPersonaPorDni, buscarEmpresaPorRuc };

@@ -60,6 +60,24 @@ function fechaLocalPeruISO(fecha = new Date()) {
   return new Date(diaCalendarioPeru(fecha)).toISOString().slice(0, 10);
 }
 
+/** Hora y minuto actuales, en hora de Perú (0-23, 0-59) — para reglas de
+ * negocio que dependen de la hora exacta del día (ej. horario límite de
+ * pedido/recojo de Panadería, ver horariosPanaderia.js). */
+function horaActualPeru() {
+  const ajustada = new Date(Date.now() + PERU_OFFSET_MS);
+  return { hora: ajustada.getUTCHours(), minuto: ajustada.getUTCMinutes() };
+}
+
+/** Instante UTC real correspondiente a una fecha y hora "naive" en hora de
+ * Perú (sin zona horaria, como la que arma el front al combinar un
+ * <input type=date> y un <input type=time>) — misma idea que
+ * inicioDeDiaPeru() pero permitiendo elegir también la hora, no solo
+ * medianoche. */
+function instantePeru({ anio, mes, dia, hora, minuto }) {
+  const comoUtc = Date.UTC(anio, mes - 1, dia, hora, minuto);
+  return new Date(comoUtc - PERU_OFFSET_MS);
+}
+
 module.exports = {
   PERU_OFFSET_MS,
   diaCalendarioPeru,
@@ -68,4 +86,6 @@ module.exports = {
   inicioDeMesPeru,
   inicioDeDiaPeru,
   fechaLocalPeruISO,
+  horaActualPeru,
+  instantePeru,
 };

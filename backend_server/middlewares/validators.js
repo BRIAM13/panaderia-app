@@ -407,11 +407,11 @@ function validateCrearPedidoHorneado(req, res, next) {
  * datos y (potencialmente) gastar una consulta paga a apiperu.dev.
  */
 function validateCrearPedidoPublico(req, res, next) {
-  const { dni, telefono, idProducto, cantidad, notas } = req.body;
+  const { documento, telefono, idProducto, cantidad, notas } = req.body;
   const errores = [];
 
-  if (!isNonEmptyString(dni) || !DNI_PERU_REGEX.test(dni.trim())) {
-    errores.push('Ingresa un DNI válido de 8 dígitos.');
+  if (!isNonEmptyString(documento) || (!DNI_PERU_REGEX.test(documento.trim()) && !RUC_PERU_REGEX.test(documento.trim()))) {
+    errores.push('El documento debe ser un DNI de 8 dígitos o un RUC de 11 dígitos.');
   }
   // Celular peruano: siempre 9 dígitos, más estricto que TELEFONO_REGEX
   // (6-20, pensado para otros formularios que sí aceptan fijos/extranjeros).

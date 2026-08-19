@@ -1,9 +1,12 @@
 const { sql, getPool } = require('../config/db');
 const { registrarAuditoria } = require('../utils/auditLog');
 const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos');
-const { buscarPersonaPorDni } = require('./externalController');
+const { buscarPersonaPorDni, buscarEmpresaPorRuc } = require('./externalController');
 const { intentarClonarUsuarioCliente } = require('./clientesController');
 const { notificarPersonalTienda, SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
+const { obtenerHorariosPanaderia, validarFechaEntrega } = require('../utils/horariosPanaderia');
+const { instantePeru } = require('../utils/fechaPeru');
+const { RUC_PERU_REGEX } = require('../middlewares/validators');
 
 // Tiendas que la página web pública puede mostrar/vender — Mercadería y
 // Pastelería todavía no tienen catálogo real, y Horneados tiene precio
@@ -61,6 +64,7 @@ async function listarCatalogoPublico(req, res, next) {
       ORDER BY p.IdProducto
     `);
     const precioPaquete = await obtenerPrecioPaquete(pool);
+    const horarios = await obtenerHorariosPanaderia(pool);
 
     return res.status(200).json({
       productos: result.recordset.map((p) => {
@@ -72,6 +76,11 @@ async function listarCatalogoPublico(req, res, next) {
           esPaquete,
         };
       }),
+      // Horario de pedido/recojo de los panes vendidos por unidad (Pan de
+      // Agua/Francés) — el formulario lo usa para calcular la fecha/hora
+      // mínima de recojo que puede elegir el cliente. No aplica al pan de
+      // hamburguesa (esPaquete), que no tiene esta restricción.
+      horarios,
     });
   } catch (err) {
     return next(err);
@@ -93,13 +102,51 @@ async function crearPedidoPublico(req, res, next) {
     return res.status(429).json({ mensaje: 'Demasiados intentos. Intenta de nuevo en unos minutos, o contáctanos directamente.' });
   }
 
-  // dni/telefono/cantidad ya vienen validados por validateCrearPedidoPublico.
-  const { dni, telefono, idProducto, cantidad, notas } = req.body;
-  const dniLimpio = String(dni).trim();
+  // documento/telefono/cantidad ya vienen validados por
+  // validateCrearPedidoPublico. `documento` acepta DNI (8 dígitos, se
+  // valida contra RENIEC) o RUC (11 dígitos, contra SUNAT) — se distingue
+  // solo por el largo, mismo criterio que ya usa validateCliente para el
+  // registro manual de clientes.
+  const { documento, telefono, idProducto, cantidad, notas, fechaEntrega } = req.body;
+  const documentoLimpio = String(documento).trim();
+  const esRuc = RUC_PERU_REGEX.test(documentoLimpio);
   const telefonoLimpio = String(telefono).trim();
   const cantidadNum = Number(cantidad);
 
   const pool = await getPool();
+
+  // La fecha/hora de recojo (solo pan de agua/francés, vendidos por
+  // unidad) se valida ANTES de abrir la transacción — nunca confía en lo
+  // que mandó el cliente, se recalcula acá con el horario configurado
+  // (Configuraciones, editable desde la app) y la hora real del servidor.
+  let fechaEntregaUtc = null;
+  const productoPreview = await pool.request()
+    .input('IdProducto', sql.Int, idProducto)
+    .query(`
+      SELECT t.Slug
+      FROM Productos p
+      INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
+      INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
+      WHERE p.IdProducto = @IdProducto AND p.Estado = 1 AND t.Estado = 1
+        AND t.Slug IN ('${SLUGS_TIENDA_PUBLICA.join("','")}')
+    `);
+  const esPaquetePreview = productoPreview.recordset[0]?.Slug === 'hamburguesas';
+
+  if (!esPaquetePreview) {
+    const coincidencia = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(fechaEntrega || ''));
+    if (!coincidencia) {
+      return res.status(400).json({ mensaje: 'Elige una fecha y hora de recojo válidas.' });
+    }
+    const [, anio, mes, dia, hora, minuto] = coincidencia.map(Number);
+    const horarios = await obtenerHorariosPanaderia(pool);
+    if (!validarFechaEntrega({ anio, mes, dia, hora, minuto }, horarios)) {
+      return res.status(400).json({
+        mensaje: `La hora de recojo elegida ya no está disponible. Actualiza la página y vuelve a intentar — pedidos hasta las ${horarios.horaLimitePedido} se recogen el mismo día desde las ${horarios.horaRecojoMismoDia}, luego de esa hora el recojo pasa para el día siguiente desde las ${horarios.horaRecojoDiaSiguiente}.`,
+      });
+    }
+    fechaEntregaUtc = instantePeru({ anio, mes, dia, hora, minuto });
+  }
+
   const transaction = new sql.Transaction(pool);
 
   try {
@@ -139,7 +186,7 @@ async function crearPedidoPublico(req, res, next) {
       : productoResult.recordset[0].PrecioUnitario;
 
     const personaExistente = await new sql.Request(transaction)
-      .input('DNI', sql.VarChar(15), dniLimpio)
+      .input('DNI', sql.VarChar(15), documentoLimpio)
       .query('SELECT IdPersona, Nombres, ApellidoPaterno FROM Personas WHERE DNI = @DNI');
 
     let idPersona;
@@ -149,29 +196,47 @@ async function crearPedidoPublico(req, res, next) {
       idPersona = personaExistente.recordset[0].IdPersona;
       nombreParaAviso = [personaExistente.recordset[0].Nombres, personaExistente.recordset[0].ApellidoPaterno].filter(Boolean).join(' ');
     } else {
-      const datosDni = await buscarPersonaPorDni(dniLimpio);
-      if (datosDni.fuente === 'NO_ENCONTRADO') {
+      // RUC (empresa/negocio, vía SUNAT) no tiene apellidos — se guarda la
+      // razón social en Nombres, igual que ya hace el registro manual de
+      // clientes-empresa en la app (ver Clientes/Personas, sin columna
+      // propia de RUC: el documento vive en la misma columna DNI).
+      const datosDocumento = esRuc
+        ? await buscarEmpresaPorRuc(documentoLimpio)
+        : await buscarPersonaPorDni(documentoLimpio);
+
+      if (datosDocumento.fuente === 'NO_ENCONTRADO') {
         await transaction.rollback();
-        return res.status(404).json({ mensaje: 'No encontramos ese DNI en RENIEC. Verifica el número.' });
+        return res.status(404).json({
+          mensaje: esRuc
+            ? 'No encontramos ese RUC en SUNAT. Verifica el número.'
+            : 'No encontramos ese DNI en RENIEC. Verifica el número.',
+        });
       }
 
+      const nombres = esRuc ? datosDocumento.razonSocial : datosDocumento.nombres;
+      const apellidoPaterno = esRuc ? '' : datosDocumento.apellidoPaterno || '';
+      const apellidoMaterno = esRuc ? null : datosDocumento.apellidoMaterno || null;
+      const origenValidacion = esRuc
+        ? (datosDocumento.fuente === 'API_REAL' ? 'SUNAT' : 'MANUAL')
+        : (datosDocumento.fuente === 'API_REAL' ? 'RENIEC' : 'MANUAL');
+
       const nuevaPersona = await new sql.Request(transaction)
-        .input('DNI', sql.VarChar(15), dniLimpio)
-        .input('Nombres', sql.NVarChar(100), datosDni.nombres.toUpperCase())
-        .input('ApellidoPaterno', sql.NVarChar(100), (datosDni.apellidoPaterno || '').toUpperCase())
-        .input('ApellidoMaterno', sql.NVarChar(100), (datosDni.apellidoMaterno || '').toUpperCase() || null)
+        .input('DNI', sql.VarChar(15), documentoLimpio)
+        .input('Nombres', sql.NVarChar(100), nombres.toUpperCase())
+        .input('ApellidoPaterno', sql.NVarChar(100), apellidoPaterno.toUpperCase())
+        .input('ApellidoMaterno', sql.NVarChar(100), apellidoMaterno ? apellidoMaterno.toUpperCase() : null)
         .input('Telefono', sql.VarChar(20), telefonoLimpio)
-        .input('OrigenValidacion', sql.VarChar(20), datosDni.fuente === 'API_REAL' ? 'RENIEC' : 'MANUAL')
+        .input('OrigenValidacion', sql.VarChar(20), origenValidacion)
         .query(`
           INSERT INTO Personas (DNI, Nombres, ApellidoPaterno, ApellidoMaterno, Telefono, OrigenValidacion)
           OUTPUT INSERTED.IdPersona
           VALUES (@DNI, @Nombres, @ApellidoPaterno, @ApellidoMaterno, @Telefono, @OrigenValidacion)
         `);
       idPersona = nuevaPersona.recordset[0].IdPersona;
-      nombreParaAviso = [datosDni.nombres, datosDni.apellidoPaterno].filter(Boolean).join(' ');
+      nombreParaAviso = [nombres, apellidoPaterno].filter(Boolean).join(' ');
 
-      if (datosDni.fuente === 'API_REAL') {
-        await intentarClonarUsuarioCliente(transaction, idPersona, dniLimpio);
+      if (!esRuc && datosDocumento.fuente === 'API_REAL') {
+        await intentarClonarUsuarioCliente(transaction, idPersona, documentoLimpio);
       }
     }
 
@@ -213,10 +278,11 @@ async function crearPedidoPublico(req, res, next) {
       .input('Total', sql.Decimal(10, 2), total)
       .input('Notas', sql.NVarChar(300), notaWeb.slice(0, 300))
       .input('NumeroPedidoDia', sql.Int, numeroPedidoDia)
+      .input('FechaEntrega', sql.DateTime, fechaEntregaUtc)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, TipoPedido, Cantidad, PrecioUnitario, Total, Notas, NumeroPedidoDia, Estado)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, TipoPedido, Cantidad, PrecioUnitario, Total, Notas, NumeroPedidoDia, FechaEntrega, Estado)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, @IdProducto, NULL, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @Notas, @NumeroPedidoDia, 'SOLICITADO')
+        VALUES (@IdCliente, @IdTienda, @IdProducto, NULL, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @Notas, @NumeroPedidoDia, @FechaEntrega, 'SOLICITADO')
       `);
     const { IdPedido: idPedido } = insertPedido.recordset[0];
 
@@ -227,7 +293,7 @@ async function crearPedidoPublico(req, res, next) {
       accion: 'CREAR_PEDIDO_WEB_PUBLICO',
       tablaAfectada: 'Pedidos',
       registroAfectadoId: String(idPedido),
-      datosNuevos: { dni: dniLimpio, idProducto, cantidad: cantidadNum, total, telefono: telefonoLimpio },
+      datosNuevos: { documento: documentoLimpio, idProducto, cantidad: cantidadNum, total, telefono: telefonoLimpio },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
