@@ -52,7 +52,11 @@ export function SelectorFecha({ id, valor, onChange, minimo, placeholder = "Elig
   });
 
   function abrir() {
-    setDraft(valor);
+    // La primera vez (todavía sin elegir nada) el calendario abre con hoy
+    // ya marcado, listo para aceptar de una — si el cliente ya había
+    // elegido una fecha antes, reabrir vuelve a mostrar esa misma.
+    const draftInicial = valor || aClaveFecha(new Date());
+    setDraft(draftInicial);
     const base = valor ? new Date(`${valor}T00:00:00`) : minimoDia;
     setMesVisible(new Date(base.getFullYear(), base.getMonth(), 1));
     setAbierto(true);

@@ -33,6 +33,10 @@ function horaTextoAMinutos(horaTexto: string): number {
   return h * 60 + m;
 }
 
+function mod(n: number, m: number): number {
+  return ((n % m) + m) % m;
+}
+
 interface RuedaProps<T> {
   valores: readonly T[];
   indice: number;
@@ -40,51 +44,192 @@ interface RuedaProps<T> {
   deshabilitado?: (valor: T) => boolean;
   render: (valor: T) => string;
   ariaLabel: string;
+  /** false = tope fijo en los dos extremos del arreglo, sin repetirlo ni
+   * dar la vuelta — pensado para AM/PM: con solo 2 valores, una rueda
+   * infinita se ve rara (cada fila alterna A, P, A, P...). Hora y minuto sí
+   * quedan infinitos por defecto. */
+  infinito?: boolean;
 }
 
-/** Una columna de la rueda: desliza con el dedo/mouse (arrastre), con el
- * scroll de la rueda del mouse, o con los botones de flecha — el valor
- * centrado (con el marco resaltado detrás) es el elegido. Usa
- * scroll-snap nativo para el "click" de cada parada; el arrastre con
- * mouse mueve `scrollTop` a mano porque el navegador no lo hace solo. */
-function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel }: RuedaProps<T>) {
+interface Limites {
+  min: number;
+  max: number;
+}
+
+/** Una columna de la rueda: gira sin fin (como una ruleta real, del 12
+ * vuelve a salir el 1) deslizando con el dedo/mouse, con el scroll del
+ * mouse, o con los botones de flecha. Cuando `deshabilitado` marca una
+ * franja como inválida (el piso de minutos de tolerancia), la rueda no dej
+ * a arrastrarse ni girar hacia ese lado — no es un salto después de
+ * soltar, es una pared física en el mismo gesto. */
+function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel, infinito = true }: RuedaProps<T>) {
+  const n = valores.length;
+  // Suficientes copias para que nunca se note el "reciclado": entre más
+  // chico el arreglo (ej. AM/PM con solo 2 valores), más copias hacen falta.
+  const copias = infinito ? Math.max(5, Math.ceil(24 / n)) : 1;
+  const total = copias * n;
+  const copiaMedia = Math.floor(copias / 2);
+  const posInicial = copiaMedia * n + indice;
+
   const ref = useRef<HTMLDivElement>(null);
+  const posRef = useRef(posInicial);
+  // Estado (no ref) porque de esto depende qué ítem se dibuja resaltado —
+  // con copias repetidas, más de una fila puede compartir el mismo valor
+  // lógico a la vez dentro de lo visible, así que el resaltado se decide
+  // por posición física centrada, no por valor.
+  const [posCentral, setPosCentral] = useState(posInicial);
+  const limitesRef = useRef<Limites | null>(null);
   const timeoutRef = useRef<number | undefined>(undefined);
   const arrastrandoRef = useRef(false);
-  const arranqueRef = useRef({ y: 0, scroll: 0 });
+  const arranqueRef = useRef({ y: 0, pos: 0 });
+  // Un scrollTo/scrollTop propio (flecha, clic en ítem, sincronización de
+  // afuera) también dispara el evento 'scroll' del navegador — sin esta
+  // bandera, el listener de scroll lo trataría como si fuera el usuario
+  // arrastrando, compitiendo consigo mismo cuando se hacen varios clics
+  // seguidos rápido.
+  const programaticoRef = useRef(false);
+  const programaticoTimeoutRef = useRef<number | undefined>(undefined);
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const destino = indice * ALTO_ITEM;
-    if (Math.abs(el.scrollTop - destino) > 1) {
-      el.scrollTo({ top: destino, behavior: "smooth" });
-    }
-  }, [indice]);
-
-  function indiceMasCercano(): number {
-    const el = ref.current;
-    if (!el) return indice;
-    return Math.min(valores.length - 1, Math.max(0, Math.round(el.scrollTop / ALTO_ITEM)));
+  function estaDeshabilitado(pos: number): boolean {
+    return deshabilitado?.(valores[mod(pos, n)]) ?? false;
   }
 
-  function siguienteHabilitado(desde: number, direccion: 1 | -1): number {
-    let i = desde;
-    while (i >= 0 && i < valores.length) {
-      if (!deshabilitado?.(valores[i])) return i;
-      i += direccion;
+  /** Explora hasta una vuelta completa en cada sentido desde `pos` (que
+   * debe ser una posición válida) para encontrar la franja deshabilitada
+   * más cercana — así sabe dónde está la "pared". Si no encuentra ninguna
+   * en toda la vuelta, ese lado queda libre (sin tope). */
+  function calcularLimites(pos: number): Limites {
+    let min = -Infinity;
+    let max = Infinity;
+    for (let paso = 1; paso <= n; paso++) {
+      if (estaDeshabilitado(pos - paso)) {
+        min = pos - paso + 1;
+        break;
+      }
     }
-    return desde;
+    for (let paso = 1; paso <= n; paso++) {
+      if (estaDeshabilitado(pos + paso)) {
+        max = pos + paso - 1;
+        break;
+      }
+    }
+    if (!infinito) {
+      // Sin vuelta: además del piso de tolerancia, tampoco se puede pasar
+      // de los bordes reales del arreglo (ej. AM/PM solo tiene 2 paradas).
+      min = Math.max(min, 0);
+      max = Math.min(max, n - 1);
+    }
+    return { min, max };
+  }
+
+  function marcarProgramatico() {
+    programaticoRef.current = true;
+    window.clearTimeout(programaticoTimeoutRef.current);
+    programaticoTimeoutRef.current = window.setTimeout(() => {
+      programaticoRef.current = false;
+    }, 320);
+  }
+
+  function irA(pos: number, suave: boolean) {
+    const el = ref.current;
+    if (!el) return;
+    posRef.current = pos;
+    marcarProgramatico();
+    el.scrollTo({ top: pos * ALTO_ITEM, behavior: suave ? "smooth" : "instant" });
+  }
+
+  /** Si la posición actual quedó demasiado cerca del principio/final del
+   * lote de copias renderizadas, salta en silencio a la copia del medio
+   * (mismo valor visual, otra copia física) — así nunca se acaban las
+   * copias sin importar cuánto siga girando. */
+  function recentrarSiHaceFalta() {
+    if (!infinito) return;
+    const el = ref.current;
+    if (!el) return;
+    const pos = posRef.current;
+    const copiaActual = Math.floor(pos / n);
+    if (copiaActual <= 0 || copiaActual >= copias - 1) {
+      const destino = copiaMedia * n + mod(pos, n);
+      posRef.current = destino;
+      marcarProgramatico();
+      el.scrollTop = destino * ALTO_ITEM;
+      setPosCentral(destino);
+    }
+  }
+
+  // Al montar, el navegador arranca con scrollTop en 0 — no coincide con
+  // la copia "del medio" que elegimos como posición inicial (posInicial),
+  // así que hay que alinear el scroll real una sola vez, sin animación.
+  useEffect(() => {
+    irA(posRef.current, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sincroniza cuando `indice` cambia desde afuera (al abrir el modal, al
+  // hacer clic en un botón de flecha o en un ítem, o cuando el piso de
+  // tolerancia avanza solo con el reloj y empuja el valor elegido hacia
+  // adelante) — busca la ocurrencia de ese valor más cercana a la posición
+  // física actual, para no saltar visualmente de copia.
+  useEffect(() => {
+    if (!infinito) {
+      // Sin copias repetidas, la posición física ES el índice lógico —
+      // nada que buscar, solo ir directo ahí si no coincide ya.
+      if (indice !== posRef.current) {
+        irA(indice, true);
+        setPosCentral(indice);
+      }
+      return;
+    }
+    const posActual = posRef.current;
+    const base = Math.round(posActual / n) * n + indice;
+    let masCercana = base;
+    for (const candidata of [base - n, base, base + n]) {
+      if (Math.abs(candidata - posActual) < Math.abs(masCercana - posActual)) masCercana = candidata;
+    }
+    if (masCercana !== posActual) {
+      irA(masCercana, true);
+      setPosCentral(masCercana);
+      window.setTimeout(recentrarSiHaceFalta, 260);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indice, infinito]);
+
+  function confirmar(pos: number) {
+    posRef.current = pos;
+    setPosCentral(pos);
+    const logico = mod(pos, n);
+    if (logico !== indice) onCambio(logico);
   }
 
   function confirmarDesdeScroll() {
-    const cercano = indiceMasCercano();
-    const valido = deshabilitado?.(valores[cercano]) ? siguienteHabilitado(cercano, 1) : cercano;
-    if (valido !== indice) onCambio(valido);
+    const el = ref.current;
+    if (!el) return;
+    let pos = Math.round(el.scrollTop / ALTO_ITEM);
+    if (estaDeshabilitado(pos)) {
+      const limites = limitesRef.current;
+      if (limites) {
+        if (limites.min !== -Infinity && pos < limites.min) pos = limites.min;
+        else if (limites.max !== Infinity && pos > limites.max) pos = limites.max;
+      }
+    }
+    irA(pos, true);
+    recentrarSiHaceFalta();
+    confirmar(pos);
   }
 
   function alScroll() {
-    if (arrastrandoRef.current) return;
+    if (arrastrandoRef.current || programaticoRef.current) return;
+    // Mientras la rueda se mueve sola (scroll nativo del mouse, o el
+    // "vuelo" después de soltar el dedo), se corrige en caliente si se
+    // sale de los límites — así nunca llega a mostrarse una franja
+    // inválida, ni un instante.
+    const el = ref.current;
+    if (el && limitesRef.current) {
+      const { min, max } = limitesRef.current;
+      const posFlot = el.scrollTop / ALTO_ITEM;
+      if (min !== -Infinity && posFlot < min) el.scrollTop = min * ALTO_ITEM;
+      else if (max !== Infinity && posFlot > max) el.scrollTop = max * ALTO_ITEM;
+    }
     window.clearTimeout(timeoutRef.current);
     timeoutRef.current = window.setTimeout(confirmarDesdeScroll, 120);
   }
@@ -93,13 +238,21 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel 
     const el = ref.current;
     if (!el) return;
     arrastrandoRef.current = true;
-    arranqueRef.current = { y: e.clientY, scroll: el.scrollTop };
+    arranqueRef.current = { y: e.clientY, pos: posRef.current };
+    limitesRef.current = calcularLimites(posRef.current);
     el.setPointerCapture(e.pointerId);
   }
   function alPointerMove(e: React.PointerEvent) {
     if (!arrastrandoRef.current || !ref.current) return;
-    const delta = e.clientY - arranqueRef.current.y;
-    ref.current.scrollTop = arranqueRef.current.scroll - delta;
+    const deltaPx = e.clientY - arranqueRef.current.y;
+    let posFlot = arranqueRef.current.pos - deltaPx / ALTO_ITEM;
+    const limites = limitesRef.current;
+    if (limites) {
+      if (limites.min !== -Infinity) posFlot = Math.max(posFlot, limites.min);
+      if (limites.max !== Infinity) posFlot = Math.min(posFlot, limites.max);
+    }
+    posRef.current = Math.round(posFlot);
+    ref.current.scrollTop = posFlot * ALTO_ITEM;
   }
   function alPointerUp() {
     if (!arrastrandoRef.current) return;
@@ -107,12 +260,30 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel 
     confirmarDesdeScroll();
   }
 
+  function moverPaso(direccion: 1 | -1) {
+    const limites = calcularLimites(posRef.current);
+    limitesRef.current = limites;
+    const destino = posRef.current + direccion;
+    if (direccion < 0 && limites.min !== -Infinity && destino < limites.min) return;
+    if (direccion > 0 && limites.max !== Infinity && destino > limites.max) return;
+    irA(destino, true);
+    recentrarSiHaceFalta();
+    confirmar(destino);
+  }
+
+  function alClicItem(pos: number, off: boolean) {
+    if (off) return;
+    irA(pos, true);
+    recentrarSiHaceFalta();
+    confirmar(pos);
+  }
+
   return (
     <div className="flex flex-col items-center">
       <button
         type="button"
         aria-label={`${ariaLabel} anterior`}
-        onClick={() => onCambio(siguienteHabilitado(Math.max(0, indice - 1), -1))}
+        onClick={() => moverPaso(-1)}
         className="rounded-full p-1 text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
       >
         <ChevronUp className="h-4 w-4" />
@@ -135,20 +306,23 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel 
         }}
         className="w-16 cursor-grab touch-pan-y select-none overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden active:cursor-grabbing"
       >
-        {valores.map((v, i) => {
+        {Array.from({ length: total }, (_, pos) => {
+          const logico = mod(pos, n);
+          const v = valores[logico];
           const off = deshabilitado?.(v) ?? false;
+          const activo = pos === posCentral;
           return (
             <div
-              key={i}
+              key={pos}
               role="option"
-              aria-selected={i === indice}
+              aria-selected={activo}
               aria-disabled={off}
               style={{ height: ALTO_ITEM, scrollSnapAlign: "center" }}
-              onClick={() => !off && onCambio(i)}
+              onClick={() => alClicItem(pos, off)}
               className={`flex items-center justify-center text-lg tabular-nums transition-all duration-150 ${
                 off
                   ? "cursor-not-allowed text-pan-carbon-suave/25"
-                  : i === indice
+                  : activo
                     ? "scale-110 font-bold text-pan-terracota"
                     : "cursor-pointer text-pan-carbon-suave/70"
               }`}
@@ -161,7 +335,7 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel 
       <button
         type="button"
         aria-label={`${ariaLabel} siguiente`}
-        onClick={() => onCambio(siguienteHabilitado(Math.min(valores.length - 1, indice + 1), 1))}
+        onClick={() => moverPaso(1)}
         className="rounded-full p-1 text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
       >
         <ChevronDown className="h-4 w-4" />
@@ -178,13 +352,15 @@ interface SelectorHoraProps {
   placeholder?: string;
   /** "HH:mm": si se pasa, ninguna hora anterior a esta queda seleccionable
    * (usado cuando la fecha elegida es hoy, para respetar los minutos de
-   * tolerancia — ver esMuyProntoHoy en utils/horariosPan.ts). */
+   * tolerancia — ver esMuyProntoHoy en utils/horariosPan.ts). Cambia solo
+   * con el reloj (cada minuto), así que si el cliente deja el selector
+   * abierto un buen rato, el piso lo sigue empujando hacia adelante. */
   minimoHoy?: string;
 }
 
 /** Selector de hora estilo rueda de celular: tres columnas (hora, minuto,
- * AM/PM) que se deslizan hasta centrar el valor elegido, con flechas para
- * quien prefiera hacer clic. Abre en una ventana emergente con
+ * AM/PM) que giran sin fin hasta centrar el valor elegido, con flechas
+ * para quien prefiera hacer clic. Abre en una ventana emergente con
  * Cancelar/Aceptar, para que el cliente pueda ver bien lo que eligió antes
  * de aplicarlo. */
 export function SelectorHora({ id, valor, onChange, placeholder = "Elige una hora", minimoHoy }: SelectorHoraProps) {
@@ -217,6 +393,22 @@ export function SelectorHora({ id, valor, onChange, placeholder = "Elige una hor
   }
 
   const draftInvalido = muyPronto(draftHora, draftMinuto, draftPeriodo);
+
+  // El piso de tolerancia avanza solo con el reloj (ver `minimoHoy`, que
+  // el padre recalcula cada 15s) — si el cliente se queda con la ventana
+  // abierta y su elección queda por detrás del nuevo piso, la rueda gira
+  // sola hasta el nuevo mínimo en vez de quedarse mostrando una hora que
+  // ya no alcanza.
+  useEffect(() => {
+    if (!abierto || !minimoHoy) return;
+    if (muyPronto(draftHora, draftMinuto, draftPeriodo)) {
+      const piso = desde24h(minimoHoy);
+      setDraftHora(piso.hora12);
+      setDraftMinuto(piso.minuto);
+      setDraftPeriodo(piso.periodo);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minimoHoy, abierto]);
 
   return (
     <div className="relative">
@@ -271,6 +463,7 @@ export function SelectorHora({ id, valor, onChange, placeholder = "Elige una hor
               deshabilitado={(p) => muyPronto(draftHora, draftMinuto, p)}
               render={(p) => p}
               ariaLabel="AM o PM"
+              infinito={false}
             />
           </div>
         </div>

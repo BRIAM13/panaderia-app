@@ -72,6 +72,17 @@ export function PedidoForm() {
     mostrarMensajeMascota(FRASES_SALUDO[Math.floor(Math.random() * FRASES_SALUDO.length)]);
   }
 
+  // Reloj vivo: el piso de "minutos de tolerancia" depende del minuto
+  // actual, así que si el cliente se queda mucho rato en la pantalla (por
+  // ejemplo con el selector de hora abierto) el piso tiene que ir
+  // avanzando solo, sin que haga falta ninguna acción suya — 15s alcanza
+  // de sobra para no notarse el salto de minuto.
+  const [ahora, setAhora] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setAhora(new Date()), 15000);
+    return () => window.clearInterval(id);
+  }, []);
+
   useEffect(() => {
     obtenerCatalogoPublico()
       .then(({ productos: lista, horarios: horariosCatalogo }) => {
@@ -107,14 +118,16 @@ export function PedidoForm() {
   // horario ya cerró (el pedido igual se registra; el negocio confirma
   // disponibilidad de stock por WhatsApp, ver el aviso más abajo).
   const fueraDeVentanaActual =
-    horarios && fechaRecojo && horaRecojo ? estaFueraDeVentana(fechaRecojo, horaRecojo, horarios) : false;
+    horarios && fechaRecojo && horaRecojo ? estaFueraDeVentana(fechaRecojo, horaRecojo, horarios, ahora) : false;
 
   // Piso duro (a diferencia del aviso de arriba, que solo informa): si la
   // fecha elegida es hoy, ninguna hora a menos de "minutos de tolerancia"
   // desde ahora es válida — el selector de hora ya la deshabilita, esto
-  // solo calcula desde qué hora arranca lo permitido para pasárselo.
-  const esRecojoHoy = fechaRecojo === hoyISO();
-  const minimoHoraHoy = horarios && esRecojoHoy ? horaMinimaHoy(horarios) : undefined;
+  // solo calcula desde qué hora arranca lo permitido para pasárselo. Se
+  // recalcula con el reloj vivo (`ahora`), así el piso sigue avanzando
+  // aunque el cliente se quede un buen rato con el selector abierto.
+  const esRecojoHoy = fechaRecojo === hoyISO(ahora);
+  const minimoHoraHoy = horarios && esRecojoHoy ? horaMinimaHoy(horarios, ahora) : undefined;
 
   // Al cambiar de producto, la cantidad y el recojo se limpian — quedan
   // vacíos con un placeholder que ya indica qué elegir (ver más abajo), en
@@ -130,11 +143,11 @@ export function PedidoForm() {
   // piso de tolerancia — se limpia en vez de dejar un valor que el envío
   // igual va a rechazar.
   useEffect(() => {
-    if (horarios && fechaRecojo && horaRecojo && esMuyProntoHoy(fechaRecojo, horaRecojo, horarios)) {
+    if (horarios && fechaRecojo && horaRecojo && esMuyProntoHoy(fechaRecojo, horaRecojo, horarios, ahora)) {
       setHoraRecojo("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fechaRecojo, horarios]);
+  }, [fechaRecojo, horarios, ahora]);
 
   // El personaje festeja un instante cuando el pedido se confirma — un
   // gesto puntual, no una animación que se repite sola sin parar.
