@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, Loader2, ShoppingBag } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, ShoppingBag } from "lucide-react";
 import { PRODUCTOS } from "../data/config";
 import {
   ApiError,
@@ -10,7 +10,9 @@ import {
   type PedidoPublicoResultado,
   type ProductoPublico,
 } from "../services/api";
-import { calcularVentanaRecojo, horaMinimaParaFecha } from "../utils/horariosPan";
+import { estaFueraDeVentana } from "../utils/horariosPan";
+import { SelectorFecha } from "./SelectorFecha";
+import { SelectorHora } from "./SelectorHora";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
 const NOMBRES_DISPONIBLES = new Set(PRODUCTOS.map((p) => p.nombreEnCatalogo));
@@ -48,6 +50,7 @@ export function PedidoForm() {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<PedidoPublicoResultado | null>(null);
+  const [fueraDeVentanaAlEnviar, setFueraDeVentanaAlEnviar] = useState(false);
   const [mascotaAgitada, setMascotaAgitada] = useState(false);
   const [mensajeMascota, setMensajeMascota] = useState<string | null>(null);
   const mensajeTimeoutRef = useRef<number | undefined>(undefined);
@@ -78,7 +81,8 @@ export function PedidoForm() {
         const disponibles = lista.filter((p) => NOMBRES_DISPONIBLES.has(p.nombre));
         setProductos(disponibles);
         setHorarios(horariosCatalogo);
-        if (disponibles.length > 0) setIdProducto(disponibles[0].idProducto);
+        // El producto arranca sin elegir a propósito — el cliente tiene que
+        // elegir uno de forma activa, no se preselecciona el primero.
       })
       .catch(() =>
         setErrorCatalogo(
@@ -93,36 +97,26 @@ export function PedidoForm() {
   const cantidadNum = Number(cantidad) || 0;
   const total = productoSeleccionado ? productoSeleccionado.precioUnitario * cantidadNum : 0;
 
-  // Pan de Agua/Francés (no paquete) exige recojo dentro de un rango de
-  // horario — hasta la hora límite de pedido se puede recoger el mismo
-  // día, después el recojo pasa para el día siguiente (ver horariosPan.ts
-  // y, del lado del servidor, horariosPanaderia.js, la fuente real de la
-  // regla). El pan de hamburguesa (paquete) no tiene esta restricción.
-  const ventanaRecojo = useMemo(
-    () => (horarios ? calcularVentanaRecojo(horarios) : null),
-    [horarios],
-  );
-  const horaMinimaRecojo =
-    horarios && ventanaRecojo && fechaRecojo
-      ? horaMinimaParaFecha(fechaRecojo, ventanaRecojo, horarios)
-      : (ventanaRecojo?.horaMinima ?? "");
+  // Pan de Agua/Francés (no paquete) muestra el recojo — el pan de
+  // hamburguesa (paquete) no lo usa. Solo aparece una vez que el cliente
+  // eligió activamente un pan (idProducto !== ""), nunca antes.
+  const mostrarCamposRecojo = idProducto !== "" && !esPaquete;
 
-  // Al cambiar de producto, la cantidad se limpia — el campo queda vacío
-  // con un placeholder que ya indica qué escribir (ver más abajo), en vez
-  // de arrastrar una cantidad que valía para el pan anterior.
+  // El cliente puede elegir cualquier fecha (desde hoy) y cualquier hora —
+  // esto no bloquea nada, solo decide si se muestra el aviso de que ese
+  // horario ya cerró (el pedido igual se registra; el negocio confirma
+  // disponibilidad de stock por WhatsApp, ver el aviso más abajo).
+  const fueraDeVentanaActual =
+    horarios && fechaRecojo && horaRecojo ? estaFueraDeVentana(fechaRecojo, horaRecojo, horarios) : false;
+
+  // Al cambiar de producto, la cantidad y el recojo se limpian — quedan
+  // vacíos con un placeholder que ya indica qué elegir (ver más abajo), en
+  // vez de arrastrar un valor que valía para el pan anterior.
   useEffect(() => {
     setCantidad("");
+    setFechaRecojo("");
+    setHoraRecojo("");
   }, [idProducto]);
-
-  // Al entrar a un producto con restricción de horario (o al cargar los
-  // horarios por primera vez), la fecha/hora de recojo arranca siempre en
-  // el mínimo permitido en este momento — nunca en blanco ni en un valor
-  // que ya quedó inválido por el paso del tiempo.
-  useEffect(() => {
-    if (esPaquete || !ventanaRecojo || !horarios) return;
-    setFechaRecojo(ventanaRecojo.fechaMinima);
-    setHoraRecojo(horaMinimaParaFecha(ventanaRecojo.fechaMinima, ventanaRecojo, horarios));
-  }, [esPaquete, ventanaRecojo, horarios]);
 
   // El personaje festeja un instante cuando el pedido se confirma — un
   // gesto puntual, no una animación que se repite sola sin parar.
@@ -170,19 +164,6 @@ export function PedidoForm() {
         setError("Elige una fecha y hora de recojo.");
         return;
       }
-      // Se recalcula el mínimo justo antes de enviar — el formulario pudo
-      // quedar abierto el tiempo suficiente para cruzar la hora límite.
-      if (horarios) {
-        const ventanaActual = calcularVentanaRecojo(horarios);
-        const pisoHora = horaMinimaParaFecha(fechaRecojo, ventanaActual, horarios);
-        const yaNoDisponible =
-          fechaRecojo < ventanaActual.fechaMinima ||
-          (fechaRecojo === ventanaActual.fechaMinima && horaRecojo < pisoHora);
-        if (yaNoDisponible) {
-          setError("La hora de recojo elegida ya no está disponible. Actualiza la página e intenta de nuevo.");
-          return;
-        }
-      }
       fechaEntrega = `${fechaRecojo}T${horaRecojo}`;
     }
 
@@ -196,6 +177,7 @@ export function PedidoForm() {
         notas: notas.trim() || undefined,
         fechaEntrega,
       });
+      setFueraDeVentanaAlEnviar(!esPaquete && fueraDeVentanaActual);
       setResultado(resultado);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -210,10 +192,13 @@ export function PedidoForm() {
 
   function pedirOtroVez() {
     setResultado(null);
+    setFueraDeVentanaAlEnviar(false);
     setNumeroDocumento("");
     setTelefono("");
     setCantidad("");
     setNotas("");
+    setFechaRecojo("");
+    setHoraRecojo("");
   }
 
   return (
@@ -317,6 +302,12 @@ export function PedidoForm() {
                 <p className="mt-3 text-lg font-semibold text-pan-terracota">
                   Total: S/ {resultado.total.toFixed(2)}
                 </p>
+                {fueraDeVentanaAlEnviar && (
+                  <p className="mx-auto mt-4 max-w-sm rounded-xl bg-amber-50 px-4 py-3 text-left text-xs font-medium text-amber-800">
+                    Como el horario elegido ya cerró, te confirmaremos por WhatsApp al número que dejaste
+                    si tenemos stock disponible para separar tu pedido.
+                  </p>
+                )}
                 <button
                   onClick={pedirOtroVez}
                   className="boton-relleno mt-6 rounded-full border border-pan-borde px-5 py-2.5 text-sm font-semibold text-pan-carbon"
@@ -394,6 +385,7 @@ export function PedidoForm() {
                     className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota disabled:opacity-60"
                   >
                     {cargandoProductos && <option>Cargando productos…</option>}
+                    {!cargandoProductos && idProducto === "" && <option value="">Selecciona un pan</option>}
                     {!cargandoProductos &&
                       productos.map((p) => (
                         <option key={p.idProducto} value={p.idProducto}>
@@ -411,40 +403,41 @@ export function PedidoForm() {
                   )}
                 </div>
 
-                {!esPaquete && horarios && ventanaRecojo && (
+                {mostrarCamposRecojo && horarios && (
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-pan-carbon">Recojo</label>
                     <div className="grid grid-cols-2 gap-3">
-                      <input
+                      <SelectorFecha
                         id="fecha-recojo"
-                        type="date"
-                        aria-label="Fecha de recojo"
-                        value={fechaRecojo}
-                        min={ventanaRecojo.fechaMinima}
-                        onChange={(e) => {
-                          const nuevaFecha = e.target.value;
-                          setFechaRecojo(nuevaFecha);
-                          setHoraRecojo(horaMinimaParaFecha(nuevaFecha, ventanaRecojo, horarios));
-                        }}
-                        required
-                        className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                        valor={fechaRecojo}
+                        onChange={setFechaRecojo}
+                        minimo={new Date()}
                       />
-                      <input
-                        id="hora-recojo"
-                        type="time"
-                        aria-label="Hora de recojo"
-                        value={horaRecojo}
-                        min={horaMinimaRecojo || undefined}
-                        onChange={(e) => setHoraRecojo(e.target.value)}
-                        required
-                        className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
-                      />
+                      <SelectorHora id="hora-recojo" valor={horaRecojo} onChange={setHoraRecojo} />
                     </div>
                     <p className="mt-1.5 text-xs text-pan-carbon-suave">
-                      {ventanaRecojo.esMismoDia
-                        ? `Pedidos hasta las ${horarios.horaLimitePedido} se recogen hoy mismo desde las ${horarios.horaRecojoMismoDia}. Después de esa hora, el recojo pasa para el día siguiente.`
-                        : `El horario de hoy ya cerró — el recojo es a partir de mañana, desde las ${horarios.horaRecojoDiaSiguiente}.`}
+                      Pedidos hasta las {horarios.horaLimitePedido} se recogen hoy mismo desde las{" "}
+                      {horarios.horaRecojoMismoDia}. Después de esa hora, el recojo pasa para el día
+                      siguiente desde las {horarios.horaRecojoDiaSiguiente}.
                     </p>
+                    <AnimatePresence>
+                      {fueraDeVentanaActual && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4, height: 0 }}
+                          animate={{ opacity: 1, y: 0, height: "auto" }}
+                          exit={{ opacity: 0, y: -4, height: 0 }}
+                          transition={{ duration: 0.2, ease: EASE_PREMIUM }}
+                          className="mt-2 flex items-start gap-2.5 overflow-hidden rounded-xl border border-amber-300 bg-amber-50 px-4 py-3"
+                        >
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                          <p className="text-xs font-medium text-amber-800">
+                            Ese horario ya cerró para recojo. Igual registramos tu pedido — te
+                            confirmamos por WhatsApp, al número que dejes, si tenemos stock disponible
+                            para separarlo.
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 )}
 
@@ -473,7 +466,7 @@ export function PedidoForm() {
                     value={notas}
                     onChange={(e) => setNotas(e.target.value)}
                     rows={2}
-                    placeholder="Ej: para recoger mañana temprano"
+                    placeholder="Ej: sin sésamo, o cualquier indicación"
                     className="w-full resize-none rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
                 </div>

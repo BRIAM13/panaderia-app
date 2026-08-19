@@ -1,6 +1,6 @@
 import type { HorariosPanaderia } from "../services/api";
 
-export interface VentanaRecojo {
+interface VentanaRecojo {
   /** "YYYY-MM-DD" */
   fechaMinima: string;
   /** "HH:mm" */
@@ -20,15 +20,14 @@ function formatearFecha(fecha: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Calcula la fecha/hora mínima de recojo que puede elegir el cliente en
- * este momento: si todavía no pasa la hora límite de pedido, el mínimo es
- * HOY a la hora de "mismo día" (la tanda de la tarde); si ya pasó, el
- * mínimo salta a MAÑANA a la hora de "día siguiente" (la tanda normal de
- * la mañana). Mismo cálculo que hace el backend al validar el pedido (ver
- * validarFechaEntrega en horariosPanaderia.js) — reflejado acá solo para
- * que el formulario proponga la opción correcta; el backend es quien de
- * verdad lo hace cumplir. */
-export function calcularVentanaRecojo(horarios: HorariosPanaderia, ahora = new Date()): VentanaRecojo {
+/** Primer día en el que técnicamente ya se puede recoger un pedido nuevo
+ * en este momento (hoy, si todavía no pasa la hora límite de pedido;
+ * mañana si ya pasó) — solo se usa para decidir si un horario elegido por
+ * el cliente cae dentro o fuera de la ventana normal, NO para bloquear
+ * ninguna fecha: el cliente puede elegir cualquier fecha desde hoy en
+ * adelante y cualquier hora, aunque caiga fuera de esta ventana (ver
+ * `estaFueraDeVentana`). */
+function calcularVentanaRecojo(horarios: HorariosPanaderia, ahora = new Date()): VentanaRecojo {
   const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
   const dentroDePlazo = minutosAhora <= horaAMinutos(horarios.horaLimitePedido);
 
@@ -42,16 +41,25 @@ export function calcularVentanaRecojo(horarios: HorariosPanaderia, ahora = new D
   };
 }
 
-/** Hora mínima válida para una fecha de recojo ya elegida por el cliente:
- * la hora de "mismo día" (ej. 3:30pm) solo aplica cuando la fecha elegida
- * es exactamente la fecha mínima Y esa fecha mínima es hoy — cualquier
- * otra fecha (mañana, o una fecha más adelante) usa siempre la hora
- * normal de "día siguiente" como piso. */
-export function horaMinimaParaFecha(
+/** true si la fecha/hora que eligió el cliente ya no alcanza a salir en
+ * la tanda normal (quedó fuera del horario configurado) — el pedido igual
+ * se registra, esto solo decide si se le muestra el aviso de "este
+ * horario ya cerró, te confirmamos disponibilidad por WhatsApp". */
+export function estaFueraDeVentana(
   fechaElegida: string,
-  ventana: VentanaRecojo,
+  horaElegida: string,
   horarios: HorariosPanaderia,
-): string {
-  const aplicaHoraMismoDia = fechaElegida === ventana.fechaMinima && ventana.esMismoDia;
-  return aplicaHoraMismoDia ? ventana.horaMinima : horarios.horaRecojoDiaSiguiente;
+  ahora = new Date(),
+): boolean {
+  const ventana = calcularVentanaRecojo(horarios, ahora);
+
+  if (fechaElegida < ventana.fechaMinima) return true;
+  if (fechaElegida > ventana.fechaMinima) {
+    // Cualquier día posterior al mínimo usa siempre la hora normal de
+    // "día siguiente" como piso (la de "mismo día" es exclusiva de hoy).
+    return horaAMinutos(horaElegida) < horaAMinutos(horarios.horaRecojoDiaSiguiente);
+  }
+  // fechaElegida === ventana.fechaMinima
+  const piso = ventana.esMismoDia ? ventana.horaMinima : horarios.horaRecojoDiaSiguiente;
+  return horaAMinutos(horaElegida) < horaAMinutos(piso);
 }
