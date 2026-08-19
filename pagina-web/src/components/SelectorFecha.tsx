@@ -91,7 +91,7 @@ export function SelectorFecha({ id, valor, onChange, minimo, placeholder = "Elig
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={{ duration: 0.18, ease: EASE_PREMIUM }}
-            className="absolute z-20 mt-2 w-72 rounded-2xl border border-pan-borde bg-pan-crema-suave p-4 shadow-xl shadow-pan-carbon/15"
+            className="absolute left-1/2 z-20 mt-2 w-72 max-w-[calc(100vw-2.5rem)] -translate-x-1/2 rounded-2xl border border-pan-borde bg-pan-crema-suave p-4 shadow-xl shadow-pan-carbon/15"
           >
             <div className="mb-3 flex items-center justify-between">
               <button
