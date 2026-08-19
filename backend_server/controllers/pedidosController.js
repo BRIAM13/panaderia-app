@@ -167,9 +167,11 @@ async function notificarPersonalTienda({ idTienda, titulo, cuerpo, datos }) {
       `);
 
     await enviarPushLimpiandoInvalidos(result.recordset.map((f) => f.FcmToken), { titulo, cuerpo, datos });
-  } catch (_) {
+  } catch (err) {
     // Silencioso a propósito: un fallo de notificación no debe afectar al
-    // pedido que ya se registró correctamente.
+    // pedido que ya se registró correctamente. El log sí queda, para no
+    // quedar ciego si Firebase empieza a fallar (ej. falta el secret file).
+    console.error('No se pudo notificar al personal de la tienda:', err.message);
   }
 }
 
@@ -191,9 +193,10 @@ async function notificarCliente({ idCliente, titulo, cuerpo, datos }) {
       `);
 
     await enviarPushLimpiandoInvalidos(result.recordset.map((f) => f.FcmToken), { titulo, cuerpo, datos });
-  } catch (_) {
+  } catch (err) {
     // Igual de silencioso: el cambio de estado ya se guardó, notificar es
-    // un extra.
+    // un extra. El log sí queda (ver notificarPersonalTienda).
+    console.error('No se pudo notificar al cliente:', err.message);
   }
 }
 

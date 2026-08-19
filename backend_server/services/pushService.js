@@ -41,14 +41,25 @@ async function enviarPush({ tokens, titulo, cuerpo, datos }) {
     ...(titulo ? { notification: { title: titulo, body: cuerpo } } : {}),
     data: datos ? Object.fromEntries(Object.entries(datos).map(([k, v]) => [k, String(v)])) : undefined,
     tokens,
-    // Sin esto, Android trata un mensaje data-only (sin `notification`,
-    // como los "silenciosos" de acá arriba) como prioridad normal y puede
-    // demorarlo bastante en Doze/segundo plano — es justo lo que hacía que
-    // el Dashboard de otro dispositivo no se refrescara solo y hubiera que
-    // deslizar a mano para forzar la recarga. "high" no muestra ningún
-    // banner (eso lo decide `notification`, no la prioridad) — solo pide
-    // entrega inmediata.
-    android: { priority: 'high' },
+    android: {
+      // Sin esto, Android trata un mensaje data-only (sin `notification`,
+      // como los "silenciosos" de acá arriba) como prioridad normal y puede
+      // demorarlo bastante en Doze/segundo plano — es justo lo que hacía que
+      // el Dashboard de otro dispositivo no se refrescara solo y hubiera que
+      // deslizar a mano para forzar la recarga. "high" no muestra ningún
+      // banner (eso lo decide `notification`, no la prioridad) — solo pide
+      // entrega inmediata.
+      priority: 'high',
+      // Con la app en segundo plano o cerrada, quien dibuja la notificación
+      // es el sistema (no nuestro código Dart) — sin decirle a qué canal
+      // pertenece, usa uno de respaldo con importancia normal: vibra y
+      // queda en la bandeja, pero no muestra el banner emergente. Mismo ID
+      // que el canal que crea la app en primer plano (ver `_canalId` en
+      // notificaciones_service.dart) y que declara AndroidManifest.xml
+      // (`default_notification_channel_id`) para cuando la app ni siquiera
+      // llegó a abrirse todavía.
+      ...(titulo ? { notification: { channelId: 'notificaciones_generales' } } : {}),
+    },
   };
 
   const respuesta = await getMessaging().sendEachForMulticast(mensaje);
