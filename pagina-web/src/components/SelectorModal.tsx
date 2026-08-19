@@ -7,22 +7,28 @@ interface SelectorModalProps {
   abierto: boolean;
   titulo: string;
   onCancelar: () => void;
-  onAceptar: () => void;
+  onAceptar?: () => void;
   aceptarDeshabilitado?: boolean;
+  /** false = sin pie de Cancelar/Aceptar — para listas donde elegir un
+   * ítem ya aplica y cierra de una vez (ej. el selector de pan), en vez
+   * del patrón de "borrador + Aceptar" de fecha/hora. */
+  mostrarPie?: boolean;
   children: React.ReactNode;
 }
 
-/** Ventana emergente compartida por SelectorFecha y SelectorHora: el
- * cliente arma su elección adentro (estado "borrador") y solo se aplica al
+/** Ventana emergente compartida por los selectores del formulario. Por
+ * defecto sigue el patrón "borrador + Aceptar" (usado por SelectorFecha y
+ * SelectorHora): el cliente arma su elección adentro y solo se aplica al
  * presionar "Aceptar" — "Cancelar" o tocar fuera descarta el borrador y
- * deja el valor que ya estaba. Evita que un clic accidental cambie la
- * fecha/hora sin que el cliente llegue a ver bien lo que eligió. */
+ * deja el valor que ya estaba. Con `mostrarPie={false}` (ej. el selector
+ * de pan) no hay borrador: cada clic en un ítem ya aplica y cierra. */
 export function SelectorModal({
   abierto,
   titulo,
   onCancelar,
   onAceptar,
   aceptarDeshabilitado,
+  mostrarPie = true,
   children,
 }: SelectorModalProps) {
   useEffect(() => {
@@ -61,23 +67,25 @@ export function SelectorModal({
 
             {children}
 
-            <div className="mt-5 flex gap-3">
-              <button
-                type="button"
-                onClick={onCancelar}
-                className="flex-1 rounded-full border border-pan-borde py-2.5 text-sm font-semibold text-pan-carbon-suave transition-colors hover:text-pan-carbon"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={onAceptar}
-                disabled={aceptarDeshabilitado}
-                className="flex-1 rounded-full bg-pan-terracota py-2.5 text-sm font-semibold text-pan-crema transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Aceptar
-              </button>
-            </div>
+            {mostrarPie && (
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={onCancelar}
+                  className="flex-1 rounded-full border border-pan-borde py-2.5 text-sm font-semibold text-pan-carbon-suave transition-colors hover:text-pan-carbon"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={onAceptar}
+                  disabled={aceptarDeshabilitado}
+                  className="flex-1 rounded-full bg-pan-terracota py-2.5 text-sm font-semibold text-pan-crema transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Aceptar
+                </button>
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}

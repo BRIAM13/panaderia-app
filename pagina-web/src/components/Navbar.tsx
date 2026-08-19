@@ -95,7 +95,7 @@ export function Navbar() {
 
         <button
           onClick={() => setAbierto((v) => !v)}
-          className="text-pan-carbon md:hidden"
+          className="rounded-lg p-1 text-pan-carbon transition-colors hover:text-pan-terracota md:hidden"
           aria-label="Abrir menú"
         >
           {abierto ? <X className="h-6 w-6" /> : <MenuIcon className="h-6 w-6" />}
@@ -118,7 +118,7 @@ export function Navbar() {
                 setAbierto(false);
                 desplazarASeccion(enlace.href.slice(1));
               }}
-              className="rounded-lg px-3 py-2.5 text-sm font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
+              className="rounded-lg px-3 py-2.5 text-sm font-medium text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted"
             >
               {enlace.texto}
             </a>
@@ -148,7 +148,7 @@ export function Navbar() {
               setAbierto(false);
               desplazarASeccion("pedido");
             }}
-            className="mt-2 rounded-full bg-pan-terracota px-5 py-2.5 text-center text-sm font-semibold text-pan-crema"
+            className="mt-2 rounded-full bg-pan-terracota px-5 py-2.5 text-center text-sm font-semibold text-pan-crema transition-opacity hover:opacity-90"
           >
             Pedir ahora
           </a>

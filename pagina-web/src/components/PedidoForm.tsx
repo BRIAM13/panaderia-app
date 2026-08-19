@@ -13,6 +13,7 @@ import {
 import { esMuyProntoHoy, estaFueraDeVentana, formatearHora12, horaMinimaHoy, hoyISO } from "../utils/horariosPan";
 import { SelectorFecha, type SelectorFechaHandle } from "./SelectorFecha";
 import { SelectorHora, type SelectorHoraHandle } from "./SelectorHora";
+import { SelectorProducto } from "./SelectorProducto";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
 const NOMBRES_DISPONIBLES = new Set(PRODUCTOS.map((p) => p.nombreEnCatalogo));
@@ -435,23 +436,13 @@ export function PedidoForm() {
                   <label htmlFor="producto" className="mb-1.5 block text-sm font-medium text-pan-carbon">
                     Producto
                   </label>
-                  <select
+                  <SelectorProducto
                     id="producto"
-                    value={idProducto}
-                    onChange={(e) => setIdProducto(Number(e.target.value))}
-                    disabled={cargandoProductos || productos.length === 0}
-                    required
-                    className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota disabled:opacity-60"
-                  >
-                    {cargandoProductos && <option>Cargando productos…</option>}
-                    {!cargandoProductos && idProducto === "" && <option value="">Selecciona un pan</option>}
-                    {!cargandoProductos &&
-                      productos.map((p) => (
-                        <option key={p.idProducto} value={p.idProducto}>
-                          {p.nombre}
-                        </option>
-                      ))}
-                  </select>
+                    productos={productos}
+                    valor={idProducto}
+                    onChange={setIdProducto}
+                    cargando={cargandoProductos}
+                  />
                   {errorCatalogo && <p className="mt-1.5 text-xs text-red-700">{errorCatalogo}</p>}
                   {productoSeleccionado && (
                     <p className="mt-1.5 text-xs text-pan-carbon-suave">

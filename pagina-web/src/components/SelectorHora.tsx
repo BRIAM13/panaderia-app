@@ -12,6 +12,14 @@ const ALTO_ITEM = 40;
 const FILAS_VISIBLES = 5;
 const ALTO_RUEDA = ALTO_ITEM * FILAS_VISIBLES;
 const RELLENO = ALTO_ITEM * Math.floor(FILAS_VISIBLES / 2);
+// Cuántos píxeles de scroll del mouse/trackpad equivalen a "un paso" —
+// una rueda de mouse estándar manda ~100px por clic/muesca, así que esto
+// hace que un clic de rueda mueva exactamente un ítem, no tres o cuatro.
+const UMBRAL_RUEDA_PX = 100;
+// Cuánto se puede mover el cursor entre presionar y soltar y que igual
+// cuente como "clic quieto" — un clic real casi nunca es 100% inmóvil
+// (temblor de mano, trackpad), así que tiene que perdonar unos píxeles.
+const UMBRAL_ARRASTRE_PX = 10;
 
 /** "HH:mm" (24h) -> { hora12, minuto, periodo } para mostrar/editar en
  * formato de 12 horas con AM/PM explícito. */
@@ -58,10 +66,12 @@ interface Limites {
 
 /** Una columna de la rueda: gira sin fin (como una ruleta real, del 12
  * vuelve a salir el 1) deslizando con el dedo/mouse, con el scroll del
- * mouse, o con los botones de flecha. Cuando `deshabilitado` marca una
- * franja como inválida (el piso de minutos de tolerancia), la rueda no dej
- * a arrastrarse ni girar hacia ese lado — no es un salto después de
- * soltar, es una pared física en el mismo gesto. */
+ * mouse/trackpad (un paso por clic de rueda), con clic directo en
+ * cualquier valor visible, o con los botones de flecha. Todo el
+ * movimiento lo controla este componente a mano (el contenedor no usa el
+ * scroll nativo del navegador) — así, cuando `deshabilitado` marca una
+ * franja como inválida, es físicamente imposible llegar a mostrarla ni un
+ * instante, sin importar el método usado. */
 function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel, infinito = true }: RuedaProps<T>) {
   const n = valores.length;
   // Suficientes copias para que nunca se note el "reciclado": entre más
@@ -78,16 +88,13 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
   // lógico a la vez dentro de lo visible, así que el resaltado se decide
   // por posición física centrada, no por valor.
   const [posCentral, setPosCentral] = useState(posInicial);
-  const timeoutRef = useRef<number | undefined>(undefined);
   const arrastrandoRef = useRef(false);
+  // Distingue un clic real (sin apenas movimiento) de un arrastre — así un
+  // clic sobre un ítem no compite con la lógica de asentado del arrastre.
+  const arrastroRealRef = useRef(false);
   const arranqueRef = useRef({ y: 0, pos: 0 });
-  // Un scrollTo/scrollTop propio (flecha, clic en ítem, sincronización de
-  // afuera) también dispara el evento 'scroll' del navegador — sin esta
-  // bandera, el listener de scroll lo trataría como si fuera el usuario
-  // arrastrando, compitiendo consigo mismo cuando se hacen varios clics
-  // seguidos rápido.
-  const programaticoRef = useRef(false);
-  const programaticoTimeoutRef = useRef<number | undefined>(undefined);
+  const deltaAcumuladoRef = useRef(0);
+  const animacionRef = useRef<number | null>(null);
 
   function estaDeshabilitado(pos: number): boolean {
     return deshabilitado?.(valores[mod(pos, n)]) ?? false;
@@ -121,20 +128,53 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
     return { min, max };
   }
 
-  function marcarProgramatico() {
-    programaticoRef.current = true;
-    window.clearTimeout(programaticoTimeoutRef.current);
-    programaticoTimeoutRef.current = window.setTimeout(() => {
-      programaticoRef.current = false;
-    }, 320);
-  }
-
+  /** Anima el giro a mano (en vez de scrollTo del navegador) y actualiza
+   * qué ítem se ve resaltado EN CADA CUADRO según la posición visual real
+   * — nunca antes de que el giro llegue ahí. Ese adelanto (marcar el
+   * siguiente valor en negrita mientras el giro todavía no llega) era
+   * justo la causa del "salto" visual reportado: con scrollTo del
+   * navegador no hay forma de saber en qué cuadro va la animación, así
+   * que el resaltado se actualizaba de una, no cuando correspondía. */
   function irA(pos: number, suave: boolean) {
     const el = ref.current;
     if (!el) return;
     posRef.current = pos;
-    marcarProgramatico();
-    el.scrollTo({ top: pos * ALTO_ITEM, behavior: suave ? "smooth" : "instant" });
+    if (animacionRef.current !== null) {
+      cancelAnimationFrame(animacionRef.current);
+      animacionRef.current = null;
+    }
+    const destinoPx = pos * ALTO_ITEM;
+    if (!suave) {
+      el.scrollTop = destinoPx;
+      setPosCentral(pos);
+      return;
+    }
+    const inicioPx = el.scrollTop;
+    const distanciaPx = destinoPx - inicioPx;
+    if (Math.abs(distanciaPx) < 0.5) {
+      setPosCentral(pos);
+      return;
+    }
+    // Duración corta y proporcional al recorrido — un solo paso se siente
+    // instantáneo-pero-suave; varios pasos seguidos (flechas o clic lejos)
+    // no se sienten más lentos de la cuenta.
+    const duracionMs = Math.min(260, Math.max(120, Math.abs(distanciaPx) * 2.2));
+    const inicioTiempo = performance.now();
+    const pasoAnimacion = (ahora: number) => {
+      const t = Math.min(1, (ahora - inicioTiempo) / duracionMs);
+      const suavizado = 1 - (1 - t) ** 3; // ease-out cúbico
+      const actualPx = inicioPx + distanciaPx * suavizado;
+      el.scrollTop = actualPx;
+      const posVisual = Math.round(actualPx / ALTO_ITEM);
+      setPosCentral((anterior) => (anterior === posVisual ? anterior : posVisual));
+      if (t < 1) {
+        animacionRef.current = requestAnimationFrame(pasoAnimacion);
+      } else {
+        animacionRef.current = null;
+        setPosCentral(pos);
+      }
+    };
+    animacionRef.current = requestAnimationFrame(pasoAnimacion);
   }
 
   /** Si la posición actual quedó demasiado cerca del principio/final del
@@ -148,9 +188,12 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
     const pos = posRef.current;
     const copiaActual = Math.floor(pos / n);
     if (copiaActual <= 0 || copiaActual >= copias - 1) {
+      if (animacionRef.current !== null) {
+        cancelAnimationFrame(animacionRef.current);
+        animacionRef.current = null;
+      }
       const destino = copiaMedia * n + mod(pos, n);
       posRef.current = destino;
-      marcarProgramatico();
       el.scrollTop = destino * ALTO_ITEM;
       setPosCentral(destino);
     }
@@ -161,6 +204,9 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
   // así que hay que alinear el scroll real una sola vez, sin animación.
   useEffect(() => {
     irA(posRef.current, false);
+    return () => {
+      if (animacionRef.current !== null) cancelAnimationFrame(animacionRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -200,7 +246,9 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
     if (logico !== indice) onCambio(logico);
   }
 
-  function confirmarDesdeScroll() {
+  /** Asienta en el ítem más cercano a donde quedó el arrastre (puede
+   * caer en una fracción de ítem) y lo confirma. */
+  function asentarTrasArrastre() {
     const el = ref.current;
     if (!el) return;
     let pos = Math.round(el.scrollTop / ALTO_ITEM);
@@ -217,48 +265,6 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
     confirmar(pos);
   }
 
-  function alScroll() {
-    if (arrastrandoRef.current || programaticoRef.current) return;
-    // Mientras la rueda se mueve sola (scroll nativo del mouse, o el
-    // "vuelo" después de soltar el dedo), se corrige en caliente si se
-    // sale de los límites — así nunca llega a mostrarse una franja
-    // inválida, ni un instante. Los límites se calculan frescos en cada
-    // evento (no se cachean): así funciona igual con scroll del mouse,
-    // que nunca pasa por pointerdown/pointermove.
-    const el = ref.current;
-    if (el) {
-      const { min, max } = calcularLimites(posRef.current);
-      const posFlot = el.scrollTop / ALTO_ITEM;
-      if (min !== -Infinity && posFlot < min) el.scrollTop = min * ALTO_ITEM;
-      else if (max !== Infinity && posFlot > max) el.scrollTop = max * ALTO_ITEM;
-    }
-    window.clearTimeout(timeoutRef.current);
-    timeoutRef.current = window.setTimeout(confirmarDesdeScroll, 120);
-  }
-
-  function alPointerDown(e: React.PointerEvent) {
-    const el = ref.current;
-    if (!el) return;
-    arrastrandoRef.current = true;
-    arranqueRef.current = { y: e.clientY, pos: posRef.current };
-    el.setPointerCapture(e.pointerId);
-  }
-  function alPointerMove(e: React.PointerEvent) {
-    if (!arrastrandoRef.current || !ref.current) return;
-    const deltaPx = e.clientY - arranqueRef.current.y;
-    let posFlot = arranqueRef.current.pos - deltaPx / ALTO_ITEM;
-    const { min, max } = calcularLimites(arranqueRef.current.pos);
-    if (min !== -Infinity) posFlot = Math.max(posFlot, min);
-    if (max !== Infinity) posFlot = Math.min(posFlot, max);
-    posRef.current = Math.round(posFlot);
-    ref.current.scrollTop = posFlot * ALTO_ITEM;
-  }
-  function alPointerUp() {
-    if (!arrastrandoRef.current) return;
-    arrastrandoRef.current = false;
-    confirmarDesdeScroll();
-  }
-
   function moverPaso(direccion: 1 | -1) {
     const limites = calcularLimites(posRef.current);
     const destino = posRef.current + direccion;
@@ -269,8 +275,70 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
     confirmar(destino);
   }
 
-  function alClicItem(pos: number, off: boolean) {
-    if (off) return;
+  // El contenedor no usa el scroll nativo del navegador (overflow-hidden):
+  // todo el movimiento pasa por acá, nunca compite con el navegador ni se
+  // corrige después de mostrarse mal — es imposible dejarlo, ni un
+  // instante, en una posición inválida.
+  function alWheel(e: React.WheelEvent) {
+    e.preventDefault();
+    deltaAcumuladoRef.current += e.deltaY;
+    let pasos = 0;
+    while (Math.abs(deltaAcumuladoRef.current) >= UMBRAL_RUEDA_PX && pasos < 12) {
+      const direccion = deltaAcumuladoRef.current > 0 ? 1 : -1;
+      deltaAcumuladoRef.current -= direccion * UMBRAL_RUEDA_PX;
+      moverPaso(direccion);
+      pasos += 1;
+    }
+  }
+
+  function alPointerDown(e: React.PointerEvent) {
+    const el = ref.current;
+    if (!el) return;
+    arrastrandoRef.current = true;
+    arrastroRealRef.current = false;
+    arranqueRef.current = { y: e.clientY, pos: posRef.current };
+    el.setPointerCapture(e.pointerId);
+  }
+  function alPointerMove(e: React.PointerEvent) {
+    if (!arrastrandoRef.current || !ref.current) return;
+    const deltaPx = e.clientY - arranqueRef.current.y;
+    // Todavía dentro del margen de "clic con temblor" — no mueve nada
+    // hasta que el gesto realmente se confirme como arrastre.
+    if (!arrastroRealRef.current && Math.abs(deltaPx) < UMBRAL_ARRASTRE_PX) return;
+    arrastroRealRef.current = true;
+    if (animacionRef.current !== null) {
+      cancelAnimationFrame(animacionRef.current);
+      animacionRef.current = null;
+    }
+    let posFlot = arranqueRef.current.pos - deltaPx / ALTO_ITEM;
+    const { min, max } = calcularLimites(arranqueRef.current.pos);
+    if (min !== -Infinity) posFlot = Math.max(posFlot, min);
+    if (max !== Infinity) posFlot = Math.min(posFlot, max);
+    posRef.current = Math.round(posFlot);
+    ref.current.scrollTop = posFlot * ALTO_ITEM;
+    // El resaltado sigue el dedo/mouse en vivo, igual que durante una
+    // animación — nunca se adelanta ni se atrasa respecto a lo que se ve.
+    setPosCentral((anterior) => (anterior === posRef.current ? anterior : posRef.current));
+  }
+  function alPointerUp(e: React.PointerEvent) {
+    if (!arrastrandoRef.current) return;
+    arrastrandoRef.current = false;
+    if (arrastroRealRef.current) {
+      asentarTrasArrastre();
+      return;
+    }
+    // Fue un clic quieto (sin arrastre real): acá mismo se calcula, con
+    // las coordenadas, qué ítem quedó bajo el cursor al soltar — nunca se
+    // usa el evento 'click' del navegador. Con el puntero capturado (hace
+    // falta para que el arrastre no se corte si el cursor sale del
+    // contenedor), Chrome reasigna ese 'click' al contenedor completo, no
+    // al ítem tocado, así que el clic nunca llegaba a su manejador.
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const offsetEnContenido = e.clientY - rect.top + el.scrollTop;
+    const pos = Math.floor((offsetEnContenido - RELLENO) / ALTO_ITEM);
+    if (estaDeshabilitado(pos)) return;
     irA(pos, true);
     recentrarSiHaceFalta();
     confirmar(pos);
@@ -290,19 +358,13 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
         ref={ref}
         role="listbox"
         aria-label={ariaLabel}
-        onScroll={alScroll}
+        onWheel={alWheel}
         onPointerDown={alPointerDown}
         onPointerMove={alPointerMove}
         onPointerUp={alPointerUp}
         onPointerCancel={alPointerUp}
-        style={{
-          height: ALTO_RUEDA,
-          paddingTop: RELLENO,
-          paddingBottom: RELLENO,
-          scrollSnapType: "y mandatory",
-          scrollbarWidth: "none",
-        }}
-        className="w-16 cursor-grab touch-pan-y select-none overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden active:cursor-grabbing"
+        style={{ height: ALTO_RUEDA, paddingTop: RELLENO, paddingBottom: RELLENO }}
+        className="w-16 cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing"
       >
         {Array.from({ length: total }, (_, pos) => {
           const logico = mod(pos, n);
@@ -315,14 +377,13 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
               role="option"
               aria-selected={activo}
               aria-disabled={off}
-              style={{ height: ALTO_ITEM, scrollSnapAlign: "center" }}
-              onClick={() => alClicItem(pos, off)}
-              className={`flex items-center justify-center text-lg tabular-nums transition-all duration-150 ${
+              style={{ height: ALTO_ITEM }}
+              className={`flex items-center justify-center rounded-lg text-lg tabular-nums transition-all duration-150 ${
                 off
                   ? "cursor-not-allowed text-pan-carbon-suave/25"
                   : activo
                     ? "scale-110 font-bold text-pan-terracota"
-                    : "cursor-pointer text-pan-carbon-suave/70"
+                    : "cursor-pointer text-pan-carbon-suave/70 hover:bg-pan-terracota-suave/25 hover:text-pan-carbon"
               }`}
             >
               {render(v)}
