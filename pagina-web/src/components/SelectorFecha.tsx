@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { SelectorModal } from "./SelectorModal";
 
@@ -27,6 +27,10 @@ function formatearBonito(clave: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
+export interface SelectorFechaHandle {
+  abrir: () => void;
+}
+
 interface SelectorFechaProps {
   id?: string;
   /** "YYYY-MM-DD" o "" si todavía no eligió. */
@@ -35,6 +39,10 @@ interface SelectorFechaProps {
   /** No se puede elegir ningún día anterior a este (inclusive). */
   minimo: Date;
   placeholder?: string;
+  /** Aviso destacado dentro de la ventana (ej. "primero elige la fecha
+   * para poder elegir la hora"), para cuando este selector se abrió solo
+   * porque el cliente intentó abrir la hora sin haber elegido fecha. */
+  aviso?: string;
 }
 
 /** Selector de fecha propio, con la paleta y el estilo del sitio — en vez
@@ -42,7 +50,10 @@ interface SelectorFechaProps {
  * combina con el resto del formulario. Nunca deja elegir un día anterior a
  * `minimo`. Abre como ventana emergente con Cancelar/Aceptar: el cliente
  * arma su elección primero y recién se aplica al aceptar. */
-export function SelectorFecha({ id, valor, onChange, minimo, placeholder = "Elige una fecha" }: SelectorFechaProps) {
+export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>(function SelectorFecha(
+  { id, valor, onChange, minimo, placeholder = "Elige una fecha", aviso },
+  ref,
+) {
   const [abierto, setAbierto] = useState(false);
   const minimoDia = inicioDelDia(minimo);
   const [draft, setDraft] = useState(valor);
@@ -66,6 +77,8 @@ export function SelectorFecha({ id, valor, onChange, minimo, placeholder = "Elig
     if (draft) onChange(draft);
     setAbierto(false);
   }
+
+  useImperativeHandle(ref, () => ({ abrir }));
 
   const primerDiaSemana = new Date(mesVisible.getFullYear(), mesVisible.getMonth(), 1).getDay();
   const diasEnMes = new Date(mesVisible.getFullYear(), mesVisible.getMonth() + 1, 0).getDate();
@@ -97,6 +110,11 @@ export function SelectorFecha({ id, valor, onChange, minimo, placeholder = "Elig
         onAceptar={aceptar}
         aceptarDeshabilitado={!draft}
       >
+        {aviso && (
+          <p className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-medium text-amber-800">
+            {aviso}
+          </p>
+        )}
         <div className="mb-3 flex items-center justify-between">
           <button
             type="button"
@@ -155,4 +173,4 @@ export function SelectorFecha({ id, valor, onChange, minimo, placeholder = "Elig
       </SelectorModal>
     </div>
   );
-}
+});

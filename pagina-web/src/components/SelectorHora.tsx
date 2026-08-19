@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Clock } from "lucide-react";
 import { formatearHora12 } from "../utils/horariosPan";
 import { SelectorModal } from "./SelectorModal";
@@ -78,7 +78,6 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
   // lógico a la vez dentro de lo visible, así que el resaltado se decide
   // por posición física centrada, no por valor.
   const [posCentral, setPosCentral] = useState(posInicial);
-  const limitesRef = useRef<Limites | null>(null);
   const timeoutRef = useRef<number | undefined>(undefined);
   const arrastrandoRef = useRef(false);
   const arranqueRef = useRef({ y: 0, pos: 0 });
@@ -206,11 +205,12 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
     if (!el) return;
     let pos = Math.round(el.scrollTop / ALTO_ITEM);
     if (estaDeshabilitado(pos)) {
-      const limites = limitesRef.current;
-      if (limites) {
-        if (limites.min !== -Infinity && pos < limites.min) pos = limites.min;
-        else if (limites.max !== Infinity && pos > limites.max) pos = limites.max;
-      }
+      // El ancla para calcular el límite tiene que ser una posición
+      // válida — se usa `posRef.current` (la última confirmada) en vez de
+      // `pos` (que en este punto ya sabemos que es inválida).
+      const limites = calcularLimites(posRef.current);
+      if (limites.min !== -Infinity && pos < limites.min) pos = limites.min;
+      else if (limites.max !== Infinity && pos > limites.max) pos = limites.max;
     }
     irA(pos, true);
     recentrarSiHaceFalta();
@@ -222,10 +222,12 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
     // Mientras la rueda se mueve sola (scroll nativo del mouse, o el
     // "vuelo" después de soltar el dedo), se corrige en caliente si se
     // sale de los límites — así nunca llega a mostrarse una franja
-    // inválida, ni un instante.
+    // inválida, ni un instante. Los límites se calculan frescos en cada
+    // evento (no se cachean): así funciona igual con scroll del mouse,
+    // que nunca pasa por pointerdown/pointermove.
     const el = ref.current;
-    if (el && limitesRef.current) {
-      const { min, max } = limitesRef.current;
+    if (el) {
+      const { min, max } = calcularLimites(posRef.current);
       const posFlot = el.scrollTop / ALTO_ITEM;
       if (min !== -Infinity && posFlot < min) el.scrollTop = min * ALTO_ITEM;
       else if (max !== Infinity && posFlot > max) el.scrollTop = max * ALTO_ITEM;
@@ -239,18 +241,15 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
     if (!el) return;
     arrastrandoRef.current = true;
     arranqueRef.current = { y: e.clientY, pos: posRef.current };
-    limitesRef.current = calcularLimites(posRef.current);
     el.setPointerCapture(e.pointerId);
   }
   function alPointerMove(e: React.PointerEvent) {
     if (!arrastrandoRef.current || !ref.current) return;
     const deltaPx = e.clientY - arranqueRef.current.y;
     let posFlot = arranqueRef.current.pos - deltaPx / ALTO_ITEM;
-    const limites = limitesRef.current;
-    if (limites) {
-      if (limites.min !== -Infinity) posFlot = Math.max(posFlot, limites.min);
-      if (limites.max !== Infinity) posFlot = Math.min(posFlot, limites.max);
-    }
+    const { min, max } = calcularLimites(arranqueRef.current.pos);
+    if (min !== -Infinity) posFlot = Math.max(posFlot, min);
+    if (max !== Infinity) posFlot = Math.min(posFlot, max);
     posRef.current = Math.round(posFlot);
     ref.current.scrollTop = posFlot * ALTO_ITEM;
   }
@@ -262,7 +261,6 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
 
   function moverPaso(direccion: 1 | -1) {
     const limites = calcularLimites(posRef.current);
-    limitesRef.current = limites;
     const destino = posRef.current + direccion;
     if (direccion < 0 && limites.min !== -Infinity && destino < limites.min) return;
     if (direccion > 0 && limites.max !== Infinity && destino > limites.max) return;
@@ -344,6 +342,10 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
   );
 }
 
+export interface SelectorHoraHandle {
+  abrir: () => void;
+}
+
 interface SelectorHoraProps {
   id?: string;
   /** "HH:mm" en formato 24h, o "" si todavía no eligió. */
@@ -356,6 +358,10 @@ interface SelectorHoraProps {
    * con el reloj (cada minuto), así que si el cliente deja el selector
    * abierto un buen rato, el piso lo sigue empujando hacia adelante. */
   minimoHoy?: string;
+  /** false = el botón no abre este selector al tocarlo, sino que dispara
+   * `onIntentoBloqueado` (usado para exigir elegir la fecha primero). */
+  puedeAbrir?: boolean;
+  onIntentoBloqueado?: () => void;
 }
 
 /** Selector de hora estilo rueda de celular: tres columnas (hora, minuto,
@@ -363,7 +369,10 @@ interface SelectorHoraProps {
  * para quien prefiera hacer clic. Abre en una ventana emergente con
  * Cancelar/Aceptar, para que el cliente pueda ver bien lo que eligió antes
  * de aplicarlo. */
-export function SelectorHora({ id, valor, onChange, placeholder = "Elige una hora", minimoHoy }: SelectorHoraProps) {
+export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(function SelectorHora(
+  { id, valor, onChange, placeholder = "Elige una hora", minimoHoy, puedeAbrir = true, onIntentoBloqueado },
+  ref,
+) {
   const [abierto, setAbierto] = useState(false);
   const [draftHora, setDraftHora] = useState(12);
   const [draftMinuto, setDraftMinuto] = useState(0);
@@ -384,6 +393,16 @@ export function SelectorHora({ id, valor, onChange, placeholder = "Elige una hor
   function aceptar() {
     onChange(a24h(draftHora, draftMinuto, draftPeriodo));
     setAbierto(false);
+  }
+
+  useImperativeHandle(ref, () => ({ abrir }));
+
+  function alPresionarBoton() {
+    if (!puedeAbrir) {
+      onIntentoBloqueado?.();
+      return;
+    }
+    abrir();
   }
 
   const minutosPiso = minimoHoy ? horaTextoAMinutos(minimoHoy) : null;
@@ -415,7 +434,7 @@ export function SelectorHora({ id, valor, onChange, placeholder = "Elige una hor
       <button
         id={id}
         type="button"
-        onClick={abrir}
+        onClick={alPresionarBoton}
         className={`flex w-full items-center gap-2.5 rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-left outline-none focus:border-pan-terracota ${
           valor ? "text-pan-carbon" : "text-pan-carbon-suave"
         }`}
@@ -447,7 +466,17 @@ export function SelectorHora({ id, valor, onChange, placeholder = "Elige una hor
               render={(h) => String(h)}
               ariaLabel="Hora"
             />
-            <span className="mt-2.5 text-lg font-bold text-pan-carbon-suave">:</span>
+            <div className="flex flex-col items-center">
+              {/* Mismo alto que los botones de flecha de las ruedas
+                  (h-4 + p-1 de cada lado = 24px), para que el ":" quede
+                  centrado en la misma franja que el valor resaltado, no
+                  en el alto total de la columna (que incluye flechas). */}
+              <div className="h-6 shrink-0" aria-hidden="true" />
+              <div style={{ height: ALTO_RUEDA }} className="flex items-center justify-center">
+                <span className="text-lg font-bold text-pan-carbon-suave">:</span>
+              </div>
+              <div className="h-6 shrink-0" aria-hidden="true" />
+            </div>
             <Rueda
               valores={MINUTOS_60}
               indice={draftMinuto}
@@ -470,4 +499,4 @@ export function SelectorHora({ id, valor, onChange, placeholder = "Elige una hor
       </SelectorModal>
     </div>
   );
-}
+});

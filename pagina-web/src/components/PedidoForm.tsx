@@ -11,8 +11,8 @@ import {
   type ProductoPublico,
 } from "../services/api";
 import { esMuyProntoHoy, estaFueraDeVentana, formatearHora12, horaMinimaHoy, hoyISO } from "../utils/horariosPan";
-import { SelectorFecha } from "./SelectorFecha";
-import { SelectorHora } from "./SelectorHora";
+import { SelectorFecha, type SelectorFechaHandle } from "./SelectorFecha";
+import { SelectorHora, type SelectorHoraHandle } from "./SelectorHora";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
 const NOMBRES_DISPONIBLES = new Set(PRODUCTOS.map((p) => p.nombreEnCatalogo));
@@ -46,6 +46,10 @@ export function PedidoForm() {
   const [notas, setNotas] = useState("");
   const [fechaRecojo, setFechaRecojo] = useState("");
   const [horaRecojo, setHoraRecojo] = useState("");
+  const [avisoFechaPrimero, setAvisoFechaPrimero] = useState(false);
+  const selectorFechaRef = useRef<SelectorFechaHandle>(null);
+  const selectorHoraRef = useRef<SelectorHoraHandle>(null);
+  const abrirHoraLuegoDeFechaRef = useRef(false);
 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +152,26 @@ export function PedidoForm() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fechaRecojo, horarios, ahora]);
+
+  // Si el cliente toca "Elige una hora" sin haber elegido fecha todavía,
+  // se abre el calendario en su lugar (con un aviso) y, apenas acepte una
+  // fecha, el selector de hora se abre solo a continuación — así nunca
+  // intenta elegir una hora sin saber para qué día es.
+  function alIntentarAbrirHoraSinFecha() {
+    abrirHoraLuegoDeFechaRef.current = true;
+    setAvisoFechaPrimero(true);
+    selectorFechaRef.current?.abrir();
+  }
+
+  useEffect(() => {
+    if (!fechaRecojo || !abrirHoraLuegoDeFechaRef.current) return;
+    abrirHoraLuegoDeFechaRef.current = false;
+    setAvisoFechaPrimero(false);
+    // Pequeña espera para que la animación de cierre del calendario no se
+    // encime con la de apertura del selector de hora.
+    const id = window.setTimeout(() => selectorHoraRef.current?.abrir(), 260);
+    return () => window.clearTimeout(id);
+  }, [fechaRecojo]);
 
   // El personaje festeja un instante cuando el pedido se confirma — un
   // gesto puntual, no una animación que se repite sola sin parar.
@@ -443,16 +467,21 @@ export function PedidoForm() {
                     <label className="mb-1.5 block text-sm font-medium text-pan-carbon">Recojo</label>
                     <div className="grid grid-cols-2 gap-3">
                       <SelectorFecha
+                        ref={selectorFechaRef}
                         id="fecha-recojo"
                         valor={fechaRecojo}
                         onChange={setFechaRecojo}
                         minimo={new Date()}
+                        aviso={avisoFechaPrimero ? "Primero elige la fecha, después podrás elegir la hora." : undefined}
                       />
                       <SelectorHora
+                        ref={selectorHoraRef}
                         id="hora-recojo"
                         valor={horaRecojo}
                         onChange={setHoraRecojo}
                         minimoHoy={minimoHoraHoy}
+                        puedeAbrir={!!fechaRecojo}
+                        onIntentoBloqueado={alIntentarAbrirHoraSinFecha}
                       />
                     </div>
                     <p className="mt-1.5 text-xs text-pan-carbon-suave">
