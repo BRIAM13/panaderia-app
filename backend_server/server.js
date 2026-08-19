@@ -20,6 +20,7 @@ const rolesRoutes = require('./routes/rolesRoutes');
 const horneadosRoutes = require('./routes/horneadosRoutes');
 const publicoRoutes = require('./routes/publicoRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
+const { iniciarCancelacionAutomatica } = require('./jobs/cancelarPedidosVencidos');
 
 const app = express();
 
@@ -102,4 +103,5 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Servidor backend escuchando en el puerto ${PORT}`);
+  iniciarCancelacionAutomatica();
 });

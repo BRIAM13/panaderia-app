@@ -6,7 +6,7 @@ export function Footer() {
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-pan-terracota/40 to-transparent" />
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-sm text-pan-carbon-suave sm:flex-row">
         <p>
-          © {new Date().getFullYear()} {SITE.nombre} — {UBICACION.direccion}, {UBICACION.ciudad}
+          © {new Date().getFullYear()} {SITE.nombre}, {UBICACION.direccion}, {UBICACION.ciudad}
         </p>
         <a
           href="/privacidad/"

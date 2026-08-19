@@ -10,7 +10,7 @@ import {
   type PedidoPublicoResultado,
   type ProductoPublico,
 } from "../services/api";
-import { estaFueraDeVentana } from "../utils/horariosPan";
+import { esMuyProntoHoy, estaFueraDeVentana, formatearHora12, horaMinimaHoy, hoyISO } from "../utils/horariosPan";
 import { SelectorFecha } from "./SelectorFecha";
 import { SelectorHora } from "./SelectorHora";
 
@@ -109,6 +109,13 @@ export function PedidoForm() {
   const fueraDeVentanaActual =
     horarios && fechaRecojo && horaRecojo ? estaFueraDeVentana(fechaRecojo, horaRecojo, horarios) : false;
 
+  // Piso duro (a diferencia del aviso de arriba, que solo informa): si la
+  // fecha elegida es hoy, ninguna hora a menos de "minutos de tolerancia"
+  // desde ahora es válida — el selector de hora ya la deshabilita, esto
+  // solo calcula desde qué hora arranca lo permitido para pasárselo.
+  const esRecojoHoy = fechaRecojo === hoyISO();
+  const minimoHoraHoy = horarios && esRecojoHoy ? horaMinimaHoy(horarios) : undefined;
+
   // Al cambiar de producto, la cantidad y el recojo se limpian — quedan
   // vacíos con un placeholder que ya indica qué elegir (ver más abajo), en
   // vez de arrastrar un valor que valía para el pan anterior.
@@ -117,6 +124,17 @@ export function PedidoForm() {
     setFechaRecojo("");
     setHoraRecojo("");
   }, [idProducto]);
+
+  // Si el cliente ya había elegido una hora y después cambia la fecha a
+  // hoy (o el reloj avanza), esa hora puede quedar por debajo del nuevo
+  // piso de tolerancia — se limpia en vez de dejar un valor que el envío
+  // igual va a rechazar.
+  useEffect(() => {
+    if (horarios && fechaRecojo && horaRecojo && esMuyProntoHoy(fechaRecojo, horaRecojo, horarios)) {
+      setHoraRecojo("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fechaRecojo, horarios]);
 
   // El personaje festeja un instante cuando el pedido se confirma — un
   // gesto puntual, no una animación que se repite sola sin parar.
@@ -162,6 +180,10 @@ export function PedidoForm() {
     if (!esPaquete) {
       if (!fechaRecojo || !horaRecojo) {
         setError("Elige una fecha y hora de recojo.");
+        return;
+      }
+      if (horarios && esMuyProntoHoy(fechaRecojo, horaRecojo, horarios)) {
+        setError(`Para pedidos de hoy necesitamos al menos ${horarios.minutosTolerancia} minutos de anticipación.`);
         return;
       }
       fechaEntrega = `${fechaRecojo}T${horaRecojo}`;
@@ -413,12 +435,18 @@ export function PedidoForm() {
                         onChange={setFechaRecojo}
                         minimo={new Date()}
                       />
-                      <SelectorHora id="hora-recojo" valor={horaRecojo} onChange={setHoraRecojo} />
+                      <SelectorHora
+                        id="hora-recojo"
+                        valor={horaRecojo}
+                        onChange={setHoraRecojo}
+                        minimoHoy={minimoHoraHoy}
+                      />
                     </div>
                     <p className="mt-1.5 text-xs text-pan-carbon-suave">
-                      Pedidos hasta las {horarios.horaLimitePedido} se recogen hoy mismo desde las{" "}
-                      {horarios.horaRecojoMismoDia}. Después de esa hora, el recojo pasa para el día
-                      siguiente desde las {horarios.horaRecojoDiaSiguiente}.
+                      Pedidos hasta las {formatearHora12(horarios.horaLimitePedido)} se recogen hoy mismo
+                      desde las {formatearHora12(horarios.horaRecojoMismoDia)}. Después de esa hora, el
+                      recojo pasa para el día siguiente desde las{" "}
+                      {formatearHora12(horarios.horaRecojoDiaSiguiente)}.
                     </p>
                     <AnimatePresence>
                       {fueraDeVentanaActual && (
@@ -431,7 +459,7 @@ export function PedidoForm() {
                         >
                           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                           <p className="text-xs font-medium text-amber-800">
-                            Ese horario ya cerró para recojo. Igual registramos tu pedido — te
+                            Ese horario ya cerró para recojo. Igual registramos tu pedido y te
                             confirmamos por WhatsApp, al número que dejes, si tenemos stock disponible
                             para separarlo.
                           </p>

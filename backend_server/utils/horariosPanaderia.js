@@ -7,6 +7,7 @@ const { diaCalendarioPeru, horaActualPeru } = require('./fechaPeru');
 const CLAVE_HORA_LIMITE = 'PANADERIA_HORA_LIMITE_PEDIDO';
 const CLAVE_HORA_MISMO_DIA = 'PANADERIA_HORA_RECOJO_MISMO_DIA';
 const CLAVE_HORA_DIA_SIGUIENTE = 'PANADERIA_HORA_RECOJO_DIA_SIGUIENTE';
+const CLAVE_MINUTOS_TOLERANCIA = 'PANADERIA_MINUTOS_TOLERANCIA';
 
 const UN_DIA_MS = 24 * 60 * 60 * 1000;
 
@@ -22,13 +23,14 @@ function horaAMinutos(horaTexto) {
 async function obtenerHorariosPanaderia(pool) {
   const result = await pool.request().query(`
     SELECT Clave, Valor FROM Configuraciones
-    WHERE Clave IN ('${CLAVE_HORA_LIMITE}', '${CLAVE_HORA_MISMO_DIA}', '${CLAVE_HORA_DIA_SIGUIENTE}')
+    WHERE Clave IN ('${CLAVE_HORA_LIMITE}', '${CLAVE_HORA_MISMO_DIA}', '${CLAVE_HORA_DIA_SIGUIENTE}', '${CLAVE_MINUTOS_TOLERANCIA}')
   `);
   const mapa = Object.fromEntries(result.recordset.map((r) => [r.Clave, r.Valor]));
   return {
     horaLimitePedido: mapa[CLAVE_HORA_LIMITE] || '10:00',
     horaRecojoMismoDia: mapa[CLAVE_HORA_MISMO_DIA] || '15:30',
     horaRecojoDiaSiguiente: mapa[CLAVE_HORA_DIA_SIGUIENTE] || '04:00',
+    minutosTolerancia: Number(mapa[CLAVE_MINUTOS_TOLERANCIA]) || 30,
   };
 }
 
@@ -81,11 +83,32 @@ function validarFechaEntrega({ anio, mes, dia, hora, minuto }, horarios) {
   return minutosPropuestos >= pisoMinutos;
 }
 
+/**
+ * Piso duro de "minutos de tolerancia": para una fecha de recojo elegida
+ * que caiga HOY (hora de Perú), el cliente nunca puede elegir una hora a
+ * menos de `minutosTolerancia` minutos del momento actual del servidor —
+ * necesitamos ese margen para confirmar si hay stock y avisarle antes de
+ * que pase la hora que eligió. No aplica a fechas futuras, esas ya tienen
+ * su propio piso vía calcularMinimoRecojo/validarFechaEntrega.
+ */
+function esMuyProntoParaHoy({ anio, mes, dia, hora, minuto }, horarios) {
+  const hoyPeru = diaCalendarioPeru(new Date());
+  const fechaPropuesta = Date.UTC(anio, mes - 1, dia);
+  if (fechaPropuesta !== hoyPeru) return false;
+
+  const ahora = horaActualPeru();
+  const minutosMinimos = ahora.hora * 60 + ahora.minuto + horarios.minutosTolerancia;
+  const minutosPropuestos = hora * 60 + minuto;
+  return minutosPropuestos < minutosMinimos;
+}
+
 module.exports = {
   CLAVE_HORA_LIMITE,
   CLAVE_HORA_MISMO_DIA,
   CLAVE_HORA_DIA_SIGUIENTE,
+  CLAVE_MINUTOS_TOLERANCIA,
   obtenerHorariosPanaderia,
   calcularMinimoRecojo,
   validarFechaEntrega,
+  esMuyProntoParaHoy,
 };

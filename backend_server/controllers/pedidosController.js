@@ -938,4 +938,7 @@ module.exports = {
   // Reexportado para publicoController.js (avisa al personal de un pedido
   // web nuevo, igual que un pedido solicitado desde la app).
   notificarPersonalTienda,
+  // Reexportado para cancelarPedidosVencidos.js (mismo aviso al cliente
+  // que una cancelación manual, ver cancelarPedido más arriba).
+  notificarCliente,
 };

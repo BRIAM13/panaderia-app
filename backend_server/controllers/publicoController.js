@@ -4,7 +4,7 @@ const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos'
 const { buscarPersonaPorDni, buscarEmpresaPorRuc } = require('./externalController');
 const { intentarClonarUsuarioCliente } = require('./clientesController');
 const { notificarPersonalTienda, SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
-const { obtenerHorariosPanaderia } = require('../utils/horariosPanaderia');
+const { obtenerHorariosPanaderia, esMuyProntoParaHoy } = require('../utils/horariosPanaderia');
 const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
 const { RUC_PERU_REGEX } = require('../middlewares/validators');
 
@@ -145,6 +145,17 @@ async function crearPedidoPublico(req, res, next) {
     const fechaPropuesta = instantePeru({ anio, mes, dia, hora, minuto });
     if (fechaEntregaEsAnteriorAHoy(fechaPropuesta)) {
       return res.status(400).json({ mensaje: 'La fecha de recojo no puede ser anterior a hoy.' });
+    }
+    // Único piso realmente duro (a diferencia del horario normal de
+    // recojo, que solo advierte): si la fecha elegida es hoy, no se puede
+    // recoger en menos de "minutos de tolerancia" desde ahora mismo — es
+    // el margen que necesita la tienda para confirmar stock por WhatsApp
+    // antes de que llegue la hora que el cliente eligió.
+    const horarios = await obtenerHorariosPanaderia(pool);
+    if (esMuyProntoParaHoy({ anio, mes, dia, hora, minuto }, horarios)) {
+      return res.status(400).json({
+        mensaje: `Para pedidos de hoy necesitamos al menos ${horarios.minutosTolerancia} minutos de anticipación. Elige una hora un poco más adelante.`,
+      });
     }
     fechaEntregaUtc = fechaPropuesta;
   }

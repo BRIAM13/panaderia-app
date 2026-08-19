@@ -20,6 +20,23 @@ function formatearFecha(fecha: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/** "YYYY-MM-DD" de hoy — para comparar contra la fecha que eligió el
+ * cliente sin repetir el formateo en cada componente que lo necesita. */
+export function hoyISO(ahora = new Date()): string {
+  return formatearFecha(ahora);
+}
+
+/** "HH:mm" (24h) -> "3:15pm"/"4:00am": sin espacio ni puntos, porque mucha
+ * gente no maneja bien el formato de 24 horas y el "p. m." con puntos
+ * confunde más de lo que aclara. Formato único usado en todo el sitio para
+ * mostrar cualquier hora configurada o elegida. */
+export function formatearHora12(horaTexto: string): string {
+  const [h, m] = horaTexto.split(":").map(Number);
+  const periodo = h >= 12 ? "pm" : "am";
+  const hora12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hora12}:${String(m).padStart(2, "0")}${periodo}`;
+}
+
 /** Primer día en el que técnicamente ya se puede recoger un pedido nuevo
  * en este momento (hoy, si todavía no pasa la hora límite de pedido;
  * mañana si ya pasó) — solo se usa para decidir si un horario elegido por
@@ -62,4 +79,36 @@ export function estaFueraDeVentana(
   // fechaElegida === ventana.fechaMinima
   const piso = ventana.esMismoDia ? ventana.horaMinima : horarios.horaRecojoDiaSiguiente;
   return horaAMinutos(horaElegida) < horaAMinutos(piso);
+}
+
+function minutosDesdeAhoraMasTolerancia(horarios: HorariosPanaderia, ahora: Date): number {
+  return ahora.getHours() * 60 + ahora.getMinutes() + horarios.minutosTolerancia;
+}
+
+/** Piso duro (a diferencia de `estaFueraDeVentana`, que solo avisa): para
+ * un pedido de HOY, nunca se puede elegir una hora a menos de
+ * `horarios.minutosTolerancia` minutos desde ahora mismo — refleja del
+ * lado del cliente la misma regla que el backend vuelve a exigir
+ * (esMuyProntoParaHoy en horariosPanaderia.js), para que el selector de
+ * hora ya la respete en vez de dejar que el envío falle. */
+export function esMuyProntoHoy(
+  fechaElegida: string,
+  horaElegida: string,
+  horarios: HorariosPanaderia,
+  ahora = new Date(),
+): boolean {
+  if (fechaElegida !== formatearFecha(ahora)) return false;
+  return horaAMinutos(horaElegida) < minutosDesdeAhoraMasTolerancia(horarios, ahora);
+}
+
+/** "HH:mm" más temprano que se puede elegir hoy en este momento — usado
+ * para que el selector de hora deshabilite de entrada lo que ya sabe que
+ * el backend va a rechazar. Si la tolerancia empuja después de
+ * medianoche, ya no queda ninguna hora válida hoy (ver `esMuyProntoHoy`
+ * con cualquier hora del día siempre da true en ese caso). */
+export function horaMinimaHoy(horarios: HorariosPanaderia, ahora = new Date()): string {
+  const minutos = Math.min(minutosDesdeAhoraMasTolerancia(horarios, ahora), 23 * 60 + 59);
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }

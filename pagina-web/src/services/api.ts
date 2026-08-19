@@ -30,6 +30,7 @@ export interface HorariosPanaderia {
   horaLimitePedido: string;
   horaRecojoMismoDia: string;
   horaRecojoDiaSiguiente: string;
+  minutosTolerancia: number;
 }
 
 export interface CatalogoPublicoResultado {
