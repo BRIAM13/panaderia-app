@@ -20,7 +20,14 @@
     --bronce: #c08a3e;
     --bronce-suave: #f1ddb6;
     --carbon: #2b2118;
-    --carbon-suave: #6b5b4c;
+    /* Ver pagina-web/src/index.css — mismo ajuste: el original (#6b5b4c) se
+       leía "lavado" sobre el fondo crema. */
+    --carbon-suave: #544435;
+    /* Tono de borde dedicado: --bronce-suave usado como borde tenía casi
+       nada de contraste contra el fondo crema (tarjetas e inputs se
+       confundían con el fondo). --bronce-suave se sigue usando tal cual
+       como relleno suave en otras partes de esta página. */
+    --borde: #af7a48;
     --oro: #e0a940;
     --ease: cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -74,7 +81,7 @@
     isolation: isolate;
     overflow: hidden;
     color: var(--carbon);
-    border: 1px solid var(--bronce-suave);
+    border: 1px solid var(--borde);
     background: var(--crema-suave);
     transition: color 0.45s var(--ease), border-color 0.45s var(--ease);
   }
@@ -219,7 +226,7 @@
   .toc-linea {
     width: 2px;
     border-radius: 2px;
-    background: var(--bronce-suave);
+    background: var(--borde);
     position: relative;
     overflow: hidden;
     flex-shrink: 0;
@@ -244,7 +251,7 @@
       overflow: hidden;
       transition: max-height 0.4s var(--ease);
       background: var(--crema-suave);
-      border: 1px solid var(--bronce-suave);
+      border: 1px solid var(--borde);
       border-radius: 16px;
       width: calc(100% - 48px);
       margin: 8px auto 0;
@@ -273,7 +280,7 @@
 
   .tarjeta {
     background: var(--crema-suave);
-    border: 1px solid var(--bronce-suave);
+    border: 1px solid var(--borde);
     border-radius: 20px;
     padding: 28px 28px 26px;
     scroll-margin-top: 24px;
