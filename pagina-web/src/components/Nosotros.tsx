@@ -66,7 +66,7 @@ export function Nosotros() {
             whileHover={{ y: -6 }}
             className="rounded-3xl bg-pan-crema-suave p-8 shadow-sm shadow-pan-carbon/5 transition-shadow duration-300 hover:shadow-xl hover:shadow-pan-carbon/10"
           >
-            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-pan-bronce-suave/60 text-pan-bronce">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-pan-bronce-suave/60 text-pan-bronce-oscuro">
               <Eye className="h-5 w-5" />
             </div>
             <h3 className="font-[family-name:var(--font-display-panaderia)] text-xl font-semibold text-pan-carbon">

@@ -26,7 +26,7 @@ export function Ubicacion() {
           </h2>
           <p className="mt-4 text-lg text-pan-carbon-suave">{UBICACION.direccion}</p>
           <p className="text-lg text-pan-carbon-suave">{UBICACION.ciudad}</p>
-          <p className="mt-2 text-sm text-pan-carbon-suave/80">Referencia: {UBICACION.referencia}</p>
+          <p className="mt-2 text-sm text-pan-carbon-suave">Referencia: {UBICACION.referencia}</p>
           <motion.a
             href={UBICACION.mapaUrl}
             target="_blank"

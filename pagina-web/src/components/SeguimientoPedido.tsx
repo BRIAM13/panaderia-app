@@ -85,7 +85,7 @@ export function SeguimientoPedido() {
         >
           <motion.div
             whileHover={{ rotate: -8, scale: 1.05 }}
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-pan-crema"
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-pan-crema/15 text-pan-crema"
           >
             <PackageSearch className="h-7 w-7" />
           </motion.div>
@@ -93,7 +93,7 @@ export function SeguimientoPedido() {
             <h3 className="font-[family-name:var(--font-display-panaderia)] text-2xl font-semibold text-pan-crema">
               ¿Ya hiciste un pedido antes?
             </h3>
-            <p className="mt-1 text-pan-crema/85">
+            <p className="mt-1 text-pan-crema/95">
               Escribe tu DNI y te decimos si tu pedido ya está confirmado o si todavía estamos por
               confirmarlo.
             </p>
@@ -111,7 +111,7 @@ export function SeguimientoPedido() {
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.4, ease: EASE_PREMIUM }}
             >
-              <div className="border-t border-white/15 bg-pan-crema px-8 py-8">
+              <div className="border-t border-pan-crema/15 bg-pan-crema px-8 py-8">
                 <AnimatePresence mode="wait">
                   {resultado ? (
                     <motion.div
@@ -191,7 +191,7 @@ export function SeguimientoPedido() {
                           onChange={(e) => setDni(e.target.value.replace(/\D/g, ""))}
                           placeholder="Tu DNI, 8 dígitos"
                           required
-                          className="w-full rounded-xl border border-pan-bronce-suave bg-white px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                          className="w-full rounded-xl border border-pan-bronce-suave bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                         />
                         {error && <p className="mt-1.5 text-sm font-medium text-red-700">{error}</p>}
                       </div>

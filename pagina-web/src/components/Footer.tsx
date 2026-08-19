@@ -12,7 +12,7 @@ export function Footer() {
           Política de privacidad
         </a>
       </div>
-      <p className="mx-auto mt-4 max-w-6xl text-center text-xs text-pan-carbon-suave/70">
+      <p className="mx-auto mt-4 max-w-6xl text-center text-xs text-pan-carbon-suave">
         {SITE.nombre} opera bajo {SITE.nombreComercial} · RUC {SITE.ruc}
       </p>
     </footer>

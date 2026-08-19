@@ -1,7 +1,6 @@
 @import "tailwindcss";
 
 @theme {
-  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
 
   /* Paleta cálida de la panadería — mismos tonos que la app móvil
@@ -24,6 +23,12 @@
      color de fondo grande. */
   --color-pan-oro: #e0a940;
   --color-pan-terracota-profundo: #7a2e10;
+
+  /* Bronce oscurecido — mismo tono familiar que --color-pan-bronce pero con
+     suficiente contraste para usarse como texto/ícono sobre
+     --color-pan-bronce-suave (el par bronce/bronce-suave original no llega
+     a 3:1 de contraste ahí). */
+  --color-pan-bronce-oscuro: #8a5e22;
 
   --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
 }

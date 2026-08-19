@@ -48,7 +48,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: EASE_PREMIUM }}
-            className="mb-4 inline-flex items-center gap-2 rounded-full bg-pan-terracota-suave/60 px-4 py-1.5 text-sm font-medium text-pan-terracota"
+            className="mb-4 inline-flex items-center gap-2 rounded-full bg-pan-terracota-suave/60 px-4 py-1.5 text-sm font-medium text-pan-terracota-profundo"
           >
             <MapPin className="h-4 w-4" />
             {UBICACION.ciudad}
