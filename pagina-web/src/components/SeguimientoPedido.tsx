@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, Loader2, PackageSearch, Truck, X } from "lucide-react";
+import { Ban, CheckCircle2, Clock, Loader2, PackageSearch, Truck, X, XCircle } from "lucide-react";
 import {
   ApiError,
   consultarPedidosPublicos,
@@ -18,20 +18,44 @@ const ESTADO_INFO = {
   PENDIENTE: {
     etiqueta: "Confirmado, por entregar",
     icono: Truck,
+    clases: "bg-blue-100 text-blue-800",
+  },
+  ENTREGADO: {
+    etiqueta: "Entregado",
+    icono: CheckCircle2,
     clases: "bg-emerald-100 text-emerald-800",
+  },
+  RECHAZADO: {
+    etiqueta: "Rechazado",
+    icono: XCircle,
+    clases: "bg-rose-100 text-rose-800",
+  },
+  CANCELADO: {
+    etiqueta: "Cancelado",
+    icono: Ban,
+    clases: "bg-slate-200 text-slate-700",
   },
 } as const;
 
-/** Búsqueda pública y sin login: solo el DNI, y solo pedidos SOLICITADO
- * (pendiente de confirmar) o PENDIENTE (confirmado, pendiente de entrega).
- * Para historial completo, deudas o cancelar un pedido, ese es trabajo de
- * la cuenta real dentro de /app/, no de esta vista rápida. */
+// Mientras algún pedido siga en un estado que todavía puede cambiar, el
+// panel se refresca solo — una vez que todos quedaron en un estado final
+// (entregado/rechazado/cancelado) ya no hay nada más que esperar.
+const ESTADOS_ACTIVOS = new Set(["SOLICITADO", "PENDIENTE"]);
+const INTERVALO_REFRESCO_MS = 20000;
+
+/** Búsqueda pública y sin login: solo el DNI, y los pedidos recientes del
+ * cliente en cualquier estado. Mientras el panel queda abierto y todavía
+ * hay algún pedido sin resolver, se vuelve a consultar solo cada 20s para
+ * que el estado se vea al día sin que el cliente tenga que volver a
+ * buscar. Para historial completo, deudas o cancelar un pedido, ese es
+ * trabajo de la cuenta real dentro de /app/, no de esta vista rápida. */
 export function SeguimientoPedido() {
   const [abierto, setAbierto] = useState(false);
   const [dni, setDni] = useState("");
   const [buscando, setBuscando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<PedidoPublicoConsultaResultado | null>(null);
+  const dniConsultadoRef = useRef("");
 
   function alternar() {
     setAbierto((v) => !v);
@@ -43,7 +67,8 @@ export function SeguimientoPedido() {
     e.preventDefault();
     setError(null);
 
-    if (!/^\d{8}$/.test(dni.trim())) {
+    const dniLimpio = dni.trim();
+    if (!/^\d{8}$/.test(dniLimpio)) {
       setError("Ingresa un DNI válido de 8 dígitos.");
       return;
     }
@@ -51,7 +76,8 @@ export function SeguimientoPedido() {
     setBuscando(true);
     setResultado(null);
     try {
-      const data = await consultarPedidosPublicos(dni.trim());
+      const data = await consultarPedidosPublicos(dniLimpio);
+      dniConsultadoRef.current = dniLimpio;
       setResultado(data);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -69,6 +95,27 @@ export function SeguimientoPedido() {
     setError(null);
     setDni("");
   }
+
+  // Sondeo en tiempo real: solo mientras el panel está abierto, hay un
+  // resultado en pantalla, y todavía queda algún pedido en un estado que
+  // puede seguir cambiando — así no gasta llamadas de más una vez que ya
+  // no hay nada pendiente de resolver.
+  useEffect(() => {
+    if (!abierto || !resultado) return;
+    const hayPedidosActivos = resultado.pedidos.some((p) => ESTADOS_ACTIVOS.has(p.estado));
+    if (!hayPedidosActivos) return;
+
+    const id = window.setInterval(async () => {
+      try {
+        const data = await consultarPedidosPublicos(dniConsultadoRef.current);
+        setResultado(data);
+      } catch {
+        // Silencioso: un refresco puntual que falla (red, servidor
+        // despertando) simplemente se reintenta en el próximo ciclo.
+      }
+    }, INTERVALO_REFRESCO_MS);
+    return () => window.clearInterval(id);
+  }, [abierto, resultado]);
 
   return (
     <section className="px-6 py-16">
@@ -124,7 +171,7 @@ export function SeguimientoPedido() {
                         <div className="text-center">
                           <p className="text-pan-carbon">
                             {resultado.nombre
-                              ? `Hola, ${resultado.nombre}. No tienes pedidos pendientes de confirmar ni de entregar en este momento.`
+                              ? `Hola, ${resultado.nombre}. Todavía no tienes ningún pedido registrado.`
                               : "No encontramos ningún cliente con ese DNI todavía. Si acabas de hacer tu primer pedido, revisa que el DNI esté bien escrito."}
                           </p>
                         </div>

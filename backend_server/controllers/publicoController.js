@@ -40,6 +40,27 @@ function limiteExcedido(ip) {
   return intentos.length > INTENTOS_MAXIMOS;
 }
 
+/**
+ * Límite aparte (más alto) solo para consultar el estado de un pedido: a
+ * diferencia de crear un pedido, esto no toca ninguna API paga, solo lee la
+ * base — y la página lo usa para refrescarse sola cada 20s mientras el
+ * cliente deja el panel abierto esperando el estado de su pedido. Con el
+ * límite estricto de arriba (pensado para no gastar saldo de apiperu.dev),
+ * ese sondeo agotaría el cupo en menos de dos minutos y el cliente se
+ * quedaría viendo un error de "demasiados intentos" sin haber hecho nada
+ * raro.
+ */
+const INTENTOS_MAXIMOS_CONSULTA = 60;
+const intentosConsultaPorIp = new Map();
+
+function limiteConsultaExcedido(ip) {
+  const ahora = Date.now();
+  const intentos = (intentosConsultaPorIp.get(ip) || []).filter((t) => ahora - t < VENTANA_MS);
+  intentos.push(ahora);
+  intentosConsultaPorIp.set(ip, intentos);
+  return intentos.length > INTENTOS_MAXIMOS_CONSULTA;
+}
+
 async function obtenerPrecioPaquete(pool) {
   const result = await pool.request().query("SELECT Valor FROM Configuraciones WHERE Clave = 'PRECIO_PAQUETE'");
   return result.recordset.length > 0 ? Number(result.recordset[0].Valor) : null;
@@ -331,14 +352,14 @@ async function crearPedidoPublico(req, res, next) {
 
 /**
  * Consulta pública de pedidos por DNI, sin login: el visitante solo escribe
- * su DNI (ya validado por validateConsultarPedidosPublico) y ve sus pedidos
- * SOLICITADO (pendiente de confirmar) y PENDIENTE (confirmado, pendiente de
- * entrega) — nunca los ya ENTREGADO/RECHAZADO/CANCELADO, que quedan solo
- * para el historial dentro de la app real. Mismo límite por IP que
- * crearPedidoPublico: es la otra puerta sin JWT del sistema.
+ * su DNI (ya validado por validateConsultarPedidosPublico) y ve el estado
+ * de cada uno de sus pedidos recientes (pendiente de confirmar, rechazado,
+ * confirmado por entregar o ya entregado) — la página lo vuelve a llamar
+ * sola cada cierto tiempo mientras deja el panel abierto, para que el
+ * estado se actualice sin que tenga que volver a buscar a mano.
  */
 async function consultarPedidosPublicos(req, res, next) {
-  if (limiteExcedido(req.ip)) {
+  if (limiteConsultaExcedido(req.ip)) {
     return res.status(429).json({ mensaje: 'Demasiados intentos. Intenta de nuevo en unos minutos.' });
   }
 
@@ -363,9 +384,13 @@ async function consultarPedidosPublicos(req, res, next) {
     }
     const { IdCliente: idCliente } = clienteResult.recordset[0];
 
+    // Los 20 más recientes de cualquier estado (antes solo se mostraban
+    // SOLICITADO/PENDIENTE) — así el cliente ve si su pedido fue
+    // rechazado, confirmado o ya entregado, no solo mientras sigue
+    // pendiente. Un tope razonable, no todo el historial de siempre.
     const pedidosResult = await pool.request()
       .input('IdCliente', sql.Int, idCliente)
-      .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdCliente = @IdCliente AND pd.Estado IN ('SOLICITADO', 'PENDIENTE') ORDER BY pd.FechaCreacion DESC`);
+      .query(`SELECT TOP 20 * FROM (${SELECT_PEDIDOS_BASE} WHERE pd.IdCliente = @IdCliente) sub ORDER BY sub.FechaCreacion DESC`);
 
     return res.status(200).json({
       nombre: [nombres, apellidoPaterno].filter(Boolean).join(' '),

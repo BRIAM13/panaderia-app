@@ -89,10 +89,9 @@ export async function crearPedidoPublico(
   return manejarRespuesta<PedidoPublicoResultado>(respuesta);
 }
 
-/** Solo los dos estados que le importan a un cliente esperando su pan:
- * SOLICITADO (todavía nadie de la tienda lo confirmó) y PENDIENTE
- * (confirmado, en camino a entregarse). Ya entregado/cancelado/rechazado no
- * aparece acá — eso queda para el historial dentro de /app/. */
+/** Los pedidos recientes (últimos 20) del cliente, en cualquier estado —
+ * la página los vuelve a pedir sola cada cierto tiempo mientras el panel
+ * queda abierto, para que el estado se vea actualizado sin recargar. */
 export interface PedidoPublicoConsultaItem {
   idPedido: number;
   numeroPedidoDia: number;
@@ -100,7 +99,7 @@ export interface PedidoPublicoConsultaItem {
   producto: string;
   cantidad: number;
   total: number;
-  estado: "SOLICITADO" | "PENDIENTE";
+  estado: "SOLICITADO" | "PENDIENTE" | "RECHAZADO" | "ENTREGADO" | "CANCELADO";
   fechaCreacion: string;
 }
 
