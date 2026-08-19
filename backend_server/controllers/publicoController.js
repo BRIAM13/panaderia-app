@@ -4,8 +4,8 @@ const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos'
 const { buscarPersonaPorDni, buscarEmpresaPorRuc } = require('./externalController');
 const { intentarClonarUsuarioCliente } = require('./clientesController');
 const { notificarPersonalTienda, SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
-const { obtenerHorariosPanaderia, validarFechaEntrega } = require('../utils/horariosPanaderia');
-const { instantePeru } = require('../utils/fechaPeru');
+const { obtenerHorariosPanaderia } = require('../utils/horariosPanaderia');
+const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
 const { RUC_PERU_REGEX } = require('../middlewares/validators');
 
 // Tiendas que la página web pública puede mostrar/vender — Mercadería y
@@ -116,9 +116,13 @@ async function crearPedidoPublico(req, res, next) {
   const pool = await getPool();
 
   // La fecha/hora de recojo (solo pan de agua/francés, vendidos por
-  // unidad) se valida ANTES de abrir la transacción — nunca confía en lo
-  // que mandó el cliente, se recalcula acá con el horario configurado
-  // (Configuraciones, editable desde la app) y la hora real del servidor.
+  // unidad) se valida ANTES de abrir la transacción. A propósito NO se
+  // rechaza un horario fuera del rango configurado (Configuraciones) — el
+  // cliente puede elegir cualquier hora, y si cae fuera del horario normal
+  // el pedido se registra igual: el negocio confirma disponibilidad de
+  // stock por WhatsApp antes de separarlo (ver PedidoForm.tsx, el aviso
+  // que le muestra esto al cliente). Lo único que de verdad se exige es
+  // una fecha/hora con formato válido y que no sea anterior a hoy.
   let fechaEntregaUtc = null;
   const productoPreview = await pool.request()
     .input('IdProducto', sql.Int, idProducto)
@@ -138,13 +142,11 @@ async function crearPedidoPublico(req, res, next) {
       return res.status(400).json({ mensaje: 'Elige una fecha y hora de recojo válidas.' });
     }
     const [, anio, mes, dia, hora, minuto] = coincidencia.map(Number);
-    const horarios = await obtenerHorariosPanaderia(pool);
-    if (!validarFechaEntrega({ anio, mes, dia, hora, minuto }, horarios)) {
-      return res.status(400).json({
-        mensaje: `La hora de recojo elegida ya no está disponible. Actualiza la página y vuelve a intentar — pedidos hasta las ${horarios.horaLimitePedido} se recogen el mismo día desde las ${horarios.horaRecojoMismoDia}, luego de esa hora el recojo pasa para el día siguiente desde las ${horarios.horaRecojoDiaSiguiente}.`,
-      });
+    const fechaPropuesta = instantePeru({ anio, mes, dia, hora, minuto });
+    if (fechaEntregaEsAnteriorAHoy(fechaPropuesta)) {
+      return res.status(400).json({ mensaje: 'La fecha de recojo no puede ser anterior a hoy.' });
     }
-    fechaEntregaUtc = instantePeru({ anio, mes, dia, hora, minuto });
+    fechaEntregaUtc = fechaPropuesta;
   }
 
   const transaction = new sql.Transaction(pool);
