@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Ban, CheckCircle2, Clock, Loader2, PackageSearch, Truck, X, XCircle } from "lucide-react";
+import {
+  Ban,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Loader2,
+  PackageSearch,
+  Truck,
+  X,
+  XCircle,
+} from "lucide-react";
 import {
   ApiError,
   consultarPedidosPublicos,
+  type PedidoPublicoConsultaItem,
   type PedidoPublicoConsultaResultado,
 } from "../services/api";
 
@@ -43,6 +54,19 @@ const ESTADO_INFO = {
 const ESTADOS_ACTIVOS = new Set(["SOLICITADO", "PENDIENTE"]);
 const INTERVALO_REFRESCO_MS = 20000;
 
+// Orden fijo de los grupos, sin importar el orden en que llegaron del
+// servidor — primero lo ya resuelto a favor del cliente (entregado),
+// después lo confirmado en camino, luego lo que todavía espera respuesta,
+// y al final lo que no llegó a concretarse.
+const ORDEN_ESTADOS = ["ENTREGADO", "PENDIENTE", "SOLICITADO", "RECHAZADO", "CANCELADO"] as const;
+
+function agruparPedidos(pedidos: PedidoPublicoConsultaItem[]) {
+  return ORDEN_ESTADOS.map((estado) => ({
+    estado,
+    pedidos: pedidos.filter((p) => p.estado === estado),
+  })).filter((grupo) => grupo.pedidos.length > 0);
+}
+
 /** Búsqueda pública y sin login: solo el DNI, y los pedidos recientes del
  * cliente en cualquier estado. Mientras el panel queda abierto y todavía
  * hay algún pedido sin resolver, se vuelve a consultar solo cada 20s para
@@ -56,11 +80,25 @@ export function SeguimientoPedido() {
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<PedidoPublicoConsultaResultado | null>(null);
   const dniConsultadoRef = useRef("");
+  // Qué grupos (por estado) están desplegados — arrancan todos plegados;
+  // el cliente elige cuál abrir. Un refresco del sondeo no toca esto, así
+  // que un grupo que ya abrió no se le vuelve a cerrar solo.
+  const [gruposAbiertos, setGruposAbiertos] = useState<Set<string>>(new Set());
+
+  function alternarGrupo(estado: string) {
+    setGruposAbiertos((actual) => {
+      const nuevo = new Set(actual);
+      if (nuevo.has(estado)) nuevo.delete(estado);
+      else nuevo.add(estado);
+      return nuevo;
+    });
+  }
 
   function alternar() {
     setAbierto((v) => !v);
     setError(null);
     setResultado(null);
+    setGruposAbiertos(new Set());
   }
 
   async function buscar(e: React.FormEvent) {
@@ -94,6 +132,7 @@ export function SeguimientoPedido() {
     setResultado(null);
     setError(null);
     setDni("");
+    setGruposAbiertos(new Set());
   }
 
   // Sondeo en tiempo real: solo mientras el panel está abierto, hay un
@@ -182,35 +221,67 @@ export function SeguimientoPedido() {
                               Hola, {resultado.nombre}
                             </p>
                           )}
-                          <ul className="space-y-3">
-                            {resultado.pedidos.map((pedido) => {
-                              const info = ESTADO_INFO[pedido.estado];
+                          <div className="space-y-2.5">
+                            {agruparPedidos(resultado.pedidos).map((grupo) => {
+                              const info = ESTADO_INFO[grupo.estado];
                               const Icono = info.icono;
+                              const abiertoGrupo = gruposAbiertos.has(grupo.estado);
                               return (
-                                <li
-                                  key={pedido.idPedido}
-                                  className="rounded-2xl bg-pan-crema-suave px-5 py-4 shadow-sm shadow-pan-carbon/5"
+                                <div
+                                  key={grupo.estado}
+                                  className="overflow-hidden rounded-2xl bg-pan-crema-suave shadow-sm shadow-pan-carbon/5"
                                 >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                      <p className="font-semibold text-pan-carbon">
-                                        Pedido #{pedido.numeroPedidoDia} · {pedido.producto}
-                                      </p>
-                                      <p className="text-sm text-pan-carbon-suave">
-                                        {pedido.cantidad} · {pedido.tienda} · S/ {pedido.total.toFixed(2)}
-                                      </p>
-                                    </div>
-                                    <span
-                                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${info.clases}`}
-                                    >
-                                      <Icono className="h-3.5 w-3.5" />
-                                      {info.etiqueta}
+                                  <button
+                                    type="button"
+                                    onClick={() => alternarGrupo(grupo.estado)}
+                                    aria-expanded={abiertoGrupo}
+                                    className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-pan-terracota-suave/25"
+                                  >
+                                    <span className="flex items-center gap-2.5">
+                                      <span
+                                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${info.clases}`}
+                                      >
+                                        <Icono className="h-3.5 w-3.5" />
+                                        {info.etiqueta}
+                                      </span>
+                                      <span className="text-sm text-pan-carbon-suave">
+                                        {grupo.pedidos.length}{" "}
+                                        {grupo.pedidos.length === 1 ? "pedido" : "pedidos"}
+                                      </span>
                                     </span>
-                                  </div>
-                                </li>
+                                    <ChevronDown
+                                      className={`h-4 w-4 shrink-0 text-pan-carbon-suave transition-transform duration-200 ${
+                                        abiertoGrupo ? "rotate-180" : ""
+                                      }`}
+                                    />
+                                  </button>
+                                  <AnimatePresence initial={false}>
+                                    {abiertoGrupo && (
+                                      <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                                      >
+                                        <ul className="space-y-2 border-t border-pan-borde/30 px-5 py-3">
+                                          {grupo.pedidos.map((pedido) => (
+                                            <li key={pedido.idPedido}>
+                                              <p className="font-semibold text-pan-carbon">
+                                                Pedido #{pedido.numeroPedidoDia} · {pedido.producto}
+                                              </p>
+                                              <p className="text-sm text-pan-carbon-suave">
+                                                {pedido.cantidad} · {pedido.tienda} · S/ {pedido.total.toFixed(2)}
+                                              </p>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
                               );
                             })}
-                          </ul>
+                          </div>
                         </div>
                       )}
                       <button
