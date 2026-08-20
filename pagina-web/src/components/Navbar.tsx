@@ -3,6 +3,7 @@ import { motion, useMotionValueEvent, useScroll } from "framer-motion";
 import { Menu as MenuIcon, X, User, Download } from "lucide-react";
 import { SITE } from "../data/config";
 import { desplazarASeccion } from "../utils/scroll";
+import { DescargarAppModal } from "./DescargarAppModal";
 
 const ENLACES = [
   { href: "#nosotros", texto: "Nosotros" },
@@ -19,6 +20,7 @@ const ES_ANDROID = typeof navigator !== "undefined" && /Android/i.test(navigator
 export function Navbar() {
   const [abierto, setAbierto] = useState(false);
   const [conSombra, setConSombra] = useState(false);
+  const [modalDescargaAbierto, setModalDescargaAbierto] = useState(false);
   const { scrollY } = useScroll();
 
   // Solo se eleva con sombra una vez que el contenido empieza a pasar por
@@ -72,14 +74,14 @@ export function Navbar() {
             Iniciar sesión
           </a>
           {ES_ANDROID && (
-            <a
-              href="/downloads/PanaderiaRonceros-latest.apk"
-              download
+            <button
+              type="button"
+              onClick={() => setModalDescargaAbierto(true)}
               className="boton-relleno inline-flex items-center gap-1.5 rounded-full border border-pan-borde bg-pan-crema-suave px-4 py-2 text-sm font-medium text-pan-carbon"
             >
               <Download className="h-4 w-4" />
               Descargar app
-            </a>
+            </button>
           )}
           <a
             href="#pedido"
@@ -131,15 +133,17 @@ export function Navbar() {
             Iniciar sesión
           </a>
           {ES_ANDROID && (
-            <a
-              href="/downloads/PanaderiaRonceros-latest.apk"
-              download
-              onClick={() => setAbierto(false)}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
+            <button
+              type="button"
+              onClick={() => {
+                setAbierto(false);
+                setModalDescargaAbierto(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
             >
               <Download className="h-4 w-4" />
               Descargar app
-            </a>
+            </button>
           )}
           <a
             href="#pedido"
@@ -154,6 +158,8 @@ export function Navbar() {
           </a>
         </motion.nav>
       )}
+
+      <DescargarAppModal abierto={modalDescargaAbierto} onCerrar={() => setModalDescargaAbierto(false)} />
     </motion.header>
   );
 }

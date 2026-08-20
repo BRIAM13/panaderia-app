@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
@@ -21,7 +22,14 @@ interface SelectorModalProps {
  * SelectorHora): el cliente arma su elección adentro y solo se aplica al
  * presionar "Aceptar" — "Cancelar" o tocar fuera descarta el borrador y
  * deja el valor que ya estaba. Con `mostrarPie={false}` (ej. el selector
- * de pan) no hay borrador: cada clic en un ítem ya aplica y cierra. */
+ * de pan) no hay borrador: cada clic en un ítem ya aplica y cierra.
+ *
+ * Se renderiza vía portal directo a `document.body`: si quedara anidado
+ * dentro de un ancestro con `transform` (ej. cualquier `motion.div` de
+ * framer-motion ya animado), ese ancestro se vuelve el "contenedor" del
+ * `position: fixed` y la ventana emergente queda comprimida a su alto en
+ * vez de cubrir toda la pantalla — un portal la saca de ese árbol por
+ * completo, sin importar dónde se use este componente. */
 export function SelectorModal({
   abierto,
   titulo,
@@ -40,7 +48,7 @@ export function SelectorModal({
     };
   }, [abierto]);
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {abierto && (
         <motion.div
@@ -89,6 +97,7 @@ export function SelectorModal({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
