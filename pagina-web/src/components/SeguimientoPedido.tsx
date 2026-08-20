@@ -67,6 +67,14 @@ function agruparPedidos(pedidos: PedidoPublicoConsultaItem[]) {
   })).filter((grupo) => grupo.pedidos.length > 0);
 }
 
+const FORMATO_FECHA_CORTA = new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "short" });
+
+/** ISO completo (con hora) -> "19 ago" — solo el día en que se registró,
+ * como referencia rápida dentro de cada tarjeta, no la hora exacta. */
+function formatearFechaCorta(fechaIso: string): string {
+  return FORMATO_FECHA_CORTA.format(new Date(fechaIso));
+}
+
 /** Búsqueda pública y sin login: solo el DNI, y los pedidos recientes del
  * cliente en cualquier estado. Mientras el panel queda abierto y todavía
  * hay algún pedido sin resolver, se vuelve a consultar solo cada 20s para
@@ -221,7 +229,7 @@ export function SeguimientoPedido() {
                               Hola, {resultado.nombre}
                             </p>
                           )}
-                          <div className="space-y-2.5">
+                          <div className="space-y-3">
                             {agruparPedidos(resultado.pedidos).map((grupo) => {
                               const info = ESTADO_INFO[grupo.estado];
                               const Icono = info.icono;
@@ -229,24 +237,28 @@ export function SeguimientoPedido() {
                               return (
                                 <div
                                   key={grupo.estado}
-                                  className="overflow-hidden rounded-2xl bg-pan-crema-suave shadow-sm shadow-pan-carbon/5"
+                                  className="overflow-hidden rounded-2xl border border-pan-borde/40 bg-pan-crema-suave shadow-sm shadow-pan-carbon/5"
                                 >
                                   <button
                                     type="button"
                                     onClick={() => alternarGrupo(grupo.estado)}
                                     aria-expanded={abiertoGrupo}
-                                    className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-pan-terracota-suave/25"
+                                    className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-pan-terracota-suave/20"
                                   >
-                                    <span className="flex items-center gap-2.5">
+                                    <span className="flex items-center gap-3">
                                       <span
-                                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${info.clases}`}
+                                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${info.clases}`}
                                       >
-                                        <Icono className="h-3.5 w-3.5" />
-                                        {info.etiqueta}
+                                        <Icono className="h-4.5 w-4.5" />
                                       </span>
-                                      <span className="text-sm text-pan-carbon-suave">
-                                        {grupo.pedidos.length}{" "}
-                                        {grupo.pedidos.length === 1 ? "pedido" : "pedidos"}
+                                      <span>
+                                        <span className="block text-sm font-semibold text-pan-carbon">
+                                          {info.etiqueta}
+                                        </span>
+                                        <span className="block text-xs text-pan-carbon-suave">
+                                          {grupo.pedidos.length}{" "}
+                                          {grupo.pedidos.length === 1 ? "pedido" : "pedidos"}
+                                        </span>
                                       </span>
                                     </span>
                                     <ChevronDown
@@ -263,15 +275,35 @@ export function SeguimientoPedido() {
                                         exit={{ height: 0, opacity: 0 }}
                                         transition={{ duration: 0.25, ease: EASE_PREMIUM }}
                                       >
-                                        <ul className="space-y-2 border-t border-pan-borde/30 px-5 py-3">
+                                        <ul className="space-y-2.5 border-t border-pan-borde/30 bg-pan-crema/60 px-4 py-3.5">
                                           {grupo.pedidos.map((pedido) => (
-                                            <li key={pedido.idPedido}>
-                                              <p className="font-semibold text-pan-carbon">
-                                                Pedido #{pedido.numeroPedidoDia} · {pedido.producto}
-                                              </p>
-                                              <p className="text-sm text-pan-carbon-suave">
-                                                {pedido.cantidad} · {pedido.tienda} · S/ {pedido.total.toFixed(2)}
-                                              </p>
+                                            <li
+                                              key={pedido.idPedido}
+                                              className="rounded-xl border border-pan-borde/40 bg-pan-crema-suave px-4 py-3"
+                                            >
+                                              <div className="flex items-baseline justify-between gap-2">
+                                                <p className="font-semibold text-pan-carbon">
+                                                  Pedido #{pedido.numeroPedidoDia}
+                                                </p>
+                                                <p className="shrink-0 text-xs text-pan-carbon-suave">
+                                                  {formatearFechaCorta(pedido.fechaCreacion)}
+                                                </p>
+                                              </div>
+                                              <p className="mt-0.5 text-sm text-pan-carbon-suave">{pedido.producto}</p>
+                                              <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-pan-borde/30 pt-2.5 text-sm">
+                                                <span className="text-pan-carbon-suave">Cantidad</span>
+                                                <span className="text-right font-medium text-pan-carbon">
+                                                  {pedido.cantidad}
+                                                </span>
+                                                <span className="text-pan-carbon-suave">Tienda</span>
+                                                <span className="text-right font-medium text-pan-carbon">
+                                                  {pedido.tienda ?? "—"}
+                                                </span>
+                                                <span className="text-pan-carbon-suave">Total</span>
+                                                <span className="text-right font-semibold text-pan-terracota">
+                                                  S/ {pedido.total.toFixed(2)}
+                                                </span>
+                                              </div>
                                             </li>
                                           ))}
                                         </ul>
