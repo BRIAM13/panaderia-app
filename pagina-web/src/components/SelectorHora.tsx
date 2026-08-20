@@ -419,6 +419,10 @@ interface SelectorHoraProps {
    * con el reloj (cada minuto), así que si el cliente deja el selector
    * abierto un buen rato, el piso lo sigue empujando hacia adelante. */
   minimoHoy?: string;
+  /** "HH:mm": si se pasa, ninguna hora después de esta queda seleccionable
+   * (el negocio ya cerró para recoger hoy — ver esMuyTardeHoy). A
+   * diferencia de `minimoHoy`, este no cambia con el reloj. */
+  maximoHoy?: string;
   /** false = el botón no abre este selector al tocarlo, sino que dispara
    * `onIntentoBloqueado` (usado para exigir elegir la fecha primero). */
   puedeAbrir?: boolean;
@@ -431,7 +435,7 @@ interface SelectorHoraProps {
  * Cancelar/Aceptar, para que el cliente pueda ver bien lo que eligió antes
  * de aplicarlo. */
 export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(function SelectorHora(
-  { id, valor, onChange, placeholder = "Elige una hora", minimoHoy, puedeAbrir = true, onIntentoBloqueado },
+  { id, valor, onChange, placeholder = "Elige una hora", minimoHoy, maximoHoy, puedeAbrir = true, onIntentoBloqueado },
   ref,
 ) {
   const [abierto, setAbierto] = useState(false);
@@ -467,9 +471,12 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
   }
 
   const minutosPiso = minimoHoy ? horaTextoAMinutos(minimoHoy) : null;
+  const minutosTope = maximoHoy ? horaTextoAMinutos(maximoHoy) : null;
   function muyPronto(hora12: number, minuto: number, periodo: Periodo): boolean {
-    if (minutosPiso === null) return false;
-    return horaTextoAMinutos(a24h(hora12, minuto, periodo)) < minutosPiso;
+    const totalMinutos = horaTextoAMinutos(a24h(hora12, minuto, periodo));
+    if (minutosPiso !== null && totalMinutos < minutosPiso) return true;
+    if (minutosTope !== null && totalMinutos > minutosTope) return true;
+    return false;
   }
 
   const draftInvalido = muyPronto(draftHora, draftMinuto, draftPeriodo);
@@ -513,7 +520,9 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
       >
         {minimoHoy && (
           <p className="mb-3 text-center text-xs text-pan-carbon-suave">
-            Para hoy, lo más pronto que puedes elegir es {formatearHora12(minimoHoy)}.
+            {maximoHoy
+              ? `Para hoy, puedes elegir entre las ${formatearHora12(minimoHoy)} y las ${formatearHora12(maximoHoy)}.`
+              : `Para hoy, lo más pronto que puedes elegir es ${formatearHora12(minimoHoy)}.`}
           </p>
         )}
         <div className="relative">

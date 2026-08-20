@@ -10,6 +10,7 @@ const {
   CLAVE_HORA_MISMO_DIA,
   CLAVE_HORA_DIA_SIGUIENTE,
   CLAVE_MINUTOS_TOLERANCIA,
+  CLAVE_HORA_TOPE_RECOJO,
 } = require('../utils/horariosPanaderia');
 
 const DEFAULTS = [
@@ -32,6 +33,11 @@ const DEFAULTS = [
     clave: CLAVE_MINUTOS_TOLERANCIA,
     valor: '30',
     descripcion: 'Minutos mínimos de anticipación para recoger un pedido de pan de agua/francés registrado hoy mismo (número entero de minutos).',
+  },
+  {
+    clave: CLAVE_HORA_TOPE_RECOJO,
+    valor: '22:00',
+    descripcion: 'Hora tope para recoger un pedido de pan de agua/francés el mismo día — después de esta hora ya no se ofrece el mismo día (formato HH:mm).',
   },
 ];
 

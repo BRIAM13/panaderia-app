@@ -4,7 +4,7 @@ const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos'
 const { buscarPersonaPorDni, buscarEmpresaPorRuc } = require('./externalController');
 const { intentarClonarUsuarioCliente } = require('./clientesController');
 const { notificarPersonalTienda, SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
-const { obtenerHorariosPanaderia, esMuyProntoParaHoy } = require('../utils/horariosPanaderia');
+const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy } = require('../utils/horariosPanaderia');
 const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
 const { RUC_PERU_REGEX } = require('../middlewares/validators');
 
@@ -20,6 +20,16 @@ const SLUGS_TIENDA_PUBLICA = ['hamburguesas', 'panaderia'];
 // (crearMiPedido), para que el mínimo no dependa de qué canal usó el
 // cliente (página web o app).
 const CANTIDAD_MINIMA_UNIDAD = 50;
+
+/** "22:00" -> "10pm" — mismo formato sin espacio ni puntos que usa la
+ * página web, para que un mensaje de error del servidor se lea igual que
+ * el resto del sitio. */
+function formatearHora12(horaTexto) {
+  const [h, m] = horaTexto.split(':').map(Number);
+  const periodo = h >= 12 ? 'pm' : 'am';
+  const hora12 = h % 12 === 0 ? 12 : h % 12;
+  return m === 0 ? `${hora12}${periodo}` : `${hora12}:${String(m).padStart(2, '0')}${periodo}`;
+}
 
 /**
  * Límite simple en memoria (sin dependencia nueva): esta es la única ruta
@@ -176,6 +186,14 @@ async function crearPedidoPublico(req, res, next) {
     if (esMuyProntoParaHoy({ anio, mes, dia, hora, minuto }, horarios)) {
       return res.status(400).json({
         mensaje: `Para pedidos de hoy necesitamos al menos ${horarios.minutosTolerancia} minutos de anticipación. Elige una hora un poco más adelante.`,
+      });
+    }
+    // Segundo piso duro: el negocio ya cerró para recoger hoy después de
+    // esta hora, sin importar la tolerancia — el cliente tiene que elegir
+    // desde mañana.
+    if (esMuyTardeParaHoy({ anio, mes, dia, hora, minuto }, horarios)) {
+      return res.status(400).json({
+        mensaje: `Ya no se puede recoger hoy después de las ${formatearHora12(horarios.horaTopeRecojo)}. Elige una fecha desde mañana.`,
       });
     }
     fechaEntregaUtc = fechaPropuesta;

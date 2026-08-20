@@ -8,6 +8,7 @@ const CLAVE_HORA_LIMITE = 'PANADERIA_HORA_LIMITE_PEDIDO';
 const CLAVE_HORA_MISMO_DIA = 'PANADERIA_HORA_RECOJO_MISMO_DIA';
 const CLAVE_HORA_DIA_SIGUIENTE = 'PANADERIA_HORA_RECOJO_DIA_SIGUIENTE';
 const CLAVE_MINUTOS_TOLERANCIA = 'PANADERIA_MINUTOS_TOLERANCIA';
+const CLAVE_HORA_TOPE_RECOJO = 'PANADERIA_HORA_TOPE_RECOJO';
 
 const UN_DIA_MS = 24 * 60 * 60 * 1000;
 
@@ -23,7 +24,7 @@ function horaAMinutos(horaTexto) {
 async function obtenerHorariosPanaderia(pool) {
   const result = await pool.request().query(`
     SELECT Clave, Valor FROM Configuraciones
-    WHERE Clave IN ('${CLAVE_HORA_LIMITE}', '${CLAVE_HORA_MISMO_DIA}', '${CLAVE_HORA_DIA_SIGUIENTE}', '${CLAVE_MINUTOS_TOLERANCIA}')
+    WHERE Clave IN ('${CLAVE_HORA_LIMITE}', '${CLAVE_HORA_MISMO_DIA}', '${CLAVE_HORA_DIA_SIGUIENTE}', '${CLAVE_MINUTOS_TOLERANCIA}', '${CLAVE_HORA_TOPE_RECOJO}')
   `);
   const mapa = Object.fromEntries(result.recordset.map((r) => [r.Clave, r.Valor]));
   return {
@@ -31,6 +32,9 @@ async function obtenerHorariosPanaderia(pool) {
     horaRecojoMismoDia: mapa[CLAVE_HORA_MISMO_DIA] || '15:30',
     horaRecojoDiaSiguiente: mapa[CLAVE_HORA_DIA_SIGUIENTE] || '04:00',
     minutosTolerancia: Number(mapa[CLAVE_MINUTOS_TOLERANCIA]) || 30,
+    // Hora tope de recojo: después de esta hora ya no se puede recoger un
+    // pedido el mismo día, sin importar la tolerancia — el negocio cierra.
+    horaTopeRecojo: mapa[CLAVE_HORA_TOPE_RECOJO] || '22:00',
   };
 }
 
@@ -102,13 +106,45 @@ function esMuyProntoParaHoy({ anio, mes, dia, hora, minuto }, horarios) {
   return minutosPropuestos < minutosMinimos;
 }
 
+/**
+ * Tope duro de recojo: para una fecha de recojo elegida que caiga HOY, el
+ * cliente nunca puede elegir una hora después de `horaTopeRecojo` (el
+ * negocio ya cerró para el día) — sin importar la tolerancia. No aplica a
+ * fechas futuras, esas siempre arrancan de nuevo desde `horaRecojoDiaSiguiente`.
+ */
+function esMuyTardeParaHoy({ anio, mes, dia, hora, minuto }, horarios) {
+  const hoyPeru = diaCalendarioPeru(new Date());
+  const fechaPropuesta = Date.UTC(anio, mes - 1, dia);
+  if (fechaPropuesta !== hoyPeru) return false;
+
+  const minutosPropuestos = hora * 60 + minuto;
+  return minutosPropuestos > horaAMinutos(horarios.horaTopeRecojo);
+}
+
+/**
+ * true si todavía queda al menos un minuto válido para recoger HOY —
+ * false cuando la tolerancia mínima ya empujó más allá del tope de recojo
+ * (ej. tope 10:00pm, tolerancia 30 min: desde las 9:30pm en adelante ya no
+ * queda ninguna hora de hoy que respete ambas reglas a la vez). En ese
+ * caso el propio día de hoy deja de ofrecerse como fecha de recojo — el
+ * cliente pasa directo a elegir desde mañana.
+ */
+function hayVentanaHoy(horarios) {
+  const ahora = horaActualPeru();
+  const minutosMinimos = ahora.hora * 60 + ahora.minuto + horarios.minutosTolerancia;
+  return minutosMinimos <= horaAMinutos(horarios.horaTopeRecojo);
+}
+
 module.exports = {
   CLAVE_HORA_LIMITE,
   CLAVE_HORA_MISMO_DIA,
   CLAVE_HORA_DIA_SIGUIENTE,
   CLAVE_MINUTOS_TOLERANCIA,
+  CLAVE_HORA_TOPE_RECOJO,
   obtenerHorariosPanaderia,
   calcularMinimoRecojo,
   validarFechaEntrega,
   esMuyProntoParaHoy,
+  esMuyTardeParaHoy,
+  hayVentanaHoy,
 };

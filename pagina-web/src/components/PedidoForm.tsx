@@ -10,7 +10,15 @@ import {
   type PedidoPublicoResultado,
   type ProductoPublico,
 } from "../services/api";
-import { esMuyProntoHoy, estaFueraDeVentana, formatearHora12, horaMinimaHoy, hoyISO } from "../utils/horariosPan";
+import {
+  esMuyProntoHoy,
+  esMuyTardeHoy,
+  estaFueraDeVentana,
+  formatearHora12,
+  hayVentanaHoy,
+  horaMinimaHoy,
+  hoyISO,
+} from "../utils/horariosPan";
 import { SelectorFecha, type SelectorFechaHandle, formatearFechaBonita } from "./SelectorFecha";
 import { SelectorHora, type SelectorHoraHandle } from "./SelectorHora";
 import { SelectorProducto } from "./SelectorProducto";
@@ -133,6 +141,22 @@ export function PedidoForm() {
   // aunque el cliente se quede un buen rato con el selector abierto.
   const esRecojoHoy = fechaRecojo === hoyISO(ahora);
   const minimoHoraHoy = horarios && esRecojoHoy ? horaMinimaHoy(horarios, ahora) : undefined;
+  // Segundo piso duro: el negocio ya cerró para recoger hoy después de
+  // esta hora (fija, no depende del reloj como el mínimo de arriba).
+  const maximoHoraHoy = horarios && esRecojoHoy ? horarios.horaTopeRecojo : undefined;
+
+  // Una vez que ni con la tolerancia mínima alcanza a caber antes del
+  // tope de recojo (ej. tope 10pm, tolerancia 30 min: desde las 9:30pm en
+  // adelante), hoy deja de ofrecerse como fecha — el calendario arranca
+  // directo en mañana, igual que si ya hubiera pasado la medianoche.
+  const hoyDisponible = !horarios || hayVentanaHoy(horarios, ahora);
+  const minimoFechaRecojo = hoyDisponible
+    ? ahora
+    : (() => {
+        const manana = new Date(ahora);
+        manana.setDate(manana.getDate() + 1);
+        return manana;
+      })();
 
   // Al cambiar de producto, la cantidad y el recojo se limpian — quedan
   // vacíos con un placeholder que ya indica qué elegir (ver más abajo), en
@@ -156,9 +180,18 @@ export function PedidoForm() {
   // suficiente como para que ese horario ya no respete los minutos de
   // tolerancia, en vez de borrarla (y dejarlo con el campo vacío otra
   // vez) se adelanta justo lo necesario para seguir siendo válida — así
-  // nunca desaparece la hora que ya había elegido, solo se corrige.
+  // nunca desaparece la hora que ya había elegido, solo se corrige. Pero
+  // si ya no queda ninguna hora válida hoy (la tolerancia empujó más allá
+  // del tope de recojo), ahí sí se limpian fecha y hora: no hay a qué
+  // horario "avanzar", el cliente tiene que elegir un día distinto.
   useEffect(() => {
-    if (horarios && fechaRecojo && horaRecojo && esMuyProntoHoy(fechaRecojo, horaRecojo, horarios, ahora)) {
+    if (!horarios || !fechaRecojo || !horaRecojo || fechaRecojo !== hoyISO(ahora)) return;
+    if (!hayVentanaHoy(horarios, ahora) || esMuyTardeHoy(fechaRecojo, horaRecojo, horarios, ahora)) {
+      setFechaRecojo("");
+      setHoraRecojo("");
+      return;
+    }
+    if (esMuyProntoHoy(fechaRecojo, horaRecojo, horarios, ahora)) {
       setHoraRecojo(horaMinimaHoy(horarios, ahora));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -232,6 +265,12 @@ export function PedidoForm() {
       }
       if (horarios && esMuyProntoHoy(fechaRecojo, horaRecojo, horarios)) {
         setError(`Para pedidos de hoy necesitamos al menos ${horarios.minutosTolerancia} minutos de anticipación.`);
+        return;
+      }
+      if (horarios && esMuyTardeHoy(fechaRecojo, horaRecojo, horarios)) {
+        setError(
+          `Ya no se puede recoger hoy después de las ${formatearHora12(horarios.horaTopeRecojo)}. Elige otro horario.`,
+        );
         return;
       }
       fechaEntrega = `${fechaRecojo}T${horaRecojo}`;
@@ -490,7 +529,7 @@ export function PedidoForm() {
                         id="fecha-recojo"
                         valor={fechaRecojo}
                         onChange={setFechaRecojo}
-                        minimo={new Date()}
+                        minimo={minimoFechaRecojo}
                         aviso={avisoFechaPrimero ? "Primero elige la fecha, después podrás elegir la hora." : undefined}
                       />
                       <SelectorHora
@@ -499,6 +538,7 @@ export function PedidoForm() {
                         valor={horaRecojo}
                         onChange={setHoraRecojo}
                         minimoHoy={minimoHoraHoy}
+                        maximoHoy={maximoHoraHoy}
                         puedeAbrir={!!fechaRecojo}
                         onIntentoBloqueado={alIntentarAbrirHoraSinFecha}
                       />
@@ -507,7 +547,8 @@ export function PedidoForm() {
                       Pedidos hasta las {formatearHora12(horarios.horaLimitePedido)} se recogen hoy mismo
                       desde las {formatearHora12(horarios.horaRecojoMismoDia)}. Después de esa hora, el
                       recojo pasa para el día siguiente desde las{" "}
-                      {formatearHora12(horarios.horaRecojoDiaSiguiente)}.
+                      {formatearHora12(horarios.horaRecojoDiaSiguiente)}. El recojo el mismo día solo se
+                      puede pedir hasta las {formatearHora12(horarios.horaTopeRecojo)}.
                     </p>
                     <AnimatePresence>
                       {fueraDeVentanaActual && (

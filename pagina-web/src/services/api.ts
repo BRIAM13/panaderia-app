@@ -31,6 +31,9 @@ export interface HorariosPanaderia {
   horaRecojoMismoDia: string;
   horaRecojoDiaSiguiente: string;
   minutosTolerancia: number;
+  /** Hora tope para recoger un pedido el mismo día — después de esta hora
+   * ya no se ofrece el mismo día, sin importar la tolerancia. */
+  horaTopeRecojo: string;
 }
 
 export interface CatalogoPublicoResultado {
@@ -101,6 +104,9 @@ export interface PedidoPublicoConsultaItem {
   total: number;
   estado: "SOLICITADO" | "PENDIENTE" | "RECHAZADO" | "ENTREGADO" | "CANCELADO";
   fechaCreacion: string;
+  /** null en pedidos de pan de hamburguesa (por paquete), que no usan el
+   * flujo de recojo con fecha/hora — solo lo tienen los de pan por unidad. */
+  fechaEntrega: string | null;
 }
 
 export interface PedidoPublicoConsultaResultado {

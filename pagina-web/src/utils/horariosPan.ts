@@ -112,3 +112,28 @@ export function horaMinimaHoy(horarios: HorariosPanaderia, ahora = new Date()): 
   const m = minutos % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
+
+/** Segundo piso duro: para un pedido de HOY, tampoco se puede elegir una
+ * hora después de `horarios.horaTopeRecojo` — el negocio ya cerró para
+ * recoger ese día, sin importar la tolerancia. Refleja del lado del
+ * cliente la misma regla que el backend vuelve a exigir
+ * (esMuyTardeParaHoy en horariosPanaderia.js). */
+export function esMuyTardeHoy(
+  fechaElegida: string,
+  horaElegida: string,
+  horarios: HorariosPanaderia,
+  ahora = new Date(),
+): boolean {
+  if (fechaElegida !== formatearFecha(ahora)) return false;
+  return horaAMinutos(horaElegida) > horaAMinutos(horarios.horaTopeRecojo);
+}
+
+/** true si todavía queda al menos un minuto válido para recoger HOY —
+ * false una vez que la tolerancia mínima ya empuja más allá del tope de
+ * recojo (ej. tope 10pm, tolerancia 30 min: desde las 9:30pm en adelante
+ * ya no hay ninguna hora de hoy que respete ambas reglas a la vez). Se usa
+ * para que el selector de fecha deje de ofrecer "hoy" en ese caso — no
+ * tiene sentido dejarlo elegible si después ninguna hora sería válida. */
+export function hayVentanaHoy(horarios: HorariosPanaderia, ahora = new Date()): boolean {
+  return minutosDesdeAhoraMasTolerancia(horarios, ahora) <= horaAMinutos(horarios.horaTopeRecojo);
+}

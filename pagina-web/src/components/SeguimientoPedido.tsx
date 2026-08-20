@@ -17,6 +17,7 @@ import {
   type PedidoPublicoConsultaItem,
   type PedidoPublicoConsultaResultado,
 } from "../services/api";
+import { formatearHora12 } from "../utils/horariosPan";
 
 const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
 
@@ -73,6 +74,16 @@ const FORMATO_FECHA_CORTA = new Intl.DateTimeFormat("es-PE", { day: "numeric", m
  * como referencia rápida dentro de cada tarjeta, no la hora exacta. */
 function formatearFechaCorta(fechaIso: string): string {
   return FORMATO_FECHA_CORTA.format(new Date(fechaIso));
+}
+
+/** ISO completo -> "19 ago, 3:15pm" — día y hora juntos, para las filas de
+ * "Registrado" y "Recojo" de cada tarjeta (mismo formato de hora que usa
+ * PedidoForm, sin espacio ni puntos, para que se lea igual en todo el
+ * sitio). */
+function formatearFechaHora(fechaIso: string): string {
+  const fecha = new Date(fechaIso);
+  const horaTexto = `${String(fecha.getHours()).padStart(2, "0")}:${String(fecha.getMinutes()).padStart(2, "0")}`;
+  return `${formatearFechaCorta(fechaIso)}, ${formatearHora12(horaTexto)}`;
 }
 
 /** Búsqueda pública y sin login: solo el DNI, y los pedidos recientes del
@@ -327,6 +338,18 @@ export function SeguimientoPedido() {
                                               </div>
                                               <p className="mt-0.5 text-sm text-pan-carbon-suave">{pedido.producto}</p>
                                               <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-pan-borde/30 pt-2.5 text-sm">
+                                                <span className="text-pan-carbon-suave">Registrado</span>
+                                                <span className="text-right font-medium text-pan-carbon">
+                                                  {formatearFechaHora(pedido.fechaCreacion)}
+                                                </span>
+                                                {pedido.fechaEntrega && (
+                                                  <>
+                                                    <span className="text-pan-carbon-suave">Recojo</span>
+                                                    <span className="text-right font-medium text-pan-carbon">
+                                                      {formatearFechaHora(pedido.fechaEntrega)}
+                                                    </span>
+                                                  </>
+                                                )}
                                                 <span className="text-pan-carbon-suave">Cantidad</span>
                                                 <span className="text-right font-medium text-pan-carbon">
                                                   {pedido.cantidad}

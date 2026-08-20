@@ -65,10 +65,13 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
   });
 
   function abrir() {
-    // La primera vez (todavía sin elegir nada) el calendario abre con hoy
-    // ya marcado, listo para aceptar de una — si el cliente ya había
-    // elegido una fecha antes, reabrir vuelve a mostrar esa misma.
-    const draftInicial = valor || aClaveFecha(new Date());
+    // La primera vez (todavía sin elegir nada) el calendario abre con el
+    // primer día válido ya marcado, listo para aceptar de una — normalmente
+    // hoy, pero si hoy ya no admite ningún horario (ver `minimo`, que el
+    // padre puede empujar a mañana) arranca directo en el primer día que sí
+    // sirve. Si el cliente ya había elegido una fecha antes, reabrir vuelve
+    // a mostrar esa misma.
+    const draftInicial = valor || aClaveFecha(minimoDia);
     setDraft(draftInicial);
     const base = valor ? new Date(`${valor}T00:00:00`) : minimoDia;
     setMesVisible(new Date(base.getFullYear(), base.getMonth(), 1));
@@ -79,6 +82,11 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
     if (draft) onChange(draft);
     setAbierto(false);
   }
+
+  // Además de vacío, un borrador que quedó apuntando a un día que ya no es
+  // válido (ej. el panel se quedó abierto y "hoy" dejó de ofrecerse
+  // mientras tanto) tampoco debe poder aceptarse.
+  const draftInvalido = !draft || new Date(`${draft}T00:00:00`) < minimoDia;
 
   useImperativeHandle(ref, () => ({ abrir }));
 
@@ -110,7 +118,7 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
         titulo="Elige la fecha de recojo"
         onCancelar={() => setAbierto(false)}
         onAceptar={aceptar}
-        aceptarDeshabilitado={!draft}
+        aceptarDeshabilitado={draftInvalido}
       >
         {aviso && (
           <p className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-medium text-amber-800">
