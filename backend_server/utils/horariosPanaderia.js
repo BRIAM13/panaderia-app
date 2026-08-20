@@ -9,6 +9,8 @@ const CLAVE_HORA_MISMO_DIA = 'PANADERIA_HORA_RECOJO_MISMO_DIA';
 const CLAVE_HORA_DIA_SIGUIENTE = 'PANADERIA_HORA_RECOJO_DIA_SIGUIENTE';
 const CLAVE_MINUTOS_TOLERANCIA = 'PANADERIA_MINUTOS_TOLERANCIA';
 const CLAVE_HORA_TOPE_RECOJO = 'PANADERIA_HORA_TOPE_RECOJO';
+const CLAVE_HORA_APERTURA = 'PANADERIA_HORA_APERTURA';
+const CLAVE_HORA_CIERRE = 'PANADERIA_HORA_CIERRE';
 
 const UN_DIA_MS = 24 * 60 * 60 * 1000;
 
@@ -24,7 +26,7 @@ function horaAMinutos(horaTexto) {
 async function obtenerHorariosPanaderia(pool) {
   const result = await pool.request().query(`
     SELECT Clave, Valor FROM Configuraciones
-    WHERE Clave IN ('${CLAVE_HORA_LIMITE}', '${CLAVE_HORA_MISMO_DIA}', '${CLAVE_HORA_DIA_SIGUIENTE}', '${CLAVE_MINUTOS_TOLERANCIA}', '${CLAVE_HORA_TOPE_RECOJO}')
+    WHERE Clave IN ('${CLAVE_HORA_LIMITE}', '${CLAVE_HORA_MISMO_DIA}', '${CLAVE_HORA_DIA_SIGUIENTE}', '${CLAVE_MINUTOS_TOLERANCIA}', '${CLAVE_HORA_TOPE_RECOJO}', '${CLAVE_HORA_APERTURA}', '${CLAVE_HORA_CIERRE}')
   `);
   const mapa = Object.fromEntries(result.recordset.map((r) => [r.Clave, r.Valor]));
   return {
@@ -35,6 +37,11 @@ async function obtenerHorariosPanaderia(pool) {
     // Hora tope de recojo: después de esta hora ya no se puede recoger un
     // pedido el mismo día, sin importar la tolerancia — el negocio cierra.
     horaTopeRecojo: mapa[CLAVE_HORA_TOPE_RECOJO] || '22:00',
+    // Horario general de atención: rige el recojo de CUALQUIER día (hoy o
+    // una fecha futura), a diferencia de las reglas de arriba que solo
+    // aplican al mismo día del pedido.
+    horaApertura: mapa[CLAVE_HORA_APERTURA] || '04:00',
+    horaCierre: mapa[CLAVE_HORA_CIERRE] || '22:00',
   };
 }
 
@@ -135,16 +142,32 @@ function hayVentanaHoy(horarios) {
   return minutosMinimos <= horaAMinutos(horarios.horaTopeRecojo);
 }
 
+/**
+ * Piso/tope duro que aplica a CUALQUIER fecha de recojo (hoy o un día
+ * futuro), a diferencia de esMuyProntoParaHoy/esMuyTardeParaHoy que solo
+ * rigen si la fecha propuesta es exactamente hoy: el horario general de
+ * atención de la tienda. Sin esto, un cliente podía elegir una fecha
+ * futura a cualquier hora del día (ej. 12:05am), aunque la tienda ya
+ * llevara horas cerrada.
+ */
+function fueraDeHorarioAtencion({ hora, minuto }, horarios) {
+  const minutosPropuestos = hora * 60 + minuto;
+  return minutosPropuestos < horaAMinutos(horarios.horaApertura) || minutosPropuestos > horaAMinutos(horarios.horaCierre);
+}
+
 module.exports = {
   CLAVE_HORA_LIMITE,
   CLAVE_HORA_MISMO_DIA,
   CLAVE_HORA_DIA_SIGUIENTE,
   CLAVE_MINUTOS_TOLERANCIA,
   CLAVE_HORA_TOPE_RECOJO,
+  CLAVE_HORA_APERTURA,
+  CLAVE_HORA_CIERRE,
   obtenerHorariosPanaderia,
   calcularMinimoRecojo,
   validarFechaEntrega,
   esMuyProntoParaHoy,
   esMuyTardeParaHoy,
   hayVentanaHoy,
+  fueraDeHorarioAtencion,
 };

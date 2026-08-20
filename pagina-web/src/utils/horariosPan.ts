@@ -137,3 +137,15 @@ export function esMuyTardeHoy(
 export function hayVentanaHoy(horarios: HorariosPanaderia, ahora = new Date()): boolean {
   return minutosDesdeAhoraMasTolerancia(horarios, ahora) <= horaAMinutos(horarios.horaTopeRecojo);
 }
+
+/** Piso/tope duro que aplica a CUALQUIER fecha (hoy o un día futuro), a
+ * diferencia de `esMuyProntoHoy`/`esMuyTardeHoy` que solo rigen si la
+ * fecha elegida es hoy: el horario general de atención de la tienda.
+ * Ninguna hora de recojo puede caer fuera de [horaApertura, horaCierre],
+ * sin importar qué día sea. Refleja del lado del cliente la misma regla
+ * que el backend vuelve a exigir (fueraDeHorarioAtencion en
+ * horariosPanaderia.js). */
+export function fueraDeHorarioAtencion(horaElegida: string, horarios: HorariosPanaderia): boolean {
+  const minutos = horaAMinutos(horaElegida);
+  return minutos < horaAMinutos(horarios.horaApertura) || minutos > horaAMinutos(horarios.horaCierre);
+}

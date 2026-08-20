@@ -34,6 +34,11 @@ export interface HorariosPanaderia {
   /** Hora tope para recoger un pedido el mismo día — después de esta hora
    * ya no se ofrece el mismo día, sin importar la tolerancia. */
   horaTopeRecojo: string;
+  /** Horario general de atención de la tienda — rige el recojo de
+   * CUALQUIER día (hoy o una fecha futura), no solo el mismo día. Ninguna
+   * hora de recojo puede caer fuera de [horaApertura, horaCierre]. */
+  horaApertura: string;
+  horaCierre: string;
 }
 
 export interface CatalogoPublicoResultado {

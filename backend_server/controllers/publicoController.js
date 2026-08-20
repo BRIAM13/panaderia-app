@@ -4,7 +4,7 @@ const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos'
 const { buscarPersonaPorDni, buscarEmpresaPorRuc } = require('./externalController');
 const { intentarClonarUsuarioCliente } = require('./clientesController');
 const { notificarPersonalTienda, SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
-const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy } = require('../utils/horariosPanaderia');
+const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy, fueraDeHorarioAtencion } = require('../utils/horariosPanaderia');
 const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
 const { RUC_PERU_REGEX } = require('../middlewares/validators');
 
@@ -197,12 +197,20 @@ async function crearPedidoPublico(req, res, next) {
     if (fechaEntregaEsAnteriorAHoy(fechaPropuesta)) {
       return res.status(400).json({ mensaje: 'La fecha de recojo no puede ser anterior a hoy.' });
     }
-    // Único piso realmente duro (a diferencia del horario normal de
-    // recojo, que solo advierte): si la fecha elegida es hoy, no se puede
-    // recoger en menos de "minutos de tolerancia" desde ahora mismo — es
-    // el margen que necesita la tienda para confirmar stock por WhatsApp
-    // antes de que llegue la hora que el cliente eligió.
     const horarios = await obtenerHorariosPanaderia(pool);
+    // Piso/tope duro que rige CUALQUIER fecha, no solo hoy: el horario
+    // general de atención de la tienda — nunca se recoge antes de que
+    // abra ni después de que cierre, sin importar qué día sea.
+    if (fueraDeHorarioAtencion({ hora, minuto }, horarios)) {
+      return res.status(400).json({
+        mensaje: `Atendemos de ${formatearHora12(horarios.horaApertura)} a ${formatearHora12(horarios.horaCierre)}. Elige una hora dentro de ese horario.`,
+      });
+    }
+    // Único piso realmente duro adicional (a diferencia del horario
+    // normal de recojo, que solo advierte): si la fecha elegida es hoy,
+    // no se puede recoger en menos de "minutos de tolerancia" desde ahora
+    // mismo — es el margen que necesita la tienda para confirmar stock
+    // por WhatsApp antes de que llegue la hora que el cliente eligió.
     if (esMuyProntoParaHoy({ anio, mes, dia, hora, minuto }, horarios)) {
       return res.status(400).json({
         mensaje: `Para pedidos de hoy necesitamos al menos ${horarios.minutosTolerancia} minutos de anticipación. Elige una hora un poco más adelante.`,
@@ -448,9 +456,12 @@ async function consultarPedidosPublicos(req, res, next) {
  * Persona/Cliente): esto solo responde sí/no.
  *
  * Primero mira la propia base (Personas) — si el documento ya está
- * registrado ahí (de un pedido o cliente anterior), responde de una sin
- * gastar ni un solo consumo de la API paga. Solo cae a RENIEC/SUNAT si de
- * verdad no lo tenemos todavía.
+ * registrado ahí Y ese registro nació de una verificación real (RENIEC o
+ * SUNAT), responde de una sin gastar ni un solo consumo de la API paga.
+ * Un registro 'MANUAL' (cargado a mano por el personal, ej. un cliente de
+ * prueba o alguien que dictó mal su número) NO cuenta como verificado acá
+ * — su sola presencia en la base no prueba que el documento sea real, así
+ * que igual se revalida contra RENIEC/SUNAT.
  */
 async function verificarDocumentoPublico(req, res, next) {
   if (limiteVerificarExcedido(req.ip)) {
@@ -464,7 +475,7 @@ async function verificarDocumentoPublico(req, res, next) {
     const pool = await getPool();
     const existente = await pool.request()
       .input('DNI', sql.VarChar(15), documentoLimpio)
-      .query('SELECT IdPersona FROM Personas WHERE DNI = @DNI');
+      .query("SELECT IdPersona FROM Personas WHERE DNI = @DNI AND OrigenValidacion IN ('RENIEC', 'SUNAT')");
     if (existente.recordset.length > 0) {
       return res.status(200).json({ existe: true });
     }

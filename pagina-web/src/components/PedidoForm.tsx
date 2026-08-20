@@ -16,6 +16,7 @@ import {
   esMuyTardeHoy,
   estaFueraDeVentana,
   formatearHora12,
+  fueraDeHorarioAtencion,
   hayVentanaHoy,
   horaMinimaHoy,
   hoyISO,
@@ -328,6 +329,12 @@ export function PedidoForm() {
         setError("Elige una fecha y hora de recojo.");
         return;
       }
+      if (horarios && fueraDeHorarioAtencion(horaRecojo, horarios)) {
+        setError(
+          `Atendemos de ${formatearHora12(horarios.horaApertura)} a ${formatearHora12(horarios.horaCierre)}. Elige una hora dentro de ese horario.`,
+        );
+        return;
+      }
       if (horarios && esMuyProntoHoy(fechaRecojo, horaRecojo, horarios)) {
         setError(`Para pedidos de hoy necesitamos al menos ${horarios.minutosTolerancia} minutos de anticipación.`);
         return;
@@ -626,16 +633,20 @@ export function PedidoForm() {
                         onChange={setHoraRecojo}
                         minimoHoy={minimoHoraHoy}
                         maximoHoy={maximoHoraHoy}
+                        minimoSiempre={horarios.horaApertura}
+                        maximoSiempre={horarios.horaCierre}
                         puedeAbrir={!!fechaRecojo}
                         onIntentoBloqueado={alIntentarAbrirHoraSinFecha}
                       />
                     </div>
                     <p className="mt-1.5 text-xs text-pan-carbon-suave">
-                      Pedidos hasta las {formatearHora12(horarios.horaLimitePedido)} se recogen hoy mismo
-                      desde las {formatearHora12(horarios.horaRecojoMismoDia)}. Después de esa hora, el
-                      recojo pasa para el día siguiente desde las{" "}
-                      {formatearHora12(horarios.horaRecojoDiaSiguiente)}. El recojo el mismo día solo se
-                      puede pedir hasta las {formatearHora12(horarios.horaTopeRecojo)}.
+                      Atendemos de {formatearHora12(horarios.horaApertura)} a{" "}
+                      {formatearHora12(horarios.horaCierre)}. Pedidos hasta las{" "}
+                      {formatearHora12(horarios.horaLimitePedido)} se recogen hoy mismo desde las{" "}
+                      {formatearHora12(horarios.horaRecojoMismoDia)}. Después de esa hora, el recojo pasa
+                      para el día siguiente desde las {formatearHora12(horarios.horaRecojoDiaSiguiente)}.
+                      El recojo el mismo día solo se puede pedir hasta las{" "}
+                      {formatearHora12(horarios.horaTopeRecojo)}.
                     </p>
                     <AnimatePresence>
                       {fueraDeVentanaActual && (

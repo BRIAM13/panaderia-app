@@ -41,6 +41,12 @@ function horaTextoAMinutos(horaTexto: string): number {
   return h * 60 + m;
 }
 
+function minutosAHoraTexto(minutos: number): string {
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 function mod(n: number, m: number): number {
   return ((n % m) + m) % m;
 }
@@ -423,6 +429,12 @@ interface SelectorHoraProps {
    * (el negocio ya cerró para recoger hoy — ver esMuyTardeHoy). A
    * diferencia de `minimoHoy`, este no cambia con el reloj. */
   maximoHoy?: string;
+  /** "HH:mm": horario general de atención — a diferencia de `minimoHoy`/
+   * `maximoHoy` (que solo aplican si la fecha elegida es hoy), estos dos
+   * rigen SIEMPRE, para cualquier fecha (hoy o cualquier día futuro). Se
+   * combinan con los de arriba tomando el más estricto de los dos. */
+  minimoSiempre?: string;
+  maximoSiempre?: string;
   /** false = el botón no abre este selector al tocarlo, sino que dispara
    * `onIntentoBloqueado` (usado para exigir elegir la fecha primero). */
   puedeAbrir?: boolean;
@@ -435,7 +447,18 @@ interface SelectorHoraProps {
  * Cancelar/Aceptar, para que el cliente pueda ver bien lo que eligió antes
  * de aplicarlo. */
 export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(function SelectorHora(
-  { id, valor, onChange, placeholder = "Elige una hora", minimoHoy, maximoHoy, puedeAbrir = true, onIntentoBloqueado },
+  {
+    id,
+    valor,
+    onChange,
+    placeholder = "Elige una hora",
+    minimoHoy,
+    maximoHoy,
+    minimoSiempre,
+    maximoSiempre,
+    puedeAbrir = true,
+    onIntentoBloqueado,
+  },
   ref,
 ) {
   const [abierto, setAbierto] = useState(false);
@@ -443,11 +466,41 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
   const [draftMinuto, setDraftMinuto] = useState(0);
   const [draftPeriodo, setDraftPeriodo] = useState<Periodo>("AM");
 
+  // Piso/tope combinados: `minimoHoy`/`maximoHoy` (solo rigen si la fecha
+  // elegida es hoy, y el piso avanza solo con el reloj) y `minimoSiempre`/
+  // `maximoSiempre` (el horario general de atención, rige cualquier día)
+  // se funden acá tomando siempre el más estricto de los dos — así una
+  // fecha futura queda acotada por el horario de atención, y hoy queda
+  // acotado por lo que sea más restrictivo entre la tolerancia y el
+  // horario de atención (por ejemplo, a la 1am la tolerancia por sí sola
+  // dejaría elegir casi cualquier hora, pero el horario de atención la
+  // empuja hasta que abre la tienda).
+  const minutosPisoHoy = minimoHoy ? horaTextoAMinutos(minimoHoy) : null;
+  const minutosTopeHoy = maximoHoy ? horaTextoAMinutos(maximoHoy) : null;
+  const minutosPisoSiempre = minimoSiempre ? horaTextoAMinutos(minimoSiempre) : null;
+  const minutosTopeSiempre = maximoSiempre ? horaTextoAMinutos(maximoSiempre) : null;
+  const minutosPisoEfectivo =
+    minutosPisoHoy === null && minutosPisoSiempre === null
+      ? null
+      : Math.max(minutosPisoHoy ?? -Infinity, minutosPisoSiempre ?? -Infinity);
+  const minutosTopeEfectivo =
+    minutosTopeHoy === null && minutosTopeSiempre === null
+      ? null
+      : Math.min(minutosTopeHoy ?? Infinity, minutosTopeSiempre ?? Infinity);
+
+  function muyPronto(hora12: number, minuto: number, periodo: Periodo): boolean {
+    const totalMinutos = horaTextoAMinutos(a24h(hora12, minuto, periodo));
+    if (minutosPisoEfectivo !== null && totalMinutos < minutosPisoEfectivo) return true;
+    if (minutosTopeEfectivo !== null && totalMinutos > minutosTopeEfectivo) return true;
+    return false;
+  }
+
   function abrir() {
+    const pisoInicial = minutosPisoEfectivo !== null ? minutosAHoraTexto(minutosPisoEfectivo) : null;
     const base = valor
       ? desde24h(valor)
-      : minimoHoy
-        ? desde24h(minimoHoy)
+      : pisoInicial
+        ? desde24h(pisoInicial)
         : { hora12: 12, minuto: 0, periodo: "AM" as Periodo };
     setDraftHora(base.hora12);
     setDraftMinuto(base.minuto);
@@ -470,40 +523,31 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
     abrir();
   }
 
-  const minutosPiso = minimoHoy ? horaTextoAMinutos(minimoHoy) : null;
-  const minutosTope = maximoHoy ? horaTextoAMinutos(maximoHoy) : null;
-  function muyPronto(hora12: number, minuto: number, periodo: Periodo): boolean {
-    const totalMinutos = horaTextoAMinutos(a24h(hora12, minuto, periodo));
-    if (minutosPiso !== null && totalMinutos < minutosPiso) return true;
-    if (minutosTope !== null && totalMinutos > minutosTope) return true;
-    return false;
-  }
-
   const draftInvalido = muyPronto(draftHora, draftMinuto, draftPeriodo);
 
   // El piso de tolerancia avanza solo con el reloj (ver `minimoHoy`, que
   // el padre recalcula cada 15s) — si el cliente se queda con la ventana
-  // abierta y su elección queda por detrás del nuevo piso, la rueda gira
-  // sola hasta el nuevo mínimo en vez de quedarse mostrando una hora que
-  // ya no alcanza. Pero si ese mismo avance del reloj ya cruzó el tope
-  // (piso > tope: ya no queda ningún minuto válido hoy), no hay a dónde
-  // girar — el selector se cierra solo en vez de quedar trabado
+  // abierta y su elección queda por detrás del nuevo piso efectivo, la
+  // rueda gira sola hasta el nuevo mínimo en vez de quedarse mostrando una
+  // hora que ya no alcanza. Pero si ese mismo avance del reloj ya cruzó el
+  // tope (piso > tope: ya no queda ningún minuto válido hoy), no hay a
+  // dónde girar — el selector se cierra solo en vez de quedar trabado
   // mostrando un rango imposible con "Aceptar" deshabilitado para
   // siempre.
   useEffect(() => {
-    if (!abierto || !minimoHoy) return;
-    if (minutosTope !== null && horaTextoAMinutos(minimoHoy) > minutosTope) {
+    if (!abierto || minutosPisoEfectivo === null) return;
+    if (minutosTopeEfectivo !== null && minutosPisoEfectivo > minutosTopeEfectivo) {
       setAbierto(false);
       return;
     }
     if (muyPronto(draftHora, draftMinuto, draftPeriodo)) {
-      const piso = desde24h(minimoHoy);
+      const piso = desde24h(minutosAHoraTexto(minutosPisoEfectivo));
       setDraftHora(piso.hora12);
       setDraftMinuto(piso.minuto);
       setDraftPeriodo(piso.periodo);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minimoHoy, maximoHoy, abierto]);
+  }, [minutosPisoEfectivo, minutosTopeEfectivo, abierto]);
 
   return (
     <div className="relative">
@@ -526,11 +570,15 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
         onAceptar={aceptar}
         aceptarDeshabilitado={draftInvalido}
       >
-        {minimoHoy && (
+        {(minutosPisoEfectivo !== null || minutosTopeEfectivo !== null) && (
           <p className="mb-3 text-center text-xs text-pan-carbon-suave">
-            {maximoHoy
-              ? `Para hoy, puedes elegir entre las ${formatearHora12(minimoHoy)} y las ${formatearHora12(maximoHoy)}.`
-              : `Para hoy, lo más pronto que puedes elegir es ${formatearHora12(minimoHoy)}.`}
+            {minutosPisoEfectivo !== null && minutosTopeEfectivo !== null
+              ? minimoHoy
+                ? `Para hoy, puedes elegir entre las ${formatearHora12(minutosAHoraTexto(minutosPisoEfectivo))} y las ${formatearHora12(minutosAHoraTexto(minutosTopeEfectivo))}.`
+                : `Atendemos de ${formatearHora12(minutosAHoraTexto(minutosPisoEfectivo))} a ${formatearHora12(minutosAHoraTexto(minutosTopeEfectivo))}.`
+              : minutosPisoEfectivo !== null
+                ? `${minimoHoy ? "Para hoy, lo" : "Lo"} más pronto que puedes elegir es ${formatearHora12(minutosAHoraTexto(minutosPisoEfectivo))}.`
+                : `${minimoHoy ? "Para hoy, lo" : "Lo"} más tarde que puedes elegir es ${formatearHora12(minutosAHoraTexto(minutosTopeEfectivo!))}.`}
           </p>
         )}
         <div className="relative">

@@ -11,6 +11,8 @@ const {
   CLAVE_HORA_DIA_SIGUIENTE,
   CLAVE_MINUTOS_TOLERANCIA,
   CLAVE_HORA_TOPE_RECOJO,
+  CLAVE_HORA_APERTURA,
+  CLAVE_HORA_CIERRE,
 } = require('../utils/horariosPanaderia');
 
 const DEFAULTS = [
@@ -38,6 +40,16 @@ const DEFAULTS = [
     clave: CLAVE_HORA_TOPE_RECOJO,
     valor: '22:00',
     descripcion: 'Hora tope para recoger un pedido de pan de agua/francés el mismo día — después de esta hora ya no se ofrece el mismo día (formato HH:mm).',
+  },
+  {
+    clave: CLAVE_HORA_APERTURA,
+    valor: '04:00',
+    descripcion: 'Horario de atención (apertura): ningún pedido, de ningún día, se puede recoger antes de esta hora (formato HH:mm).',
+  },
+  {
+    clave: CLAVE_HORA_CIERRE,
+    valor: '22:00',
+    descripcion: 'Horario de atención (cierre): ningún pedido, de ningún día, se puede recoger después de esta hora (formato HH:mm).',
   },
 ];
 
