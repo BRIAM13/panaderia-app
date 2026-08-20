@@ -229,6 +229,42 @@ export function SeguimientoPedido() {
                               Hola, {resultado.nombre}
                             </p>
                           )}
+
+                          {/* A simple vista, sin tener que desplegar nada —
+                              los pedidos más recientes ya vienen primero
+                              (el backend los manda ordenados por fecha). */}
+                          <p className="mb-2 text-xs font-semibold tracking-wide text-pan-carbon-suave uppercase">
+                            Tus últimos pedidos
+                          </p>
+                          <div className="mb-6 space-y-2">
+                            {resultado.pedidos.slice(0, 3).map((pedido) => {
+                              const info = ESTADO_INFO[pedido.estado];
+                              const Icono = info.icono;
+                              return (
+                                <div
+                                  key={pedido.idPedido}
+                                  className="flex items-center justify-between gap-3 rounded-xl border border-pan-borde/40 bg-pan-crema-suave px-4 py-3"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-pan-carbon">
+                                      Pedido #{pedido.numeroPedidoDia}
+                                    </p>
+                                    <p className="truncate text-xs text-pan-carbon-suave">{pedido.producto}</p>
+                                  </div>
+                                  <span
+                                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${info.clases}`}
+                                  >
+                                    <Icono className="h-3.5 w-3.5" />
+                                    {info.etiqueta}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <p className="mb-2 text-xs font-semibold tracking-wide text-pan-carbon-suave uppercase">
+                            Todos tus pedidos
+                          </p>
                           <div className="space-y-3">
                             {agruparPedidos(resultado.pedidos).map((grupo) => {
                               const info = ESTADO_INFO[grupo.estado];
@@ -294,10 +330,6 @@ export function SeguimientoPedido() {
                                                 <span className="text-pan-carbon-suave">Cantidad</span>
                                                 <span className="text-right font-medium text-pan-carbon">
                                                   {pedido.cantidad}
-                                                </span>
-                                                <span className="text-pan-carbon-suave">Tienda</span>
-                                                <span className="text-right font-medium text-pan-carbon">
-                                                  {pedido.tienda ?? "—"}
                                                 </span>
                                                 <span className="text-pan-carbon-suave">Total</span>
                                                 <span className="text-right font-semibold text-pan-terracota">
