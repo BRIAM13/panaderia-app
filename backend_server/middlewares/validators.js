@@ -579,6 +579,21 @@ function validateConsultarPedidosPublico(req, res, next) {
   next();
 }
 
+/**
+ * Verificación pública de existencia de DNI/RUC (ver publicoController.js,
+ * verificarDocumentoPublico) — mismo criterio sin-JWT que
+ * validateCrearPedidoPublico, el documento viene por query string.
+ */
+function validateVerificarDocumentoPublico(req, res, next) {
+  const { documento } = req.query;
+
+  if (!isNonEmptyString(documento) || (!DNI_PERU_REGEX.test(documento.trim()) && !RUC_PERU_REGEX.test(documento.trim()))) {
+    return res.status(400).json({ mensaje: 'El documento debe ser un DNI de 8 dígitos o un RUC de 11 dígitos.' });
+  }
+
+  next();
+}
+
 module.exports = {
   validateRegister,
   validateLogin,
@@ -592,6 +607,7 @@ module.exports = {
   validateCrearPedidoHorneado,
   validateCrearPedidoPublico,
   validateConsultarPedidosPublico,
+  validateVerificarDocumentoPublico,
   validateConfiguracion,
   validateMedioPago,
   validateActualizarMedioPago,

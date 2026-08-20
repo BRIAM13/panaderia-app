@@ -485,9 +485,17 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
   // el padre recalcula cada 15s) — si el cliente se queda con la ventana
   // abierta y su elección queda por detrás del nuevo piso, la rueda gira
   // sola hasta el nuevo mínimo en vez de quedarse mostrando una hora que
-  // ya no alcanza.
+  // ya no alcanza. Pero si ese mismo avance del reloj ya cruzó el tope
+  // (piso > tope: ya no queda ningún minuto válido hoy), no hay a dónde
+  // girar — el selector se cierra solo en vez de quedar trabado
+  // mostrando un rango imposible con "Aceptar" deshabilitado para
+  // siempre.
   useEffect(() => {
     if (!abierto || !minimoHoy) return;
+    if (minutosTope !== null && horaTextoAMinutos(minimoHoy) > minutosTope) {
+      setAbierto(false);
+      return;
+    }
     if (muyPronto(draftHora, draftMinuto, draftPeriodo)) {
       const piso = desde24h(minimoHoy);
       setDraftHora(piso.hora12);
@@ -495,7 +503,7 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
       setDraftPeriodo(piso.periodo);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minimoHoy, abierto]);
+  }, [minimoHoy, maximoHoy, abierto]);
 
   return (
     <div className="relative">

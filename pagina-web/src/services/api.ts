@@ -118,3 +118,15 @@ export async function consultarPedidosPublicos(dni: string): Promise<PedidoPubli
   const respuesta = await fetch(`${API_BASE_URL}/publico/pedidos?dni=${encodeURIComponent(dni)}`);
   return manejarRespuesta<PedidoPublicoConsultaResultado>(respuesta);
 }
+
+export interface VerificarDocumentoResultado {
+  existe: boolean;
+  /** Presente solo cuando existe:false, ya explica el motivo (RENIEC/SUNAT
+   * no lo tienen registrado). */
+  mensaje?: string;
+}
+
+export async function verificarDocumentoPublico(documento: string): Promise<VerificarDocumentoResultado> {
+  const respuesta = await fetch(`${API_BASE_URL}/publico/verificar-documento?documento=${encodeURIComponent(documento)}`);
+  return manejarRespuesta<VerificarDocumentoResultado>(respuesta);
+}

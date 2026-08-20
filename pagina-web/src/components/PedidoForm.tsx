@@ -6,6 +6,7 @@ import {
   ApiError,
   crearPedidoPublico,
   obtenerCatalogoPublico,
+  verificarDocumentoPublico,
   type HorariosPanaderia,
   type PedidoPublicoResultado,
   type ProductoPublico,
@@ -49,6 +50,11 @@ export function PedidoForm() {
 
   const [tipoDocumento, setTipoDocumento] = useState<"DNI" | "RUC">("DNI");
   const [numeroDocumento, setNumeroDocumento] = useState("");
+  // null = todavía no se completó/verificó; true/false = resultado de la
+  // última verificación contra RENIEC/SUNAT (ver el efecto más abajo).
+  const [documentoValido, setDocumentoValido] = useState<boolean | null>(null);
+  const [verificandoDocumento, setVerificandoDocumento] = useState(false);
+  const [avisoDocumento, setAvisoDocumento] = useState<string | null>(null);
   const [telefono, setTelefono] = useState("");
   const [idProducto, setIdProducto] = useState<number | "">("");
   const [cantidad, setCantidad] = useState("");
@@ -115,6 +121,45 @@ export function PedidoForm() {
       )
       .finally(() => setCargandoProductos(false));
   }, []);
+
+  // Verificación real contra RENIEC/SUNAT apenas el documento llega al
+  // largo esperado (8 dígitos DNI, 11 RUC) — así el cliente se entera de
+  // entrada si escribió mal el número, en vez de descubrirlo recién al
+  // enviar todo el formulario. Si borra un dígito o cambia de pestaña
+  // DNI/RUC, el resultado anterior ya no aplica y vuelve a quedar sin
+  // verificar hasta completar el nuevo número.
+  useEffect(() => {
+    const largoEsperado = tipoDocumento === "DNI" ? 8 : 11;
+    if (numeroDocumento.length !== largoEsperado) {
+      setDocumentoValido(null);
+      setAvisoDocumento(null);
+      return;
+    }
+    let cancelado = false;
+    setVerificandoDocumento(true);
+    setAvisoDocumento(null);
+    verificarDocumentoPublico(numeroDocumento)
+      .then((resultado) => {
+        if (cancelado) return;
+        setDocumentoValido(resultado.existe);
+        if (!resultado.existe) {
+          setAvisoDocumento(
+            resultado.mensaje ?? (tipoDocumento === "DNI" ? "DNI no encontrado." : "RUC no encontrado."),
+          );
+        }
+      })
+      .catch(() => {
+        if (cancelado) return;
+        setDocumentoValido(null);
+        setAvisoDocumento("No pudimos verificar el documento. Intenta de nuevo en un momento.");
+      })
+      .finally(() => {
+        if (!cancelado) setVerificandoDocumento(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [numeroDocumento, tipoDocumento]);
 
   const productoSeleccionado = productos.find((p) => p.idProducto === idProducto);
   const esPaquete = productoSeleccionado?.esPaquete ?? false;
@@ -185,8 +230,18 @@ export function PedidoForm() {
   // del tope de recojo), ahí sí se limpian fecha y hora: no hay a qué
   // horario "avanzar", el cliente tiene que elegir un día distinto.
   useEffect(() => {
-    if (!horarios || !fechaRecojo || !horaRecojo || fechaRecojo !== hoyISO(ahora)) return;
-    if (!hayVentanaHoy(horarios, ahora) || esMuyTardeHoy(fechaRecojo, horaRecojo, horarios, ahora)) {
+    if (!horarios || !fechaRecojo || fechaRecojo !== hoyISO(ahora)) return;
+    // Aunque todavía no haya una hora confirmada (el cliente sigue
+    // eligiendo dentro del selector), si la ventana de hoy ya se cerró
+    // por completo no tiene sentido dejar "hoy" marcado como fecha — se
+    // limpia para que el selector de fecha vuelva a arrancar en mañana.
+    if (!hayVentanaHoy(horarios, ahora)) {
+      setFechaRecojo("");
+      setHoraRecojo("");
+      return;
+    }
+    if (!horaRecojo) return;
+    if (esMuyTardeHoy(fechaRecojo, horaRecojo, horarios, ahora)) {
       setFechaRecojo("");
       setHoraRecojo("");
       return;
@@ -195,7 +250,7 @@ export function PedidoForm() {
       setHoraRecojo(horaMinimaHoy(horarios, ahora));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fechaRecojo, horarios, ahora]);
+  }, [fechaRecojo, horaRecojo, horarios, ahora]);
 
   // Si el cliente toca "Elige una hora" sin haber elegido fecha todavía,
   // se abre el calendario en su lugar (con un aviso) y, apenas acepte una
@@ -237,6 +292,16 @@ export function PedidoForm() {
         tipoDocumento === "DNI"
           ? "Ingresa un DNI válido de 8 dígitos."
           : "Ingresa un RUC válido de 11 dígitos.",
+      );
+      return;
+    }
+    if (verificandoDocumento) {
+      setError("Espera un momento, estamos verificando tu documento.");
+      return;
+    }
+    if (documentoValido !== true) {
+      setError(
+        avisoDocumento ?? (tipoDocumento === "DNI" ? "DNI no encontrado." : "RUC no encontrado."),
       );
       return;
     }
@@ -476,11 +541,33 @@ export function PedidoForm() {
                     inputMode="numeric"
                     maxLength={tipoDocumento === "DNI" ? 8 : 11}
                     value={numeroDocumento}
-                    onChange={(e) => setNumeroDocumento(e.target.value.replace(/\D/g, ""))}
+                    onChange={(e) => {
+                      const limpio = e.target.value.replace(/\D/g, "");
+                      setNumeroDocumento(limpio);
+                      // Al completar el largo esperado, se quita el foco
+                      // de una vez: no hace falta que el cliente toque
+                      // otro campo para que arranque la verificación.
+                      if (limpio.length === (tipoDocumento === "DNI" ? 8 : 11)) e.target.blur();
+                    }}
                     placeholder={tipoDocumento === "DNI" ? "Ingresa tu DNI" : "Ingresa tu RUC"}
                     required
                     className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
                   />
+                  {verificandoDocumento && (
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-pan-carbon-suave">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Verificando documento…
+                    </p>
+                  )}
+                  {!verificandoDocumento && avisoDocumento && (
+                    <p className="mt-1.5 text-xs font-medium text-red-700">{avisoDocumento}</p>
+                  )}
+                  {!verificandoDocumento && documentoValido === true && (
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Documento verificado.
+                    </p>
+                  )}
                 </div>
 
                 <div>

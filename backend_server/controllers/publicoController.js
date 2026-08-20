@@ -71,6 +71,26 @@ function limiteConsultaExcedido(ip) {
   return intentos.length > INTENTOS_MAXIMOS_CONSULTA;
 }
 
+/**
+ * Límite aparte para verificar un DNI/RUC antes de enviar el pedido: a
+ * diferencia de crearPedidoPublico, esto puede dispararse varias veces
+ * mientras el cliente corrige un número mal tecleado, así que necesita más
+ * margen que los 5/15min pensados para pedidos reales — pero sigue
+ * pudiendo golpear la API paga de apiperu.dev (solo para documentos que
+ * todavía no están en la base), así que no puede ser tan alto como el de
+ * simple consulta de estado.
+ */
+const INTENTOS_MAXIMOS_VERIFICAR = 15;
+const intentosVerificarPorIp = new Map();
+
+function limiteVerificarExcedido(ip) {
+  const ahora = Date.now();
+  const intentos = (intentosVerificarPorIp.get(ip) || []).filter((t) => ahora - t < VENTANA_MS);
+  intentos.push(ahora);
+  intentosVerificarPorIp.set(ip, intentos);
+  return intentos.length > INTENTOS_MAXIMOS_VERIFICAR;
+}
+
 async function obtenerPrecioPaquete(pool) {
   const result = await pool.request().query("SELECT Valor FROM Configuraciones WHERE Clave = 'PRECIO_PAQUETE'");
   return result.recordset.length > 0 ? Number(result.recordset[0].Valor) : null;
@@ -419,4 +439,53 @@ async function consultarPedidosPublicos(req, res, next) {
   }
 }
 
-module.exports = { listarCatalogoPublico, crearPedidoPublico, consultarPedidosPublicos };
+/**
+ * Verifica si un DNI/RUC existe de verdad (RENIEC/SUNAT) ANTES de que el
+ * cliente llene el resto del formulario y lo envíe — sin esto, alguien
+ * podía escribir un documento inventado y solo enterarse de que no existe
+ * al final, después de completar todo. No crea nada (a diferencia de
+ * crearPedidoPublico, que si el documento existe de verdad crea la
+ * Persona/Cliente): esto solo responde sí/no.
+ *
+ * Primero mira la propia base (Personas) — si el documento ya está
+ * registrado ahí (de un pedido o cliente anterior), responde de una sin
+ * gastar ni un solo consumo de la API paga. Solo cae a RENIEC/SUNAT si de
+ * verdad no lo tenemos todavía.
+ */
+async function verificarDocumentoPublico(req, res, next) {
+  if (limiteVerificarExcedido(req.ip)) {
+    return res.status(429).json({ mensaje: 'Demasiados intentos. Intenta de nuevo en unos minutos.' });
+  }
+
+  const documentoLimpio = String(req.query.documento || '').trim();
+  const esRuc = RUC_PERU_REGEX.test(documentoLimpio);
+
+  try {
+    const pool = await getPool();
+    const existente = await pool.request()
+      .input('DNI', sql.VarChar(15), documentoLimpio)
+      .query('SELECT IdPersona FROM Personas WHERE DNI = @DNI');
+    if (existente.recordset.length > 0) {
+      return res.status(200).json({ existe: true });
+    }
+
+    const datosDocumento = esRuc
+      ? await buscarEmpresaPorRuc(documentoLimpio)
+      : await buscarPersonaPorDni(documentoLimpio);
+
+    if (datosDocumento.fuente === 'NO_ENCONTRADO') {
+      return res.status(200).json({
+        existe: false,
+        mensaje: esRuc
+          ? 'No encontramos ese RUC en SUNAT. Verifica el número.'
+          : 'No encontramos ese DNI en RENIEC. Verifica el número.',
+      });
+    }
+
+    return res.status(200).json({ existe: true });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = { listarCatalogoPublico, crearPedidoPublico, consultarPedidosPublicos, verificarDocumentoPublico };
