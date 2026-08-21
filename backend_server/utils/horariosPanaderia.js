@@ -11,6 +11,12 @@ const CLAVE_MINUTOS_TOLERANCIA = 'PANADERIA_MINUTOS_TOLERANCIA';
 const CLAVE_HORA_TOPE_RECOJO = 'PANADERIA_HORA_TOPE_RECOJO';
 const CLAVE_HORA_APERTURA = 'PANADERIA_HORA_APERTURA';
 const CLAVE_HORA_CIERRE = 'PANADERIA_HORA_CIERRE';
+// Turnos de pedido (solo informativos, ver franjaAjustada más abajo para
+// el bloqueo real) y los 2 interruptores de franja de recojo.
+const CLAVE_HORA_INICIO_PEDIDO_TARDE = 'PANADERIA_HORA_INICIO_PEDIDO_TARDE';
+const CLAVE_DOMINGO_HORA_LIMITE_PEDIDO = 'PANADERIA_DOMINGO_HORA_LIMITE_PEDIDO';
+const CLAVE_FRANJA_MANANA_ACTIVA = 'PANADERIA_FRANJA_MANANA_ACTIVA';
+const CLAVE_FRANJA_TARDE_ACTIVA = 'PANADERIA_FRANJA_TARDE_ACTIVA';
 
 const UN_DIA_MS = 24 * 60 * 60 * 1000;
 
@@ -26,7 +32,12 @@ function horaAMinutos(horaTexto) {
 async function obtenerHorariosPanaderia(pool) {
   const result = await pool.request().query(`
     SELECT Clave, Valor FROM Configuraciones
-    WHERE Clave IN ('${CLAVE_HORA_LIMITE}', '${CLAVE_HORA_MISMO_DIA}', '${CLAVE_HORA_DIA_SIGUIENTE}', '${CLAVE_MINUTOS_TOLERANCIA}', '${CLAVE_HORA_TOPE_RECOJO}', '${CLAVE_HORA_APERTURA}', '${CLAVE_HORA_CIERRE}')
+    WHERE Clave IN (
+      '${CLAVE_HORA_LIMITE}', '${CLAVE_HORA_MISMO_DIA}', '${CLAVE_HORA_DIA_SIGUIENTE}',
+      '${CLAVE_MINUTOS_TOLERANCIA}', '${CLAVE_HORA_TOPE_RECOJO}', '${CLAVE_HORA_APERTURA}', '${CLAVE_HORA_CIERRE}',
+      '${CLAVE_HORA_INICIO_PEDIDO_TARDE}', '${CLAVE_DOMINGO_HORA_LIMITE_PEDIDO}',
+      '${CLAVE_FRANJA_MANANA_ACTIVA}', '${CLAVE_FRANJA_TARDE_ACTIVA}'
+    )
   `);
   const mapa = Object.fromEntries(result.recordset.map((r) => [r.Clave, r.Valor]));
   return {
@@ -38,11 +49,44 @@ async function obtenerHorariosPanaderia(pool) {
     // pedido el mismo día, sin importar la tolerancia — el negocio cierra.
     horaTopeRecojo: mapa[CLAVE_HORA_TOPE_RECOJO] || '22:00',
     // Horario general de atención: rige el recojo de CUALQUIER día (hoy o
-    // una fecha futura), a diferencia de las reglas de arriba que solo
-    // aplican al mismo día del pedido.
+    // una fecha futura) — ver franjaAjustada() para cómo se combina con
+    // los 2 interruptores de franja.
     horaApertura: mapa[CLAVE_HORA_APERTURA] || '04:00',
     horaCierre: mapa[CLAVE_HORA_CIERRE] || '22:00',
+    // Turnos de pedido: puramente informativos (solo alimentan el aviso
+    // de "fuera de ventana" del lado del cliente) — el bloqueo real de
+    // horas lo hacen los 2 interruptores de franja de abajo.
+    horaInicioPedidoTarde: mapa[CLAVE_HORA_INICIO_PEDIDO_TARDE] || '18:00',
+    domingoHoraLimitePedido: mapa[CLAVE_DOMINGO_HORA_LIMITE_PEDIDO] || '07:00',
+    // Interruptores manuales de franja: cuando el dueño se queda sin
+    // stock de una hornada, los apaga desde la app y los pedidos nuevos
+    // saltan directo a la otra franja — ver franjaAjustada().
+    franjaMananaActiva: (mapa[CLAVE_FRANJA_MANANA_ACTIVA] ?? 'true') === 'true',
+    franjaTardeActiva: (mapa[CLAVE_FRANJA_TARDE_ACTIVA] ?? 'true') === 'true',
   };
+}
+
+/**
+ * Piso/techo EFECTIVO de recojo para cualquier día, según qué franjas
+ * están activas ahora mismo. Las dos franjas son secuenciales y sin
+ * encimarse (juntas cubren exactamente [horaApertura, horaCierre]):
+ * franja mañana [horaApertura, horaRecojoMismoDia) y franja tarde
+ * [horaRecojoMismoDia, horaCierre). Si el dueño apaga una, el rango
+ * válido se achica al de la otra; si apaga las dos, no queda ningún
+ * minuto válido (caso raro — se trata como "cerrado hasta que reactive
+ * alguna", no auto-recupera solo).
+ */
+function franjaAjustada(horarios) {
+  if (horarios.franjaMananaActiva && horarios.franjaTardeActiva) {
+    return { piso: horarios.horaApertura, tope: horarios.horaCierre };
+  }
+  if (horarios.franjaMananaActiva && !horarios.franjaTardeActiva) {
+    return { piso: horarios.horaApertura, tope: horarios.horaRecojoMismoDia };
+  }
+  if (!horarios.franjaMananaActiva && horarios.franjaTardeActiva) {
+    return { piso: horarios.horaRecojoMismoDia, tope: horarios.horaCierre };
+  }
+  return null;
 }
 
 /**
@@ -145,14 +189,17 @@ function hayVentanaHoy(horarios) {
 /**
  * Piso/tope duro que aplica a CUALQUIER fecha de recojo (hoy o un día
  * futuro), a diferencia de esMuyProntoParaHoy/esMuyTardeParaHoy que solo
- * rigen si la fecha propuesta es exactamente hoy: el horario general de
- * atención de la tienda. Sin esto, un cliente podía elegir una fecha
- * futura a cualquier hora del día (ej. 12:05am), aunque la tienda ya
- * llevara horas cerrada.
+ * rigen si la fecha propuesta es exactamente hoy: el rango efectivo según
+ * qué franjas de recojo están activas (ver franjaAjustada). Sin esto, un
+ * cliente podía elegir una fecha futura a cualquier hora del día (ej.
+ * 12:05am), aunque la tienda ya llevara horas cerrada, o seguir eligiendo
+ * una franja que el dueño ya apagó por falta de stock.
  */
 function fueraDeHorarioAtencion({ hora, minuto }, horarios) {
+  const franja = franjaAjustada(horarios);
+  if (!franja) return true;
   const minutosPropuestos = hora * 60 + minuto;
-  return minutosPropuestos < horaAMinutos(horarios.horaApertura) || minutosPropuestos > horaAMinutos(horarios.horaCierre);
+  return minutosPropuestos < horaAMinutos(franja.piso) || minutosPropuestos > horaAMinutos(franja.tope);
 }
 
 module.exports = {
@@ -163,6 +210,10 @@ module.exports = {
   CLAVE_HORA_TOPE_RECOJO,
   CLAVE_HORA_APERTURA,
   CLAVE_HORA_CIERRE,
+  CLAVE_HORA_INICIO_PEDIDO_TARDE,
+  CLAVE_DOMINGO_HORA_LIMITE_PEDIDO,
+  CLAVE_FRANJA_MANANA_ACTIVA,
+  CLAVE_FRANJA_TARDE_ACTIVA,
   obtenerHorariosPanaderia,
   calcularMinimoRecojo,
   validarFechaEntrega,
@@ -170,4 +221,5 @@ module.exports = {
   esMuyTardeParaHoy,
   hayVentanaHoy,
   fueraDeHorarioAtencion,
+  franjaAjustada,
 };

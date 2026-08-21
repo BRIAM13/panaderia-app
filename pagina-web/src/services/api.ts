@@ -39,6 +39,16 @@ export interface HorariosPanaderia {
    * hora de recojo puede caer fuera de [horaApertura, horaCierre]. */
   horaApertura: string;
   horaCierre: string;
+  /** Puramente informativos (alimentan el aviso de "fuera de ventana"),
+   * no bloquean nada por sí mismos — ver franjaAjustada() en
+   * utils/horariosPan.ts para el bloqueo real. */
+  horaInicioPedidoTarde: string;
+  domingoHoraLimitePedido: string;
+  /** Interruptores manuales: si el dueño se queda sin stock de una
+   * hornada, apaga la franja correspondiente desde la app y los pedidos
+   * nuevos saltan directo a la otra franja. */
+  franjaMananaActiva: boolean;
+  franjaTardeActiva: boolean;
 }
 
 export interface CatalogoPublicoResultado {

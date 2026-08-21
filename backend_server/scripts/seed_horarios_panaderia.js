@@ -13,6 +13,10 @@ const {
   CLAVE_HORA_TOPE_RECOJO,
   CLAVE_HORA_APERTURA,
   CLAVE_HORA_CIERRE,
+  CLAVE_HORA_INICIO_PEDIDO_TARDE,
+  CLAVE_DOMINGO_HORA_LIMITE_PEDIDO,
+  CLAVE_FRANJA_MANANA_ACTIVA,
+  CLAVE_FRANJA_TARDE_ACTIVA,
 } = require('../utils/horariosPanaderia');
 
 const DEFAULTS = [
@@ -50,6 +54,26 @@ const DEFAULTS = [
     clave: CLAVE_HORA_CIERRE,
     valor: '22:00',
     descripcion: 'Horario de atención (cierre): ningún pedido, de ningún día, se puede recoger después de esta hora (formato HH:mm).',
+  },
+  {
+    clave: CLAVE_HORA_INICIO_PEDIDO_TARDE,
+    valor: '18:00',
+    descripcion: 'Desde esta hora, un pedido nuevo se considera del turno tarde/noche (solo informativo, formato HH:mm).',
+  },
+  {
+    clave: CLAVE_DOMINGO_HORA_LIMITE_PEDIDO,
+    valor: '07:00',
+    descripcion: 'Igual que PANADERIA_HORA_LIMITE_PEDIDO pero solo para domingos (formato HH:mm).',
+  },
+  {
+    clave: CLAVE_FRANJA_MANANA_ACTIVA,
+    valor: 'true',
+    descripcion: 'Interruptor: "true" acepta pedidos para la franja de recojo de la mañana (4am), "false" los bloquea por falta de stock.',
+  },
+  {
+    clave: CLAVE_FRANJA_TARDE_ACTIVA,
+    valor: 'true',
+    descripcion: 'Interruptor: "true" acepta pedidos para la franja de recojo de la tarde (3pm), "false" los bloquea por falta de stock.',
   },
 ];
 

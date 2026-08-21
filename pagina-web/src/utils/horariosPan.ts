@@ -5,7 +5,6 @@ interface VentanaRecojo {
   fechaMinima: string;
   /** "HH:mm" */
   horaMinima: string;
-  esMismoDia: boolean;
 }
 
 function horaAMinutos(hora: string): number {
@@ -38,23 +37,40 @@ export function formatearHora12(horaTexto: string): string {
 }
 
 /** Primer día en el que técnicamente ya se puede recoger un pedido nuevo
- * en este momento (hoy, si todavía no pasa la hora límite de pedido;
- * mañana si ya pasó) — solo se usa para decidir si un horario elegido por
- * el cliente cae dentro o fuera de la ventana normal, NO para bloquear
- * ninguna fecha: el cliente puede elegir cualquier fecha desde hoy en
- * adelante y cualquier hora, aunque caiga fuera de esta ventana (ver
- * `estaFueraDeVentana`). */
+ * en este momento — solo se usa para decidir si un horario elegido por
+ * el cliente cae dentro o fuera de la ventana normal (el aviso ámbar
+ * informativo), NO para bloquear ninguna fecha: el cliente puede elegir
+ * cualquier fecha desde hoy en adelante y cualquier hora, aunque caiga
+ * fuera de esta ventana (ver `estaFueraDeVentana`).
+ *
+ * El día se reparte en 3 zonas (domingo usa su propio corte de mañana
+ * en vez de `horaLimitePedido`, ver `horaLimiteHoy`):
+ *   1. antes del corte de la mañana -> HOY, franja tarde (3pm).
+ *   2. entre ese corte y `horaInicioPedidoTarde` (6pm) -> MAÑANA, franja
+ *      mañana (4am) — el turno de pedidos "de la tarde" que hoy en día
+ *      alimenta la hornada de mañana.
+ *   3. después de `horaInicioPedidoTarde` -> MAÑANA, franja tarde (3pm)
+ *      — turno tarde/noche, alimenta la hornada de la tarde del día
+ *      siguiente (no la de la mañana). */
+function horaLimiteHoy(horarios: HorariosPanaderia, ahora: Date): string {
+  return ahora.getDay() === 0 ? horarios.domingoHoraLimitePedido : horarios.horaLimitePedido;
+}
+
 function calcularVentanaRecojo(horarios: HorariosPanaderia, ahora = new Date()): VentanaRecojo {
   const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
-  const dentroDePlazo = minutosAhora <= horaAMinutos(horarios.horaLimitePedido);
+  const minutosLimite = horaAMinutos(horaLimiteHoy(horarios, ahora));
+  const minutosInicioTarde = horaAMinutos(horarios.horaInicioPedidoTarde);
 
-  const fecha = new Date(ahora);
-  if (!dentroDePlazo) fecha.setDate(fecha.getDate() + 1);
+  if (minutosAhora < minutosLimite) {
+    return { fechaMinima: formatearFecha(ahora), horaMinima: horarios.horaRecojoMismoDia };
+  }
 
+  const manana = new Date(ahora);
+  manana.setDate(manana.getDate() + 1);
+  const zonaTarde = minutosAhora >= minutosInicioTarde;
   return {
-    fechaMinima: formatearFecha(fecha),
-    horaMinima: dentroDePlazo ? horarios.horaRecojoMismoDia : horarios.horaRecojoDiaSiguiente,
-    esMismoDia: dentroDePlazo,
+    fechaMinima: formatearFecha(manana),
+    horaMinima: zonaTarde ? horarios.horaRecojoMismoDia : horarios.horaRecojoDiaSiguiente,
   };
 }
 
@@ -76,9 +92,10 @@ export function estaFueraDeVentana(
     // "día siguiente" como piso (la de "mismo día" es exclusiva de hoy).
     return horaAMinutos(horaElegida) < horaAMinutos(horarios.horaRecojoDiaSiguiente);
   }
-  // fechaElegida === ventana.fechaMinima
-  const piso = ventana.esMismoDia ? ventana.horaMinima : horarios.horaRecojoDiaSiguiente;
-  return horaAMinutos(horaElegida) < horaAMinutos(piso);
+  // fechaElegida === ventana.fechaMinima: `horaMinima` ya trae la hora
+  // correcta para la zona en la que se hizo el pedido (franja mañana o
+  // franja tarde), tanto si el mínimo es hoy como si es mañana.
+  return horaAMinutos(horaElegida) < horaAMinutos(ventana.horaMinima);
 }
 
 function minutosDesdeAhoraMasTolerancia(horarios: HorariosPanaderia, ahora: Date): number {
@@ -128,24 +145,58 @@ export function esMuyTardeHoy(
   return horaAMinutos(horaElegida) > horaAMinutos(horarios.horaTopeRecojo);
 }
 
+interface FranjaAjustada {
+  /** "HH:mm" */
+  piso: string;
+  /** "HH:mm" */
+  tope: string;
+}
+
+/** Piso/techo EFECTIVO de recojo para cualquier día, según qué franjas
+ * están activas ahora mismo — mismo cálculo que `franjaAjustada` en
+ * horariosPanaderia.js (backend). Las dos franjas son secuenciales y sin
+ * encimarse (juntas cubren exactamente [horaApertura, horaCierre]):
+ * franja mañana [horaApertura, horaRecojoMismoDia) y franja tarde
+ * [horaRecojoMismoDia, horaCierre). Si el dueño apaga una, el rango
+ * válido se achica al de la otra; si apaga las dos, no queda ningún
+ * minuto válido (`null`). */
+export function franjaAjustada(horarios: HorariosPanaderia): FranjaAjustada | null {
+  if (horarios.franjaMananaActiva && horarios.franjaTardeActiva) {
+    return { piso: horarios.horaApertura, tope: horarios.horaCierre };
+  }
+  if (horarios.franjaMananaActiva && !horarios.franjaTardeActiva) {
+    return { piso: horarios.horaApertura, tope: horarios.horaRecojoMismoDia };
+  }
+  if (!horarios.franjaMananaActiva && horarios.franjaTardeActiva) {
+    return { piso: horarios.horaRecojoMismoDia, tope: horarios.horaCierre };
+  }
+  return null;
+}
+
 /** true si todavía queda al menos un minuto válido para recoger HOY —
- * false una vez que la tolerancia mínima ya empuja más allá del tope de
- * recojo (ej. tope 10pm, tolerancia 30 min: desde las 9:30pm en adelante
- * ya no hay ninguna hora de hoy que respete ambas reglas a la vez). Se usa
- * para que el selector de fecha deje de ofrecer "hoy" en ese caso — no
- * tiene sentido dejarlo elegible si después ninguna hora sería válida. */
+ * false una vez que la tolerancia mínima ya empuja más allá del techo
+ * efectivo de hoy (el tope de recojo del mismo día, o antes si la franja
+ * tarde está apagada — ver `franjaAjustada`). Se usa para que el selector
+ * de fecha deje de ofrecer "hoy" en ese caso — no tiene sentido dejarlo
+ * elegible si después ninguna hora sería válida. */
 export function hayVentanaHoy(horarios: HorariosPanaderia, ahora = new Date()): boolean {
-  return minutosDesdeAhoraMasTolerancia(horarios, ahora) <= horaAMinutos(horarios.horaTopeRecojo);
+  const franja = franjaAjustada(horarios);
+  if (!franja) return false;
+  const topeEfectivo = Math.min(horaAMinutos(horarios.horaTopeRecojo), horaAMinutos(franja.tope));
+  return minutosDesdeAhoraMasTolerancia(horarios, ahora) <= topeEfectivo;
 }
 
 /** Piso/tope duro que aplica a CUALQUIER fecha (hoy o un día futuro), a
  * diferencia de `esMuyProntoHoy`/`esMuyTardeHoy` que solo rigen si la
- * fecha elegida es hoy: el horario general de atención de la tienda.
- * Ninguna hora de recojo puede caer fuera de [horaApertura, horaCierre],
- * sin importar qué día sea. Refleja del lado del cliente la misma regla
- * que el backend vuelve a exigir (fueraDeHorarioAtencion en
+ * fecha elegida es hoy: el rango efectivo según qué franjas de recojo
+ * están activas (ver `franjaAjustada`). Ninguna hora de recojo puede caer
+ * fuera de ese rango, sin importar qué día sea, ni dentro de una franja
+ * que el dueño apagó por falta de stock. Refleja del lado del cliente la
+ * misma regla que el backend vuelve a exigir (fueraDeHorarioAtencion en
  * horariosPanaderia.js). */
 export function fueraDeHorarioAtencion(horaElegida: string, horarios: HorariosPanaderia): boolean {
+  const franja = franjaAjustada(horarios);
+  if (!franja) return true;
   const minutos = horaAMinutos(horaElegida);
-  return minutos < horaAMinutos(horarios.horaApertura) || minutos > horaAMinutos(horarios.horaCierre);
+  return minutos < horaAMinutos(franja.piso) || minutos > horaAMinutos(franja.tope);
 }

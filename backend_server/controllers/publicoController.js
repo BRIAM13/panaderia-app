@@ -4,7 +4,7 @@ const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos'
 const { buscarPersonaPorDni, buscarEmpresaPorRuc } = require('./externalController');
 const { intentarClonarUsuarioCliente } = require('./clientesController');
 const { notificarPersonalTienda, SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
-const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy, fueraDeHorarioAtencion } = require('../utils/horariosPanaderia');
+const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy, fueraDeHorarioAtencion, franjaAjustada } = require('../utils/horariosPanaderia');
 const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
 const { RUC_PERU_REGEX } = require('../middlewares/validators');
 
@@ -198,13 +198,17 @@ async function crearPedidoPublico(req, res, next) {
       return res.status(400).json({ mensaje: 'La fecha de recojo no puede ser anterior a hoy.' });
     }
     const horarios = await obtenerHorariosPanaderia(pool);
-    // Piso/tope duro que rige CUALQUIER fecha, no solo hoy: el horario
-    // general de atención de la tienda — nunca se recoge antes de que
-    // abra ni después de que cierre, sin importar qué día sea.
+    // Piso/tope duro que rige CUALQUIER fecha, no solo hoy: el rango
+    // efectivo según qué franjas de recojo (mañana/tarde) están activas
+    // — nunca se recoge antes de que abra la franja ni después de que
+    // cierre, ni dentro de una franja que el dueño apagó por falta de
+    // stock, sin importar qué día sea.
     if (fueraDeHorarioAtencion({ hora, minuto }, horarios)) {
-      return res.status(400).json({
-        mensaje: `Atendemos de ${formatearHora12(horarios.horaApertura)} a ${formatearHora12(horarios.horaCierre)}. Elige una hora dentro de ese horario.`,
-      });
+      const franja = franjaAjustada(horarios);
+      const mensaje = franja
+        ? `Atendemos de ${formatearHora12(franja.piso)} a ${formatearHora12(franja.tope)}. Elige una hora dentro de ese horario.`
+        : 'Por ahora no estamos recibiendo pedidos nuevos. Intenta de nuevo más tarde.';
+      return res.status(400).json({ mensaje });
     }
     // Único piso realmente duro adicional (a diferencia del horario
     // normal de recojo, que solo advierte): si la fecha elegida es hoy,

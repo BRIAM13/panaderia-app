@@ -16,6 +16,7 @@ import {
   esMuyTardeHoy,
   estaFueraDeVentana,
   formatearHora12,
+  franjaAjustada,
   fueraDeHorarioAtencion,
   hayVentanaHoy,
   horaMinimaHoy,
@@ -123,6 +124,27 @@ export function PedidoForm() {
       .finally(() => setCargandoProductos(false));
   }, []);
 
+  // Los horarios (y sobre todo los 2 interruptores de franja) pueden
+  // cambiar en cualquier momento desde la app — sin este sondeo, alguien
+  // que ya tenía la página abierta seguía viendo el horario viejo hasta
+  // que recargaba. Se detiene una vez que el pedido ya se envió (no hace
+  // falta seguir refrescando sobre la pantalla de éxito). Silencioso: un
+  // refresco que falla (red, servidor despertando) simplemente se
+  // reintenta en el próximo ciclo, sin tocar el horario ya cargado.
+  useEffect(() => {
+    if (resultado) return;
+    const id = window.setInterval(() => {
+      obtenerCatalogoPublico()
+        .then(({ productos: lista, horarios: horariosCatalogo }) => {
+          const disponibles = lista.filter((p) => NOMBRES_DISPONIBLES.has(p.nombre));
+          setProductos(disponibles);
+          setHorarios(horariosCatalogo);
+        })
+        .catch(() => {});
+    }, 30000);
+    return () => window.clearInterval(id);
+  }, [resultado]);
+
   // Verificación real contra RENIEC/SUNAT apenas el documento llega al
   // largo esperado (8 dígitos DNI, 11 RUC) — así el cliente se entera de
   // entrada si escribió mal el número, en vez de descubrirlo recién al
@@ -190,6 +212,17 @@ export function PedidoForm() {
   // Segundo piso duro: el negocio ya cerró para recoger hoy después de
   // esta hora (fija, no depende del reloj como el mínimo de arriba).
   const maximoHoraHoy = horarios && esRecojoHoy ? horarios.horaTopeRecojo : undefined;
+
+  // Piso/techo que rige CUALQUIER fecha (no solo hoy): el rango efectivo
+  // según qué franjas de recojo (mañana 4am / tarde 3pm) están activas
+  // ahora mismo — si el dueño apagó una por falta de stock, el rango se
+  // achica a la otra. Si apagó las dos, "23:59"-"00:00" es un rango
+  // invertido a propósito: el mismo mecanismo que ya cierra el selector
+  // cuando el piso supera el techo (ver SelectorHora) deja todo
+  // deshabilitado sin necesitar un caso especial aparte.
+  const franja = horarios ? franjaAjustada(horarios) : null;
+  const minimoHoraSiempre = franja?.piso ?? "23:59";
+  const maximoHoraSiempre = franja?.tope ?? "00:00";
 
   // Una vez que ni con la tolerancia mínima alcanza a caber antes del
   // tope de recojo (ej. tope 10pm, tolerancia 30 min: desde las 9:30pm en
@@ -330,8 +363,11 @@ export function PedidoForm() {
         return;
       }
       if (horarios && fueraDeHorarioAtencion(horaRecojo, horarios)) {
+        const franjaActual = franjaAjustada(horarios);
         setError(
-          `Atendemos de ${formatearHora12(horarios.horaApertura)} a ${formatearHora12(horarios.horaCierre)}. Elige una hora dentro de ese horario.`,
+          franjaActual
+            ? `Atendemos de ${formatearHora12(franjaActual.piso)} a ${formatearHora12(franjaActual.tope)}. Elige una hora dentro de ese horario.`
+            : "Por ahora no estamos recibiendo pedidos nuevos. Intenta de nuevo más tarde.",
         );
         return;
       }
@@ -633,20 +669,22 @@ export function PedidoForm() {
                         onChange={setHoraRecojo}
                         minimoHoy={minimoHoraHoy}
                         maximoHoy={maximoHoraHoy}
-                        minimoSiempre={horarios.horaApertura}
-                        maximoSiempre={horarios.horaCierre}
+                        minimoSiempre={minimoHoraSiempre}
+                        maximoSiempre={maximoHoraSiempre}
                         puedeAbrir={!!fechaRecojo}
                         onIntentoBloqueado={alIntentarAbrirHoraSinFecha}
                       />
                     </div>
                     <p className="mt-1.5 text-xs text-pan-carbon-suave">
-                      Atendemos de {formatearHora12(horarios.horaApertura)} a{" "}
-                      {formatearHora12(horarios.horaCierre)}. Pedidos hasta las{" "}
-                      {formatearHora12(horarios.horaLimitePedido)} se recogen hoy mismo desde las{" "}
-                      {formatearHora12(horarios.horaRecojoMismoDia)}. Después de esa hora, el recojo pasa
-                      para el día siguiente desde las {formatearHora12(horarios.horaRecojoDiaSiguiente)}.
-                      El recojo el mismo día solo se puede pedir hasta las{" "}
-                      {formatearHora12(horarios.horaTopeRecojo)}.
+                      {franja
+                        ? `Por ahora, el recojo está disponible de ${formatearHora12(franja.piso)} a ${formatearHora12(franja.tope)}. `
+                        : "Por ahora no estamos recibiendo pedidos nuevos. "}
+                      Pedidos hasta las {formatearHora12(horarios.horaLimitePedido)} se recogen hoy mismo
+                      desde las {formatearHora12(horarios.horaRecojoMismoDia)}. Después de esa hora, el
+                      recojo pasa para el día siguiente desde las{" "}
+                      {formatearHora12(horarios.horaRecojoDiaSiguiente)}, o desde las{" "}
+                      {formatearHora12(horarios.horaRecojoMismoDia)} si el pedido llega pasadas las{" "}
+                      {formatearHora12(horarios.horaInicioPedidoTarde)}.
                     </p>
                     <AnimatePresence>
                       {fueraDeVentanaActual && (
