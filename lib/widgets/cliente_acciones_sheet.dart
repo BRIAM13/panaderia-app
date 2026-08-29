@@ -8,7 +8,7 @@ import '../theme/app_theme.dart';
 /// Acciones que puede devolver el sheet, para que la pantalla que lo abrió
 /// decida qué hacer (editar / desactivar / reactivar) sin acoplarse a la
 /// navegación.
-enum ClienteAccion { editar, desactivar, reactivar }
+enum ClienteAccion { verPerfil, editar, desactivar, reactivar }
 
 Future<ClienteAccion?> showClienteAccionesSheet(
   BuildContext context,
@@ -304,6 +304,12 @@ class _ClienteAccionesSheetContent extends StatelessWidget {
             const Divider(height: 1),
             const SizedBox(height: 8),
             if (cliente.activo) ...[
+              ListTile(
+                leading: Icon(Icons.badge_outlined, color: scheme.primary),
+                title: const Text('Ver perfil'),
+                subtitle: const Text('Historial, puntos y notas del cliente'),
+                onTap: () => Navigator.of(context).pop(ClienteAccion.verPerfil),
+              ),
               ListTile(
                 leading: const Icon(Icons.edit_rounded),
                 title: const Text('Editar cliente'),

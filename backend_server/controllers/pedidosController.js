@@ -891,6 +891,23 @@ async function entregarPedido(req, res, next) {
         WHERE IdPedido = @IdPedido
       `);
 
+    // CRM: puntos de fidelidad reales — 1 punto por cada
+    // CLIENTES_SOLES_POR_PUNTO soles del pedido, sin importar si quedó
+    // como deuda (el pedido ya se entregó de verdad, la deuda es un
+    // problema de cobranza aparte).
+    const solesPorPuntoResult = await pool
+      .request()
+      .query(`SELECT Valor FROM Configuraciones WHERE Clave = 'CLIENTES_SOLES_POR_PUNTO'`);
+    const solesPorPunto = Number(solesPorPuntoResult.recordset[0]?.Valor) || 10;
+    const puntosGanados = Math.floor(Number(pedido.Total) / solesPorPunto);
+    if (puntosGanados > 0) {
+      await pool
+        .request()
+        .input('IdCliente', sql.Int, pedido.IdCliente)
+        .input('Puntos', sql.Int, puntosGanados)
+        .query('UPDATE Clientes SET PuntosFidelidad = PuntosFidelidad + @Puntos WHERE IdCliente = @IdCliente');
+    }
+
     await registrarAuditoria({
       idUsuario: req.usuario.idUsuario,
       accion: 'ENTREGAR_PEDIDO',

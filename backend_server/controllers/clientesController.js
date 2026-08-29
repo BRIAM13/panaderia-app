@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const { sql, getPool } = require('../config/db');
 const { registrarAuditoria } = require('../utils/auditLog');
 const { solicitarCodigo, verificarCodigo, OtpError } = require('../services/otpService');
+const { enviarPush } = require('../services/pushService');
 
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
 
@@ -29,6 +30,47 @@ function mayuscula(valor) {
   return valor ? valor.trim().toUpperCase() : valor;
 }
 
+// CRM — claves de Configuraciones que controlan los umbrales de
+// segmentación y la conversión de puntos de fidelidad, mismo patrón que
+// PRECIO_PAQUETE/horariosPanaderia.js: se leen de la BD en cada consulta,
+// así un cambio hecho desde la app surte efecto de inmediato.
+const CLAVE_DIAS_EN_RIESGO = 'CLIENTES_DIAS_EN_RIESGO';
+const CLAVE_PEDIDOS_FRECUENTE = 'CLIENTES_PEDIDOS_FRECUENTE';
+const CLAVE_UMBRAL_VIP_SOLES = 'CLIENTES_UMBRAL_VIP_SOLES';
+const CLAVE_SOLES_POR_PUNTO = 'CLIENTES_SOLES_POR_PUNTO';
+
+async function obtenerConfiguracionesCrm(pool) {
+  const result = await pool.request().query(`
+    SELECT Clave, Valor FROM Configuraciones
+    WHERE Clave IN ('${CLAVE_DIAS_EN_RIESGO}', '${CLAVE_PEDIDOS_FRECUENTE}', '${CLAVE_UMBRAL_VIP_SOLES}', '${CLAVE_SOLES_POR_PUNTO}')
+  `);
+  const mapa = Object.fromEntries(result.recordset.map((r) => [r.Clave, r.Valor]));
+  return {
+    diasEnRiesgo: Number(mapa[CLAVE_DIAS_EN_RIESGO]) || 30,
+    pedidosFrecuente: Number(mapa[CLAVE_PEDIDOS_FRECUENTE]) || 5,
+    umbralVipSoles: Number(mapa[CLAVE_UMBRAL_VIP_SOLES]) || 200,
+    solesPorPunto: Number(mapa[CLAVE_SOLES_POR_PUNTO]) || 10,
+  };
+}
+
+/**
+ * Segmento del cliente según su historial de pedidos ENTREGADOS (los
+ * únicos que cuentan como compra real, no pedidos rechazados/cancelados
+ * ni todavía pendientes). Reglas, en orden de prioridad:
+ *   'NUEVO'      -> nunca se le entregó un pedido.
+ *   'EN_RIESGO'  -> ya compró antes, pero no hace más de `diasEnRiesgo`.
+ *   'VIP'        -> gastó en total (entregado) al menos `umbralVipSoles`.
+ *   'FRECUENTE'  -> al menos `pedidosFrecuente` pedidos entregados.
+ *   'REGULAR'    -> cualquier otro cliente con compras.
+ */
+function calcularSegmento({ pedidosEntregados, totalGastado, diasDesdeUltimaCompra }, config) {
+  if (!pedidosEntregados) return 'NUEVO';
+  if (diasDesdeUltimaCompra !== null && diasDesdeUltimaCompra > config.diasEnRiesgo) return 'EN_RIESGO';
+  if (totalGastado >= config.umbralVipSoles) return 'VIP';
+  if (pedidosEntregados >= config.pedidosFrecuente) return 'FRECUENTE';
+  return 'REGULAR';
+}
+
 function mapearCliente(fila) {
   return {
     idCliente: fila.IdCliente,
@@ -49,6 +91,306 @@ function mapearCliente(fila) {
     telefonoVerificado: Boolean(fila.TelefonoVerificado),
     emailVerificado: Boolean(fila.EmailVerificado),
   };
+}
+
+/**
+ * CRM — perfil de cliente con historial agregado (gasto total, pedidos
+ * entregados, deuda pendiente, última compra, tiendas donde compró) y su
+ * segmento calculado al vuelo. Solo cuenta pedidos ENTREGADO como compra
+ * real: uno pendiente/rechazado/cancelado no debe inflar el historial ni
+ * la fecha de "última compra".
+ */
+async function obtenerPerfilCliente(req, res, next) {
+  const { id } = req.params;
+
+  try {
+    const pool = await getPool();
+
+    const clienteResult = await pool
+      .request()
+      .input('IdCliente', sql.Int, id)
+      .query(`
+        SELECT c.IdCliente, c.DescripcionNegocio, c.NombreComercialOficial, c.PuntosFidelidad, c.Estado,
+               p.IdPersona, p.DNI, p.Nombres, p.ApellidoPaterno, p.ApellidoMaterno,
+               p.Telefono, p.Email, p.Direccion, p.OrigenValidacion, p.TelefonoVerificado, p.EmailVerificado
+        FROM Clientes c
+        INNER JOIN Personas p ON p.IdPersona = c.IdPersona
+        WHERE c.IdCliente = @IdCliente
+      `);
+    const filaCliente = clienteResult.recordset[0];
+    if (!filaCliente) return res.status(404).json({ mensaje: 'Cliente no encontrado' });
+
+    const agregadoResult = await pool
+      .request()
+      .input('IdCliente', sql.Int, id)
+      .query(`
+        SELECT
+          COUNT(*) AS TotalPedidos,
+          SUM(CASE WHEN Estado = 'ENTREGADO' THEN 1 ELSE 0 END) AS PedidosEntregados,
+          COALESCE(SUM(CASE WHEN Estado = 'ENTREGADO' THEN Total ELSE 0 END), 0) AS TotalGastado,
+          COALESCE(SUM(CASE WHEN Estado = 'ENTREGADO' AND EstadoPago = 'DEUDA' THEN Total ELSE 0 END), 0) AS DeudaPendiente,
+          MAX(CASE WHEN Estado = 'ENTREGADO' THEN COALESCE(FechaEntregaReal, FechaCreacion) END) AS UltimaCompra
+        FROM Pedidos
+        WHERE IdCliente = @IdCliente
+      `);
+    const agregado = agregadoResult.recordset[0];
+
+    const tiendasResult = await pool
+      .request()
+      .input('IdCliente', sql.Int, id)
+      .query(`
+        SELECT DISTINCT t.IdTienda, t.Nombre
+        FROM Pedidos pd
+        INNER JOIN Tiendas t ON t.IdTienda = pd.IdTienda
+        WHERE pd.IdCliente = @IdCliente AND pd.Estado = 'ENTREGADO'
+      `);
+
+    const config = await obtenerConfiguracionesCrm(pool);
+    const ultimaCompra = agregado.UltimaCompra ? new Date(agregado.UltimaCompra) : null;
+    const diasDesdeUltimaCompra = ultimaCompra
+      ? Math.floor((Date.now() - ultimaCompra.getTime()) / 86400000)
+      : null;
+
+    const segmento = calcularSegmento(
+      {
+        pedidosEntregados: Number(agregado.PedidosEntregados) || 0,
+        totalGastado: Number(agregado.TotalGastado) || 0,
+        diasDesdeUltimaCompra,
+      },
+      config,
+    );
+
+    return res.status(200).json({
+      cliente: mapearCliente(filaCliente),
+      historial: {
+        totalPedidos: Number(agregado.TotalPedidos) || 0,
+        pedidosEntregados: Number(agregado.PedidosEntregados) || 0,
+        totalGastado: Number(agregado.TotalGastado) || 0,
+        deudaPendiente: Number(agregado.DeudaPendiente) || 0,
+        ultimaCompra: agregado.UltimaCompra,
+        diasDesdeUltimaCompra,
+        tiendas: tiendasResult.recordset.map((f) => ({ idTienda: f.IdTienda, nombre: f.Nombre })),
+      },
+      segmento,
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * CRM — historial de notas internas del cliente (visible solo para
+ * personal, nunca para el cliente mismo). Se listan todas, no solo la
+ * última, más recientes primero.
+ */
+async function listarNotasCliente(req, res, next) {
+  const { id } = req.params;
+
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input('IdCliente', sql.Int, id)
+      .query(`
+        SELECT n.IdNota, n.IdCliente, n.Texto, n.FechaCreacion,
+               n.IdUsuarioAutor, p.Nombres AS AutorNombres, p.ApellidoPaterno AS AutorApellidoPaterno
+        FROM NotasCliente n
+        INNER JOIN Usuarios u ON u.IdUsuario = n.IdUsuarioAutor
+        INNER JOIN Personas p ON p.IdPersona = u.IdPersona
+        WHERE n.IdCliente = @IdCliente
+        ORDER BY n.FechaCreacion DESC
+      `);
+
+    return res.status(200).json({
+      notas: result.recordset.map((f) => ({
+        idNota: f.IdNota,
+        idCliente: f.IdCliente,
+        texto: f.Texto,
+        fechaCreacion: f.FechaCreacion,
+        autor: `${f.AutorNombres} ${f.AutorApellidoPaterno}`.trim(),
+      })),
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function crearNotaCliente(req, res, next) {
+  const { id } = req.params;
+  const { texto } = req.body;
+
+  if (!texto || !texto.trim()) {
+    return res.status(400).json({ mensaje: 'La nota no puede estar vacía' });
+  }
+  if (texto.trim().length > 500) {
+    return res.status(400).json({ mensaje: 'La nota no puede superar los 500 caracteres' });
+  }
+
+  try {
+    const pool = await getPool();
+
+    const clienteResult = await pool
+      .request()
+      .input('IdCliente', sql.Int, id)
+      .query('SELECT IdCliente FROM Clientes WHERE IdCliente = @IdCliente');
+    if (clienteResult.recordset.length === 0) {
+      return res.status(404).json({ mensaje: 'Cliente no encontrado' });
+    }
+
+    await pool
+      .request()
+      .input('IdCliente', sql.Int, id)
+      .input('IdUsuarioAutor', sql.Int, req.usuario.idUsuario)
+      .input('Texto', sql.VarChar(500), texto.trim())
+      .query(`
+        INSERT INTO NotasCliente (IdCliente, IdUsuarioAutor, Texto)
+        VALUES (@IdCliente, @IdUsuarioAutor, @Texto)
+      `);
+
+    return res.status(201).json({ mensaje: 'Nota agregada correctamente' });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * CRM — canje de puntos de fidelidad: resta puntos del saldo del cliente
+ * (nunca deja el saldo negativo) y lo deja registrado en la auditoría
+ * general (no hace falta una tabla propia: es un evento infrecuente y
+ * `registrarAuditoria` ya guarda quién, cuándo y con qué datos).
+ */
+async function canjearPuntos(req, res, next) {
+  const { id } = req.params;
+  const { puntos, descripcion } = req.body;
+
+  if (!Number.isInteger(puntos) || puntos <= 0) {
+    return res.status(400).json({ mensaje: 'Los puntos a canjear deben ser un número entero positivo' });
+  }
+
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input('IdCliente', sql.Int, id)
+      .input('Puntos', sql.Int, puntos)
+      .query(`
+        UPDATE Clientes
+        SET PuntosFidelidad = PuntosFidelidad - @Puntos
+        WHERE IdCliente = @IdCliente AND PuntosFidelidad >= @Puntos
+      `);
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(400).json({ mensaje: 'El cliente no existe o no tiene puntos suficientes' });
+    }
+
+    await registrarAuditoria({
+      idUsuario: req.usuario.idUsuario,
+      accion: 'CANJEAR_PUNTOS_CLIENTE',
+      tablaAfectada: 'Clientes',
+      registroAfectadoId: String(id),
+      datosNuevos: { puntosCanjeados: puntos, descripcion: descripcion || null },
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    const nuevoSaldo = await pool
+      .request()
+      .input('IdCliente', sql.Int, id)
+      .query('SELECT PuntosFidelidad FROM Clientes WHERE IdCliente = @IdCliente');
+
+    return res.status(200).json({
+      mensaje: 'Puntos canjeados correctamente',
+      puntosFidelidad: nuevoSaldo.recordset[0].PuntosFidelidad,
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * CRM — campaña de reactivación: envía un push a todos los clientes
+ * segmentados como "EN_RIESGO" (recalculado al vuelo, mismo criterio que
+ * `obtenerPerfilCliente`). Solo llega a quienes tienen cuenta propia
+ * (clonada) con al menos un dispositivo registrado — un cliente que
+ * nunca inició sesión en la app no tiene forma de recibir push todavía.
+ */
+async function enviarCampaniaReactivacion(req, res, next) {
+  const { mensaje } = req.body;
+
+  if (!mensaje || !mensaje.trim()) {
+    return res.status(400).json({ mensaje: 'El mensaje de la campaña no puede estar vacío' });
+  }
+
+  try {
+    const pool = await getPool();
+    const config = await obtenerConfiguracionesCrm(pool);
+
+    const candidatosResult = await pool.request().query(`
+      SELECT c.IdCliente,
+             MAX(CASE WHEN pd.Estado = 'ENTREGADO' THEN COALESCE(pd.FechaEntregaReal, pd.FechaCreacion) END) AS UltimaCompra
+      FROM Clientes c
+      INNER JOIN Pedidos pd ON pd.IdCliente = c.IdCliente
+      WHERE c.Estado = 1
+      GROUP BY c.IdCliente
+      HAVING MAX(CASE WHEN pd.Estado = 'ENTREGADO' THEN 1 ELSE 0 END) = 1
+    `);
+
+    const ahora = Date.now();
+    const idsEnRiesgo = candidatosResult.recordset
+      .filter((f) => {
+        const dias = Math.floor((ahora - new Date(f.UltimaCompra).getTime()) / 86400000);
+        return dias > config.diasEnRiesgo;
+      })
+      .map((f) => f.IdCliente);
+
+    if (idsEnRiesgo.length === 0) {
+      return res.status(200).json({ mensaje: 'No hay clientes en riesgo por ahora', clientesNotificados: 0, dispositivosAlcanzados: 0 });
+    }
+
+    const tokensResult = await pool.request().query(`
+      SELECT dn.FcmToken
+      FROM Clientes c
+      INNER JOIN Personas p ON p.IdPersona = c.IdPersona
+      INNER JOIN Usuarios u ON u.IdPersona = p.IdPersona
+      INNER JOIN DispositivosNotificacion dn ON dn.IdUsuario = u.IdUsuario
+      WHERE c.IdCliente IN (${idsEnRiesgo.join(',')})
+    `);
+    const tokens = tokensResult.recordset.map((f) => f.FcmToken);
+
+    let enviados = 0;
+    if (tokens.length > 0) {
+      const { enviados: total, tokensInvalidos } = await enviarPush({
+        tokens,
+        titulo: 'Te extrañamos',
+        cuerpo: mensaje.trim(),
+        datos: { tipo: 'CAMPANIA_REACTIVACION' },
+      });
+      enviados = total;
+      if (tokensInvalidos.length > 0) {
+        await pool
+          .request()
+          .query(`DELETE FROM DispositivosNotificacion WHERE FcmToken IN (${tokensInvalidos.map((t) => `'${t.replace(/'/g, "''")}'`).join(',')})`);
+      }
+    }
+
+    await registrarAuditoria({
+      idUsuario: req.usuario.idUsuario,
+      accion: 'CAMPANIA_REACTIVACION_CLIENTES',
+      tablaAfectada: 'Clientes',
+      registroAfectadoId: null,
+      datosNuevos: { clientesEnRiesgo: idsEnRiesgo.length, dispositivosAlcanzados: enviados, mensaje: mensaje.trim() },
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return res.status(200).json({
+      mensaje: 'Campaña enviada correctamente',
+      clientesNotificados: idsEnRiesgo.length,
+      dispositivosAlcanzados: enviados,
+    });
+  } catch (err) {
+    return next(err);
+  }
 }
 
 /**
@@ -864,6 +1206,11 @@ module.exports = {
   solicitarAutorizacion,
   validarAutorizacion,
   cambiarPasswordSeguro,
+  obtenerPerfilCliente,
+  listarNotasCliente,
+  crearNotaCliente,
+  canjearPuntos,
+  enviarCampaniaReactivacion,
   // Reexportado para publicoController.js (pedido web sin login) — mismo
   // clonado de cuenta (usuario=DNI, password=DNI) que ya dispara un
   // registro de cliente hecho por el personal con DNI real verificado.

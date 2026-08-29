@@ -15,6 +15,11 @@ const {
   solicitarAutorizacion,
   validarAutorizacion,
   cambiarPasswordSeguro,
+  obtenerPerfilCliente,
+  listarNotasCliente,
+  crearNotaCliente,
+  canjearPuntos,
+  enviarCampaniaReactivacion,
 } = require('../controllers/clientesController');
 const {
   validateCliente,
@@ -64,5 +69,16 @@ router.post('/', validateCliente, crearCliente);
 router.put('/:id', validateCliente, actualizarCliente);
 router.delete('/:id', desactivarCliente);
 router.put('/:id/reactivar', reactivarCliente);
+
+// CRM: perfil con historial agregado + segmento, notas internas del
+// personal, y canje de puntos de fidelidad.
+router.get('/:id/perfil', obtenerPerfilCliente);
+router.get('/:id/notas', listarNotasCliente);
+router.post('/:id/notas', crearNotaCliente);
+router.post('/:id/canjear-puntos', canjearPuntos);
+
+// Campaña de reactivación (push a clientes "en riesgo") — exclusivo
+// ADMIN/SUPERADMIN, a diferencia del resto del CRUD de arriba.
+router.post('/campanias/reactivacion', autorizarRoles('ADMIN', 'SUPERADMIN'), enviarCampaniaReactivacion);
 
 module.exports = router;

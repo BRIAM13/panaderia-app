@@ -137,6 +137,26 @@ CREATE TABLE Clientes (
 );
 GO
 
+-- Notas internas del personal sobre un cliente (preferencias, alergias,
+-- quejas, etc.) — historial completo, no solo la última nota; visible
+-- únicamente para personal, nunca para el propio cliente. Ver CRM,
+-- pantalla de perfil de cliente.
+CREATE TABLE NotasCliente (
+    IdNota              INT IDENTITY(1,1)   NOT NULL,
+    IdCliente           INT                 NOT NULL,
+    IdUsuarioAutor      INT                 NOT NULL,
+    Texto               NVARCHAR(500)       NOT NULL,
+    FechaCreacion       DATETIME2           NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT PK_NotasCliente PRIMARY KEY (IdNota),
+    CONSTRAINT FK_NotasCliente_Cliente FOREIGN KEY (IdCliente)
+        REFERENCES Clientes(IdCliente),
+    CONSTRAINT FK_NotasCliente_Usuario FOREIGN KEY (IdUsuarioAutor)
+        REFERENCES Usuarios(IdUsuario)
+);
+GO
+CREATE INDEX IX_NotasCliente_Cliente ON NotasCliente(IdCliente, FechaCreacion DESC);
+GO
+
 /* ============================================================================
    5. TRABAJADORES - Perfil de trabajador (1:1 opcional con Personas)
    ============================================================================ */

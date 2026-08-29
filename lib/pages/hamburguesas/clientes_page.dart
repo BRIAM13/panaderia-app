@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/cliente_model.dart';
+import '../../models/usuario_sesion.dart';
 import '../../services/api_client.dart';
 import '../../services/clientes_service.dart';
 import '../../utils/texto_utils.dart';
@@ -13,11 +14,17 @@ import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/segmented_switch.dart';
 import 'cliente_form_page.dart';
+import 'cliente_perfil_page.dart';
 
 /// Módulo de Clientes de Hamburguesas: lista con búsqueda predictiva local,
 /// tarjetas con auditoría visual de calidad de dato y acciones directas.
 class ClientesPage extends StatefulWidget {
-  const ClientesPage({super.key});
+  const ClientesPage({super.key, this.usuario});
+
+  /// Necesario solo para decidir si se muestra el botón de campaña de
+  /// reactivación (exclusivo ADMIN/SUPERADMIN) — opcional para no romper
+  /// otros lugares que todavía navegan aquí sin sesión a mano.
+  final UsuarioSesion? usuario;
 
   @override
   State<ClientesPage> createState() => _ClientesPageState();
@@ -112,12 +119,93 @@ class _ClientesPageState extends State<ClientesPage> {
     final accion = await showClienteAccionesSheet(context, cliente);
     if (!mounted || accion == null) return;
 
-    if (accion == ClienteAccion.editar) {
+    if (accion == ClienteAccion.verPerfil) {
+      await _abrirPerfil(cliente);
+    } else if (accion == ClienteAccion.editar) {
       await _abrirFormulario(clienteExistente: cliente);
     } else if (accion == ClienteAccion.desactivar) {
       await _confirmarDesactivar(cliente);
     } else if (accion == ClienteAccion.reactivar) {
       await _reactivar(cliente);
+    }
+  }
+
+  Future<void> _abrirPerfil(Cliente cliente) async {
+    await pushSlideUpFade(
+      context,
+      (_) => ClientePerfilPage(cliente: cliente),
+    );
+    _cargarClientes();
+  }
+
+  bool get _puedeEnviarCampania {
+    final rol = widget.usuario?.rol;
+    return rol == 'ADMIN' || rol == 'SUPERADMIN';
+  }
+
+  Future<void> _abrirCampaniaReactivacion() async {
+    final mensajeController = TextEditingController(
+      text:
+          'Te extrañamos en Panadería Ronceros. Vuelve pronto, tenemos algo rico esperándote 🥖',
+    );
+
+    final mensaje = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Campaña de reactivación'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Se enviará este mensaje por notificación push a todos los '
+              'clientes marcados como "En riesgo".',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: mensajeController,
+              minLines: 2,
+              maxLines: 4,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Mensaje'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(context).pop(mensajeController.text.trim()),
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+
+    mensajeController.dispose();
+    if (mensaje == null || mensaje.isEmpty || !mounted) return;
+
+    try {
+      final resultado = await _clientesService.enviarCampaniaReactivacion(
+        mensaje,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Campaña enviada a ${resultado.clientesNotificados} clientes en '
+            'riesgo (${resultado.dispositivosAlcanzados} dispositivos alcanzados).',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.mensaje)));
     }
   }
 
@@ -178,7 +266,17 @@ class _ClientesPageState extends State<ClientesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Clientes')),
+      appBar: AppBar(
+        title: const Text('Clientes'),
+        actions: [
+          if (_puedeEnviarCampania)
+            IconButton(
+              icon: const Icon(Icons.campaign_outlined),
+              tooltip: 'Campaña de reactivación',
+              onPressed: _abrirCampaniaReactivacion,
+            ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _abrirFormulario(),
         icon: const Icon(Icons.person_add_alt_1_rounded),

@@ -1,4 +1,5 @@
 import '../models/cliente_model.dart';
+import '../models/perfil_cliente_model.dart';
 import 'api_client.dart';
 import 'secure_storage_service.dart';
 
@@ -248,5 +249,56 @@ class ClientesService {
       'canalAutorizacion': canalAutorizacion,
       'codigoAutorizacion': codigoAutorizacion,
     }, token: token);
+  }
+
+  /// CRM (personal): perfil completo con historial agregado y segmento.
+  Future<PerfilCliente> obtenerPerfil(int idCliente) async {
+    final token = await _storage.obtenerAccessToken();
+    final data = await _api.get('/clientes/$idCliente/perfil', token: token);
+    return PerfilCliente.fromJson(data);
+  }
+
+  Future<List<NotaCliente>> listarNotas(int idCliente) async {
+    final token = await _storage.obtenerAccessToken();
+    final data = await _api.get('/clientes/$idCliente/notas', token: token);
+    final lista = data['notas'] as List<dynamic>? ?? const [];
+    return lista
+        .map((e) => NotaCliente.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> crearNota(int idCliente, String texto) async {
+    final token = await _storage.obtenerAccessToken();
+    await _api.post('/clientes/$idCliente/notas', {
+      'texto': texto,
+    }, token: token);
+  }
+
+  /// Devuelve el nuevo saldo de puntos tras el canje.
+  Future<int> canjearPuntos(
+    int idCliente,
+    int puntos, {
+    String? descripcion,
+  }) async {
+    final token = await _storage.obtenerAccessToken();
+    final data = await _api.post('/clientes/$idCliente/canjear-puntos', {
+      'puntos': puntos,
+      if (descripcion != null) 'descripcion': descripcion,
+    }, token: token);
+    return data['puntosFidelidad'] as int;
+  }
+
+  /// Campaña de reactivación: push a todos los clientes "en riesgo".
+  /// Exclusivo ADMIN/SUPERADMIN — el backend también lo exige.
+  Future<({int clientesNotificados, int dispositivosAlcanzados})>
+  enviarCampaniaReactivacion(String mensaje) async {
+    final token = await _storage.obtenerAccessToken();
+    final data = await _api.post('/clientes/campanias/reactivacion', {
+      'mensaje': mensaje,
+    }, token: token);
+    return (
+      clientesNotificados: data['clientesNotificados'] as int? ?? 0,
+      dispositivosAlcanzados: data['dispositivosAlcanzados'] as int? ?? 0,
+    );
   }
 }

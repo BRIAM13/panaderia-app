@@ -22,6 +22,7 @@ import '../hamburguesas/pedidos_page.dart';
 import '../hamburguesas/trabajadores_page.dart';
 import '../horneados/horneados_home_page.dart';
 import '../panaderia/ajuste_precios_page.dart';
+import '../panaderia/horarios_pedido_page.dart';
 import '../perfil/mi_perfil_page.dart';
 import '../sistema/token_api_peru_page.dart';
 import '../sistema/version_app_page.dart';
@@ -97,7 +98,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _abrirClientesHamburguesas() {
-    pushSlideUpFade(context, (context) => const ClientesPage());
+    pushSlideUpFade(
+      context,
+      (context) => ClientesPage(usuario: widget.usuario),
+    );
   }
 
   void _abrirPedidosHamburguesas() {
@@ -148,6 +152,10 @@ class _HomePageState extends State<HomePage> {
     final tienda = _buscarMiTienda('panaderia');
     if (tienda == null) return;
     pushSlideUpFade(context, (context) => AjustePreciosPage(tienda: tienda));
+  }
+
+  void _abrirHorariosPanaderia() {
+    pushSlideUpFade(context, (context) => const HorariosPedidoPage());
   }
 
   /// El anuncio solo existe para monetizar a quienes SOLO son clientes —
@@ -258,6 +266,7 @@ class _HomePageState extends State<HomePage> {
       onAbrirNuevoPedidoPanaderia: _abrirNuevoPedidoPanaderia,
       onAbrirDeudasPanaderia: _abrirDeudasPanaderia,
       onAbrirAjustePreciosPanaderia: _abrirAjustePreciosPanaderia,
+      onAbrirHorariosPanaderia: _abrirHorariosPanaderia,
       onAbrirMiPerfil: _abrirMiPerfil,
       onAbrirMisPedidos: _abrirMisPedidos,
       onAbrirMisDeudas: _abrirMisDeudas,
