@@ -572,8 +572,8 @@ function validateSolicitudPago(req, res, next) {
 function validateConsultarPedidosPublico(req, res, next) {
   const { dni } = req.query;
 
-  if (!isNonEmptyString(dni) || !DNI_PERU_REGEX.test(dni.trim())) {
-    return res.status(400).json({ mensaje: 'Ingresa un DNI válido de 8 dígitos.' });
+  if (!isNonEmptyString(dni) || (!DNI_PERU_REGEX.test(dni.trim()) && !RUC_PERU_REGEX.test(dni.trim()))) {
+    return res.status(400).json({ mensaje: 'Ingresa un DNI de 8 dígitos o un RUC de 11 dígitos válido.' });
   }
 
   next();

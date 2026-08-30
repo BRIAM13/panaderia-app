@@ -261,6 +261,19 @@ class _PedidosPageState extends State<PedidosPage> {
       );
     }
 
+    // Hay pedidos, pero todos ya se resolvieron (entregado/rechazado/
+    // cancelado) — sin este chequeo, la lista de abajo quedaba en blanco
+    // (cada sección se oculta sola si no tiene pedidos activos) en vez de
+    // avisar que no hay nada pendiente ahora mismo.
+    if (_pedidos.every((p) => p.esFinalizado)) {
+      return EstadoVacio(
+        icono: Icons.task_alt_rounded,
+        titulo: 'No hay pedidos pendientes',
+        subtitulo: 'Todos los pedidos ya se resolvieron. El historial está en Ventas de hoy.',
+        onRefrescar: _cargar,
+      );
+    }
+
     final solicitados = _pedidos.where((p) => p.esSolicitado).toList();
     final resto = _pedidos.where((p) => !p.esSolicitado).toList();
 

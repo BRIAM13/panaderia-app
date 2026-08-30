@@ -401,12 +401,16 @@ async function crearPedidoPublico(req, res, next) {
 }
 
 /**
- * Consulta pública de pedidos por DNI, sin login: el visitante solo escribe
- * su DNI (ya validado por validateConsultarPedidosPublico) y ve el estado
- * de cada uno de sus pedidos recientes (pendiente de confirmar, rechazado,
- * confirmado por entregar o ya entregado) — la página lo vuelve a llamar
- * sola cada cierto tiempo mientras deja el panel abierto, para que el
- * estado se actualice sin que tenga que volver a buscar a mano.
+ * Consulta pública de pedidos por DNI o RUC, sin login: el visitante
+ * escribe su documento (ya validado por validateConsultarPedidosPublico,
+ * acepta cualquiera de los dos formatos) y ve el estado de cada uno de sus
+ * pedidos recientes (pendiente de confirmar, rechazado, confirmado por
+ * entregar o ya entregado) — la página lo vuelve a llamar sola cada cierto
+ * tiempo mientras deja el panel abierto, para que el estado se actualice
+ * sin que tenga que volver a buscar a mano. Es una búsqueda pura contra
+ * nuestra propia base (columna `Personas.DNI`, que guarda DNI y RUC por
+ * igual — ver convención del resto del backend): nunca gasta un consumo
+ * de apiperu.dev, a diferencia de verificarDocumentoPublico.
  */
 async function consultarPedidosPublicos(req, res, next) {
   if (limiteConsultaExcedido(req.ip)) {

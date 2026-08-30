@@ -86,19 +86,27 @@ function formatearFechaHora(fechaIso: string): string {
   return `${formatearFechaCorta(fechaIso)}, ${formatearHora12(horaTexto)}`;
 }
 
-/** Búsqueda pública y sin login: solo el DNI, y los pedidos recientes del
- * cliente en cualquier estado. Mientras el panel queda abierto y todavía
- * hay algún pedido sin resolver, se vuelve a consultar solo cada 20s para
- * que el estado se vea al día sin que el cliente tenga que volver a
- * buscar. Para historial completo, deudas o cancelar un pedido, ese es
- * trabajo de la cuenta real dentro de /app/, no de esta vista rápida. */
+type TipoDocumento = "DNI" | "RUC";
+
+const LONGITUD_DOCUMENTO: Record<TipoDocumento, number> = { DNI: 8, RUC: 11 };
+
+/** Búsqueda pública y sin login: DNI o RUC (el cliente elige cuál), y los
+ * pedidos recientes del cliente en cualquier estado. Es una consulta pura
+ * contra nuestra propia base — nunca gasta un consumo de la API paga de
+ * RENIEC/SUNAT, a diferencia de la verificación de documento del
+ * formulario de pedido. Mientras el panel queda abierto y todavía hay
+ * algún pedido sin resolver, se vuelve a consultar solo cada 20s para que
+ * el estado se vea al día sin que el cliente tenga que volver a buscar.
+ * Para historial completo, deudas o cancelar un pedido, ese es trabajo de
+ * la cuenta real dentro de /app/, no de esta vista rápida. */
 export function SeguimientoPedido() {
   const [abierto, setAbierto] = useState(false);
-  const [dni, setDni] = useState("");
+  const [tipoDocumento, setTipoDocumento] = useState<TipoDocumento>("DNI");
+  const [documento, setDocumento] = useState("");
   const [buscando, setBuscando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<PedidoPublicoConsultaResultado | null>(null);
-  const dniConsultadoRef = useRef("");
+  const documentoConsultadoRef = useRef("");
   // Qué grupos (por estado) están desplegados — arrancan todos plegados;
   // el cliente elige cuál abrir. Un refresco del sondeo no toca esto, así
   // que un grupo que ya abrió no se le vuelve a cerrar solo.
@@ -120,21 +128,28 @@ export function SeguimientoPedido() {
     setGruposAbiertos(new Set());
   }
 
+  function elegirTipoDocumento(tipo: TipoDocumento) {
+    setTipoDocumento(tipo);
+    setDocumento("");
+    setError(null);
+  }
+
   async function buscar(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    const dniLimpio = dni.trim();
-    if (!/^\d{8}$/.test(dniLimpio)) {
-      setError("Ingresa un DNI válido de 8 dígitos.");
+    const documentoLimpio = documento.trim();
+    const longitud = LONGITUD_DOCUMENTO[tipoDocumento];
+    if (documentoLimpio.length !== longitud || !/^\d+$/.test(documentoLimpio)) {
+      setError(`Ingresa un ${tipoDocumento} válido de ${longitud} dígitos.`);
       return;
     }
 
     setBuscando(true);
     setResultado(null);
     try {
-      const data = await consultarPedidosPublicos(dniLimpio);
-      dniConsultadoRef.current = dniLimpio;
+      const data = await consultarPedidosPublicos(documentoLimpio);
+      documentoConsultadoRef.current = documentoLimpio;
       setResultado(data);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -150,7 +165,7 @@ export function SeguimientoPedido() {
   function buscarOtroVez() {
     setResultado(null);
     setError(null);
-    setDni("");
+    setDocumento("");
     setGruposAbiertos(new Set());
   }
 
@@ -165,7 +180,7 @@ export function SeguimientoPedido() {
 
     const id = window.setInterval(async () => {
       try {
-        const data = await consultarPedidosPublicos(dniConsultadoRef.current);
+        const data = await consultarPedidosPublicos(documentoConsultadoRef.current);
         setResultado(data);
       } catch {
         // Silencioso: un refresco puntual que falla (red, servidor
@@ -199,8 +214,8 @@ export function SeguimientoPedido() {
               ¿Ya hiciste un pedido antes?
             </h3>
             <p className="mt-1 text-pan-crema/95">
-              Escribe tu DNI y te decimos si tu pedido ya está confirmado o si todavía estamos por
-              confirmarlo.
+              Escribe tu DNI o RUC y te decimos si tu pedido ya está confirmado o si todavía estamos
+              por confirmarlo.
             </p>
           </div>
           <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-pan-crema px-6 py-3.5 font-semibold text-pan-terracota shadow-md transition-transform duration-300 group-hover:scale-105">
@@ -230,7 +245,7 @@ export function SeguimientoPedido() {
                           <p className="text-pan-carbon">
                             {resultado.nombre
                               ? `Hola, ${resultado.nombre}. Todavía no tienes ningún pedido registrado.`
-                              : "No encontramos ningún cliente con ese DNI todavía. Si acabas de hacer tu primer pedido, revisa que el DNI esté bien escrito."}
+                              : `No encontramos ningún cliente con ese ${tipoDocumento} todavía. Si acabas de hacer tu primer pedido, revisa que el ${tipoDocumento} esté bien escrito.`}
                           </p>
                         </div>
                       ) : (
@@ -376,45 +391,77 @@ export function SeguimientoPedido() {
                         className="mx-auto mt-6 flex items-center gap-1.5 text-sm font-semibold text-pan-terracota hover:underline"
                       >
                         <X className="h-3.5 w-3.5" />
-                        Buscar con otro DNI
+                        Buscar con otro documento
                       </button>
                     </motion.div>
                   ) : (
-                    <motion.form
+                    <motion.div
                       key="formulario"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      onSubmit={buscar}
-                      className="mx-auto flex max-w-md flex-col items-center gap-3 sm:flex-row sm:items-start"
+                      className="mx-auto flex max-w-md flex-col items-center gap-3"
                     >
-                      <div className="w-full">
-                        <input
-                          id="dni-seguimiento"
-                          inputMode="numeric"
-                          maxLength={8}
-                          value={dni}
-                          onChange={(e) => setDni(e.target.value.replace(/\D/g, ""))}
-                          placeholder="Tu DNI, 8 dígitos"
-                          required
-                          className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
-                        />
-                        {error && <p className="mt-1.5 text-sm font-medium text-red-700">{error}</p>}
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={buscando}
-                        className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-pan-terracota px-6 py-3 font-semibold text-pan-crema transition-transform hover:scale-[1.02] disabled:opacity-60 disabled:hover:scale-100 sm:w-auto"
+                      <div
+                        role="radiogroup"
+                        aria-label="Tipo de documento"
+                        className="inline-flex rounded-full bg-pan-borde/30 p-1"
                       >
-                        {buscando ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Buscando…
-                          </>
-                        ) : (
-                          "Buscar"
-                        )}
-                      </button>
-                    </motion.form>
+                        {(["DNI", "RUC"] as const).map((tipo) => (
+                          <button
+                            key={tipo}
+                            type="button"
+                            role="radio"
+                            aria-checked={tipoDocumento === tipo}
+                            onClick={() => elegirTipoDocumento(tipo)}
+                            className={`relative rounded-full px-6 py-2 text-sm font-semibold transition-colors ${
+                              tipoDocumento === tipo ? "text-pan-crema" : "text-pan-carbon-suave hover:text-pan-carbon"
+                            }`}
+                          >
+                            {tipoDocumento === tipo && (
+                              <motion.span
+                                layoutId="seguimiento-tipo-documento-activo"
+                                className="absolute inset-0 rounded-full bg-pan-terracota"
+                                transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                              />
+                            )}
+                            <span className="relative">{tipo}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <form
+                        onSubmit={buscar}
+                        className="flex w-full flex-col items-center gap-3 sm:flex-row sm:items-start"
+                      >
+                        <div className="w-full">
+                          <input
+                            id="documento-seguimiento"
+                            inputMode="numeric"
+                            maxLength={LONGITUD_DOCUMENTO[tipoDocumento]}
+                            value={documento}
+                            onChange={(e) => setDocumento(e.target.value.replace(/\D/g, ""))}
+                            placeholder={`Tu ${tipoDocumento}, ${LONGITUD_DOCUMENTO[tipoDocumento]} dígitos`}
+                            required
+                            className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                          />
+                          {error && <p className="mt-1.5 text-sm font-medium text-red-700">{error}</p>}
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={buscando}
+                          className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-pan-terracota px-6 py-3 font-semibold text-pan-crema transition-transform hover:scale-[1.02] disabled:opacity-60 disabled:hover:scale-100 sm:w-auto"
+                        >
+                          {buscando ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Buscando…
+                            </>
+                          ) : (
+                            "Buscar"
+                          )}
+                        </button>
+                      </form>
+                    </motion.div>
                   )}
                 </AnimatePresence>
               </div>

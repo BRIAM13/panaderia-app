@@ -168,6 +168,19 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
                             'Tu historial con la panadería va a aparecer acá.',
                       ),
                     )
+                  else if (_pedidos.every((p) => p.esFinalizado))
+                    // Tiene historial, pero nada pendiente ahora mismo —
+                    // sin este chequeo, ListaPedidosPorSeccion quedaba en
+                    // blanco (cada sección se oculta sola si no tiene
+                    // pedidos activos) en vez de avisar que está al día.
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: EstadoVacio(
+                        icono: Icons.task_alt_rounded,
+                        titulo: 'No tienes pedidos pendientes',
+                        subtitulo: 'Estás al día — tu próximo pedido va a aparecer acá.',
+                      ),
+                    )
                   else
                     ListaPedidosPorSeccion(
                       pedidos: _pedidos,

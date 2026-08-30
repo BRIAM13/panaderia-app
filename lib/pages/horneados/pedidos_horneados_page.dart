@@ -200,6 +200,18 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
       );
     }
 
+    // Hay pedidos, pero todos ya se resolvieron — sin este chequeo la
+    // lista de secciones quedaba en blanco (cada una se oculta sola si no
+    // tiene pedidos activos) en vez de avisar que no hay nada pendiente.
+    if (_pedidos.every((p) => p.pedido.esFinalizado)) {
+      return EstadoVacio(
+        icono: Icons.task_alt_rounded,
+        titulo: 'No hay pedidos pendientes',
+        subtitulo: 'Todos los pedidos de Horneados ya se resolvieron.',
+        onRefrescar: _cargar,
+      );
+    }
+
     final activos = _pedidos.where((p) => !p.pedido.esFinalizado).toList();
     final agrupados = agruparPedidosPorFecha(
       activos.map((p) => p.pedido).toList(),
