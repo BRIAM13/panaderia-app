@@ -1,11 +1,18 @@
-name: Keep-alive backend + base de datos 24-7
+name: Keep-alive backend + ML 24-7
 
-# Evita el "arranque en frío" de ~2 minutos al loguearse: Render duerme el
-# servicio gratuito tras 15 min sin tráfico, y Azure SQL (oferta gratuita)
-# pausa la base de datos por su cuenta tras un rato de inactividad — ninguno
-# de los dos se puede desactivar directamente en el nivel gratuito. Este
-# ping cada 10 minutos, 24/7, mantiene ambos despiertos sin depender de que
-# nadie tenga la app abierta.
+# Evita el "arranque en frío" (~2 min el backend, ~1 min el microservicio
+# de ML) al usar la app: Render duerme cada servicio gratuito tras 15 min
+# sin tráfico, y eso no se puede desactivar directamente en el nivel
+# gratuito. Este ping cada 10 minutos, 24/7, mantiene ambos despiertos sin
+# depender de que nadie tenga la app abierta.
+#
+# Costo real de esto: las 750 horas gratis de Render son por workspace, no
+# por servicio — dos servicios despiertos 24/7 sí pueden agotarlas antes de
+# fin de mes (~1,440-1,488 horas combinadas contra 750 disponibles). Es una
+# decisión consciente del negocio (evitar la espera en vez de ahorrar
+# horas); si vuelve a pasar lo de la suspensión, la solución real es pasar
+# el backend a un plan pago (Starter, ~$7/mes) para sacarlo del pool
+# gratuito, no quitar este ping.
 #
 # Reemplaza a keep-alive.yml (mismo propósito, nombre de archivo distinto):
 # ese workflow se quedó con el disparador `schedule` sin registrar del lado
@@ -21,7 +28,12 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping /api/keep-alive
+      - name: Ping /api/keep-alive (backend)
         run: |
           curl -sS --max-time 90 --retry 2 --retry-delay 5 \
             "https://panaderia-backend-vtdy.onrender.com/api/keep-alive"
+
+      - name: Ping /salud (microservicio ML)
+        run: |
+          curl -sS --max-time 90 --retry 2 --retry-delay 5 \
+            "https://panaderia-ml-service.onrender.com/salud"
