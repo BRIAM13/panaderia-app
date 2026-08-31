@@ -17,6 +17,7 @@ import '../../widgets/page_transitions.dart';
 import '../../widgets/premium_button.dart';
 import '../hub/home_page.dart';
 import 'change_password_page.dart';
+import 'recuperar_password_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, this.mensajeInicial});
@@ -476,7 +477,18 @@ class _LoginPageState extends State<LoginPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _cargando
+                        ? null
+                        : () => pushSlideUpFade(
+                            context,
+                            (_) => const RecuperarPasswordPage(),
+                          ),
+                    child: const Text('¿Olvidaste tu contraseña?'),
+                  ),
+                ).animate().fadeIn(delay: 220.ms, duration: 300.ms),
                 Row(
                   children: [
                     Switch(

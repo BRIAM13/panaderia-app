@@ -48,6 +48,29 @@ class AuthService {
     }, token: token);
   }
 
+  /// Paso 1 de "olvidé mi contraseña": pide el mismo identificador que el
+  /// login (en la práctica, el DNI/RUC). El backend responde siempre el
+  /// mismo mensaje exista o no la cuenta — a propósito, para no revelar qué
+  /// documentos tienen cuenta — así que acá no hay nada que distinguir.
+  Future<void> solicitarRecuperacionPassword({required String nombreUsuario}) async {
+    await _api.post('/auth/recuperar/solicitar', {'nombreUsuario': nombreUsuario});
+  }
+
+  /// Paso 2: valida el código enviado al correo verificado y reemplaza la
+  /// contraseña. Un código inválido/expirado y una cuenta inexistente dan el
+  /// mismo error desde el backend (ver authController.confirmarRecuperacion).
+  Future<void> confirmarRecuperacionPassword({
+    required String nombreUsuario,
+    required String codigo,
+    required String passwordNueva,
+  }) async {
+    await _api.post('/auth/recuperar/confirmar', {
+      'nombreUsuario': nombreUsuario,
+      'codigo': codigo,
+      'passwordNueva': passwordNueva,
+    });
+  }
+
   /// Revalida la sesión guardada (usada en el auto-login biométrico) y
   /// devuelve el perfil actualizado. Si el access token expiró, intenta
   /// renovarlo con el refresh token antes de rendirse.

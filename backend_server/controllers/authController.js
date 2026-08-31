@@ -6,10 +6,31 @@ const {
   verifyRefreshToken,
 } = require('../utils/jwt');
 const { registrarAuditoria } = require('../utils/auditLog');
+const { solicitarCodigo, verificarCodigo, OtpError } = require('../services/otpService');
 
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
 const MAX_LOGIN_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS) || 5;
 const ROL_CLIENTE_DEFAULT = 'CLIENTE';
+
+// Mismo propósito que ya usa clientesController para "autorizar un cambio
+// sensible por un canal ya verificado" — recuperar contraseña es exactamente
+// eso. Reusarlo (en vez de sumar un valor nuevo, ej. 'RECUPERAR_PASSWORD')
+// evita tocar el CHECK de CodigosVerificacion.Proposito en la base real, que
+// solo el dueño puede migrar (vive en su celular, no hay acceso directo acá)
+// — mismo tipo de bug de fondo que ya se encontró y arregló con
+// OrigenValidacion/'SUNAT' en esta misma auditoría.
+const PROPOSITO_RECUPERAR_PASSWORD = 'AUTORIZAR_CAMBIO';
+
+const MENSAJE_RECUPERACION_GENERICO =
+  'Si el usuario existe y tiene un correo verificado, te llegará un código de verificación.';
+
+function manejarOtpError(err, res, next) {
+  if (err instanceof OtpError) {
+    const status = err.tipo === 'COOLDOWN' ? 429 : err.tipo === 'AUTORIZACION_REQUERIDA' ? 403 : 400;
+    return res.status(status).json({ mensaje: err.message, tipo: err.tipo });
+  }
+  return next(err);
+}
 
 /**
  * Roles y perfiles (Cliente/Trabajador) vigentes de una persona. Con esto
@@ -401,6 +422,141 @@ async function obtenerPerfil(req, res, next) {
   }
 }
 
+/**
+ * Busca la cuenta y el correo verificado asociados a un nombreUsuario (que
+ * en la práctica siempre es el DNI/RUC — ver intentarClonarUsuarioCliente y
+ * crearTrabajador). Centralizado acá porque lo usan las dos rutas de
+ * recuperación y ambas necesitan exactamente los mismos datos.
+ */
+async function buscarCuentaParaRecuperacion(pool, nombreUsuario) {
+  const result = await pool
+    .request()
+    .input('NombreUsuario', sql.VarChar(50), nombreUsuario)
+    .query(`
+      SELECT u.IdUsuario, u.Estado, p.IdPersona, p.Email, p.EmailVerificado
+      FROM Usuarios u
+      INNER JOIN Personas p ON p.IdPersona = u.IdPersona
+      WHERE u.NombreUsuario = @NombreUsuario
+    `);
+  return result.recordset[0] || null;
+}
+
+/**
+ * Paso 1 de "olvidé mi contraseña": pide el mismo identificador que el login
+ * (nombreUsuario, en la práctica el DNI/RUC) y, si existe una cuenta con
+ * correo YA verificado, manda un código de un solo uso a ese correo.
+ *
+ * La respuesta es SIEMPRE la misma sin importar si la cuenta existe, si
+ * tiene correo verificado, o si ya había un código reciente (cooldown) —
+ * cualquier diferencia visible ahí (mensaje, código HTTP, tiempos) le
+ * permitiría a quien sea usar este endpoint para averiguar qué DNIs/RUCs
+ * tienen cuenta, exactamente el mismo tipo de fuga que ya se cerró hoy en
+ * el alta de clientes con OrigenValidacion.
+ */
+async function solicitarRecuperacion(req, res, next) {
+  const nombreUsuario = req.body.nombreUsuario.trim();
+
+  try {
+    const pool = await getPool();
+    const cuenta = await buscarCuentaParaRecuperacion(pool, nombreUsuario);
+
+    if (cuenta && cuenta.Estado && cuenta.EmailVerificado && cuenta.Email) {
+      try {
+        await solicitarCodigo({
+          idPersona: cuenta.IdPersona,
+          canal: 'EMAIL',
+          proposito: PROPOSITO_RECUPERAR_PASSWORD,
+          destino: cuenta.Email,
+        });
+      } catch (err) {
+        // Un COOLDOWN acá (ya se pidió un código hace poco) es información
+        // real sobre la cuenta — no debe filtrarse. Cualquier otro error sí
+        // interesa a los logs, pero la respuesta al cliente no cambia.
+        if (!(err instanceof OtpError)) console.error('Error al enviar código de recuperación:', err.message);
+      }
+
+      await registrarAuditoria({
+        idUsuario: cuenta.IdUsuario,
+        accion: 'RECUPERACION_PASSWORD_SOLICITADA',
+        tablaAfectada: 'Usuarios',
+        registroAfectadoId: String(cuenta.IdUsuario),
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+    }
+
+    return res.status(200).json({ mensaje: MENSAJE_RECUPERACION_GENERICO });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * Paso 2: valida el código contra el correo verificado de la cuenta y, si
+ * coincide, reemplaza la contraseña. También libera cualquier bloqueo por
+ * intentos fallidos (probar el código por correo es una prueba de identidad
+ * más fuerte que la contraseña que se está reemplazando) y revoca todas las
+ * sesiones activas — si la contraseña se perdió, cualquier sesión abierta en
+ * otro dispositivo con la clave vieja debe cerrarse.
+ */
+async function confirmarRecuperacion(req, res, next) {
+  const nombreUsuario = req.body.nombreUsuario.trim();
+  const { codigo, passwordNueva } = req.body;
+
+  try {
+    const pool = await getPool();
+    const cuenta = await buscarCuentaParaRecuperacion(pool, nombreUsuario);
+
+    // Mismo mensaje/tipo que un código que no coincide: no hay forma de
+    // distinguir "esta cuenta no existe" de "el código está mal".
+    if (!cuenta || !cuenta.Estado || !cuenta.EmailVerificado || !cuenta.Email) {
+      throw new OtpError('INVALIDO', 'Código inválido o ya expirado. Solicita uno nuevo.');
+    }
+
+    await verificarCodigo({
+      idPersona: cuenta.IdPersona,
+      proposito: PROPOSITO_RECUPERAR_PASSWORD,
+      destino: cuenta.Email,
+      codigo,
+    });
+
+    const nuevoHash = await bcrypt.hash(passwordNueva, SALT_ROUNDS);
+
+    await pool
+      .request()
+      .input('IdUsuario', sql.Int, cuenta.IdUsuario)
+      .input('PasswordHash', sql.VarChar(255), nuevoHash)
+      .query(`
+        UPDATE Usuarios
+        SET PasswordHash = @PasswordHash,
+            RequiereCambioPassword = 0,
+            IntentosFallidos = 0,
+            Bloqueado = 0,
+            FechaBloqueo = NULL,
+            FechaActualizacion = SYSUTCDATETIME()
+        WHERE IdUsuario = @IdUsuario
+      `);
+
+    await pool
+      .request()
+      .input('IdUsuario', sql.Int, cuenta.IdUsuario)
+      .query('UPDATE TokensSesion SET Revocado = 1 WHERE IdUsuario = @IdUsuario AND Revocado = 0');
+
+    await registrarAuditoria({
+      idUsuario: cuenta.IdUsuario,
+      accion: 'RECUPERACION_PASSWORD_COMPLETADA',
+      tablaAfectada: 'Usuarios',
+      registroAfectadoId: String(cuenta.IdUsuario),
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return res.status(200).json({ mensaje: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.' });
+  } catch (err) {
+    return manejarOtpError(err, res, next);
+  }
+}
+
 /** Emite un nuevo accessToken a partir de un refreshToken vigente y no revocado. */
 async function refrescarToken(req, res, next) {
   const { refreshToken } = req.body;
@@ -481,4 +637,12 @@ async function refrescarToken(req, res, next) {
   }
 }
 
-module.exports = { register, login, cambiarPassword, obtenerPerfil, refrescarToken };
+module.exports = {
+  register,
+  login,
+  cambiarPassword,
+  obtenerPerfil,
+  refrescarToken,
+  solicitarRecuperacion,
+  confirmarRecuperacion,
+};

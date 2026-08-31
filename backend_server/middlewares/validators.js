@@ -80,6 +80,30 @@ function validateCambiarPassword(req, res, next) {
   next();
 }
 
+function validateSolicitarRecuperacion(req, res, next) {
+  const { nombreUsuario } = req.body;
+  if (!isNonEmptyString(nombreUsuario) || nombreUsuario.trim().length > 50) {
+    return res.status(400).json({ mensaje: 'Usuario requerido.' });
+  }
+  next();
+}
+
+function validateConfirmarRecuperacion(req, res, next) {
+  const { nombreUsuario, codigo, passwordNueva } = req.body;
+  const errores = [];
+  if (!isNonEmptyString(nombreUsuario) || nombreUsuario.trim().length > 50) {
+    errores.push('Usuario requerido.');
+  }
+  if (!isNonEmptyString(codigo) || !CODIGO_OTP_REGEX.test(codigo.trim())) {
+    errores.push('El código debe tener 6 dígitos.');
+  }
+  if (!isNonEmptyString(passwordNueva) || passwordNueva.length < 8) {
+    errores.push('La nueva contraseña debe tener al menos 8 caracteres.');
+  }
+  if (errores.length > 0) return res.status(400).json({ mensaje: 'Datos inválidos', errores });
+  next();
+}
+
 function validateRefreshToken(req, res, next) {
   const { refreshToken } = req.body;
 
@@ -619,6 +643,8 @@ module.exports = {
   validateSolicitarAutorizacion,
   validateValidarAutorizacion,
   validateCambiarPasswordSeguro,
+  validateSolicitarRecuperacion,
+  validateConfirmarRecuperacion,
   DNI_PERU_REGEX,
   RUC_PERU_REGEX,
 };
