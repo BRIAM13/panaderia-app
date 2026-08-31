@@ -3,8 +3,7 @@ name: Keep-alive backend + ML 24-7
 # Evita el "arranque en frío" (~2 min el backend, ~1 min el microservicio
 # de ML) al usar la app: Render duerme cada servicio gratuito tras 15 min
 # sin tráfico, y eso no se puede desactivar directamente en el nivel
-# gratuito. Este ping cada 10 minutos, 24/7, mantiene ambos despiertos sin
-# depender de que nadie tenga la app abierta.
+# gratuito.
 #
 # Costo real de esto: las 750 horas gratis de Render son por workspace, no
 # por servicio — dos servicios despiertos 24/7 sí pueden agotarlas antes de
@@ -14,26 +13,46 @@ name: Keep-alive backend + ML 24-7
 # el backend a un plan pago (Starter, ~$7/mes) para sacarlo del pool
 # gratuito, no quitar este ping.
 #
-# Reemplaza a keep-alive.yml (mismo propósito, nombre de archivo distinto):
-# ese workflow se quedó con el disparador `schedule` sin registrar del lado
-# de GitHub — quedó como `state: active` pero nunca ejecutó una sola vez
-# por cron, ni siquiera tras reescribir el archivo y volver a subirlo. Un
-# workflow con un id nuevo evita lo que sea que se atascó en el anterior.
+# NO alcanza con "un ping cada 10 min" via `schedule`: se probó (ver
+# historial de este mismo workflow, y antes en keep-alive.yml) y GitHub NO
+# cumple ese intervalo — un cron de cada 10 min terminó disparando con
+# gaps reales de 43 a 462 minutos, muy por encima del umbral de sueño de
+# Render (documentado por GitHub: los schedules frecuentes se retrasan o
+# se descartan bajo carga, sin garantía de horario). Por eso cada corrida
+# de este job hace su PROPIO loop de ping cada ~9 min durante ~5h50 (bien
+# por debajo del límite duro de 360 min por job de GitHub Actions) en vez
+# de confiar en que el disparador externo llegue a tiempo. El repo es
+# público, así que estos minutos de Actions no cuestan nada.
+#
+# `concurrency` con `cancel-in-progress: false` encadena las corridas sin
+# solaparlas: si ya hay un loop activo, un disparo nuevo se encola y
+# arranca apenas termine el anterior — así el schedule (cada 20 min, como
+# red de respaldo) solo necesita acertar UNA vez dentro de esas ~5h50 para
+# que la cadena nunca se corte, en vez de necesitar acertar cada 10 min.
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/20 * * * *"
   workflow_dispatch: {}
+
+concurrency:
+  group: keep-alive-24-7
+  cancel-in-progress: false
 
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 350
     steps:
-      - name: Ping /api/keep-alive (backend)
+      - name: Ping ambos servicios cada ~9 min por ~5h50
         run: |
-          curl -sS --max-time 90 --retry 2 --retry-delay 5 \
-            "https://panaderia-backend-vtdy.onrender.com/api/keep-alive"
-
-      - name: Ping /salud (microservicio ML)
-        run: |
-          curl -sS --max-time 90 --retry 2 --retry-delay 5 \
-            "https://panaderia-ml-service.onrender.com/salud"
+          fin=$(( $(date +%s) + 350*60 ))
+          while [ "$(date +%s)" -lt "$fin" ]; do
+            echo "=== $(date -u +%H:%M:%S) UTC ==="
+            curl -sS --max-time 90 --retry 2 --retry-delay 5 \
+              "https://panaderia-backend-vtdy.onrender.com/api/keep-alive" || true
+            echo
+            curl -sS --max-time 90 --retry 2 --retry-delay 5 \
+              "https://panaderia-ml-service.onrender.com/salud" || true
+            echo
+            sleep 540
+          done
