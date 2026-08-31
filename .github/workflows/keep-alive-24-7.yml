@@ -24,4 +24,4 @@ jobs:
       - name: Ping /api/keep-alive
         run: |
           curl -sS --max-time 90 --retry 2 --retry-delay 5 \
-            "https://panaderia-backend-2xvd.onrender.com/api/keep-alive"
+            "https://panaderia-backend-vtdy.onrender.com/api/keep-alive"

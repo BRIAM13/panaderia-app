@@ -1,11 +1,11 @@
 {
-    "name": "panaderia_app",
-    "short_name": "panaderia_app",
+    "name": "Panadería Ronceros",
+    "short_name": "Ronceros",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFE7CD",
     "theme_color": "#FFE7CD",
-    "description": "A new Flutter project.",
+    "description": "Panadería Ronceros — el sistema de gestión de Panadería y Pastelería Briam: pedidos, deudas y pagos, en un solo lugar.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

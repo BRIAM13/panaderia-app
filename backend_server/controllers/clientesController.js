@@ -71,6 +71,113 @@ function calcularSegmento({ pedidosEntregados, totalGastado, diasDesdeUltimaComp
   return 'REGULAR';
 }
 
+// Orden fijo de los segmentos en el resumen de analítica: es el que usa la
+// pantalla para dibujar las barras, y tiene que ser estable aunque no haya
+// ni un cliente en alguno de ellos (una barra que desaparece y reaparece
+// según el día haría imposible comparar dos capturas del panel).
+const SEGMENTOS = ['NUEVO', 'EN_RIESGO', 'VIP', 'FRECUENTE', 'REGULAR'];
+const TOPE_TOP_POR_GASTO = 10;
+
+/**
+ * Mismo criterio que `Cliente.nombreParaMostrar` en la app: un cliente con
+ * RUC (11 dígitos) se muestra por su razón social, que vive entera en
+ * `Nombres`; uno con DNI, por su nombre y apellidos.
+ */
+function nombreParaMostrar(fila) {
+  if (fila.DNI && String(fila.DNI).length === 11) return fila.Nombres;
+  return [fila.Nombres, fila.ApellidoPaterno, fila.ApellidoMaterno]
+    .filter((parte) => parte && String(parte).trim())
+    .join(' ')
+    .trim();
+}
+
+/**
+ * Núcleo puro de `obtenerResumenSegmentos`: recibe las filas ya agregadas
+ * por cliente y devuelve el conteo por segmento más las dos listas que
+ * mueven la aguja del negocio (a quién reactivar, a quién cuidar). Se
+ * mantiene separado de la consulta para poder probarlo sin base de datos.
+ *
+ * `ahora` es un parámetro y no `Date.now()` directo porque el cálculo de
+ * "días desde la última compra" es lo que decide el segmento EN_RIESGO: sin
+ * poder fijar el reloj, la prueba dependería del día en que se ejecuta.
+ */
+function resumirSegmentosClientes(filas, config, ahora = Date.now()) {
+  const resumen = Object.fromEntries(SEGMENTOS.map((s) => [s, 0]));
+
+  const clientes = filas.map((fila) => {
+    const ultimaCompra = fila.UltimaCompra ? new Date(fila.UltimaCompra) : null;
+    const diasDesdeUltimaCompra = ultimaCompra
+      ? Math.floor((ahora - ultimaCompra.getTime()) / 86400000)
+      : null;
+    const pedidosEntregados = Number(fila.PedidosEntregados) || 0;
+    const totalGastado = Number(fila.TotalGastado) || 0;
+    const segmento = calcularSegmento(
+      { pedidosEntregados, totalGastado, diasDesdeUltimaCompra },
+      config,
+    );
+
+    resumen[segmento] += 1;
+
+    return {
+      idCliente: fila.IdCliente,
+      nombre: nombreParaMostrar(fila),
+      telefono: fila.Telefono || null,
+      pedidosEntregados,
+      totalGastado,
+      diasDesdeUltimaCompra,
+      segmento,
+    };
+  });
+
+  // Los más abandonados primero: es el orden en que conviene llamarlos.
+  const enRiesgo = clientes
+    .filter((c) => c.segmento === 'EN_RIESGO')
+    .sort((a, b) => b.diasDesdeUltimaCompra - a.diasDesdeUltimaCompra);
+
+  // Sin filtrar por segmento a propósito: un top 10 por gasto cae casi todo
+  // en VIP solo, y si alguno no llega al umbral igual merece estar ahí.
+  const topPorGasto = clientes
+    .filter((c) => c.totalGastado > 0)
+    .sort((a, b) => b.totalGastado - a.totalGastado)
+    .slice(0, TOPE_TOP_POR_GASTO);
+
+  return { resumen, totalClientes: clientes.length, enRiesgo, topPorGasto };
+}
+
+/**
+ * CRM — analítica: la foto de TODA la cartera de clientes activos en una
+ * sola consulta, en vez de pedir `obtenerPerfilCliente` uno por uno (que
+ * serían N+1 consultas para dibujar un gráfico). Mismo criterio de compra
+ * real (solo pedidos ENTREGADO) y mismos umbrales configurables que el
+ * perfil individual, así el panel nunca contradice lo que dice la ficha de
+ * un cliente puntual.
+ */
+async function obtenerResumenSegmentos(req, res, next) {
+  try {
+    const pool = await getPool();
+    const config = await obtenerConfiguracionesCrm(pool);
+
+    // LEFT JOIN (no INNER): un cliente sin ningún pedido todavía es
+    // justamente el segmento NUEVO — desaparecería del conteo con un INNER.
+    const result = await pool.request().query(`
+      SELECT c.IdCliente,
+             p.DNI, p.Nombres, p.ApellidoPaterno, p.ApellidoMaterno, p.Telefono,
+             COALESCE(SUM(CASE WHEN pd.Estado = 'ENTREGADO' THEN 1 ELSE 0 END), 0) AS PedidosEntregados,
+             COALESCE(SUM(CASE WHEN pd.Estado = 'ENTREGADO' THEN pd.Total ELSE 0 END), 0) AS TotalGastado,
+             MAX(CASE WHEN pd.Estado = 'ENTREGADO' THEN COALESCE(pd.FechaEntregaReal, pd.FechaCreacion) END) AS UltimaCompra
+      FROM Clientes c
+      INNER JOIN Personas p ON p.IdPersona = c.IdPersona
+      LEFT JOIN Pedidos pd ON pd.IdCliente = c.IdCliente
+      WHERE c.Estado = 1
+      GROUP BY c.IdCliente, p.DNI, p.Nombres, p.ApellidoPaterno, p.ApellidoMaterno, p.Telefono
+    `);
+
+    return res.status(200).json(resumirSegmentosClientes(result.recordset, config));
+  } catch (err) {
+    return next(err);
+  }
+}
+
 function mapearCliente(fila) {
   return {
     idCliente: fila.IdCliente,
@@ -1211,6 +1318,13 @@ module.exports = {
   crearNotaCliente,
   canjearPuntos,
   enviarCampaniaReactivacion,
+  obtenerResumenSegmentos,
+  // Reexportadas para pruebas unitarias (__tests__/clientesController.test.js)
+  // — son funciones puras, no dependen de la base de datos.
+  calcularCalidadDato,
+  calcularSegmento,
+  esRucPersonaJuridica,
+  resumirSegmentosClientes,
   // Reexportado para publicoController.js (pedido web sin login) — mismo
   // clonado de cuenta (usuario=DNI, password=DNI) que ya dispara un
   // registro de cliente hecho por el personal con DNI real verificado.

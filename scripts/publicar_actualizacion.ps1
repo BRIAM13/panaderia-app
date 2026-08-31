@@ -38,7 +38,7 @@ if (-not (Test-Path 'android\key.properties')) {
 Write-Host "=== Preparando version $version para Play Store ===" -ForegroundColor Cyan
 
 Write-Host "`n[1/2] Compilando App Bundle (.aab) de produccion..." -ForegroundColor Yellow
-flutter build appbundle --release --dart-define=API_BASE_URL=https://panaderia-backend-2xvd.onrender.com/api
+flutter build appbundle --release --dart-define=API_BASE_URL=https://panaderia-backend-vtdy.onrender.com/api
 if ($LASTEXITCODE -ne 0) { Write-Error "Fallo la compilacion del .aab"; exit 1 }
 
 $aab = 'build\app\outputs\bundle\release\app-release.aab'

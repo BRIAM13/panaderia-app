@@ -555,11 +555,11 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
         id={id}
         type="button"
         onClick={alPresionarBoton}
-        className={`flex w-full items-center gap-2.5 rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-left outline-none focus:border-pan-terracota ${
+        className={`campo-pan flex items-center gap-2.5 text-left ${
           valor ? "text-pan-carbon" : "text-pan-carbon-suave"
         }`}
       >
-        <Clock className="h-4 w-4 shrink-0 text-pan-terracota" />
+        <Clock className="h-4 w-4 shrink-0 text-pan-terracota" strokeWidth={1.75} />
         <span>{valor ? formatearHora12(valor) : placeholder}</span>
       </button>
 

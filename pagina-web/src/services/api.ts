@@ -3,7 +3,7 @@
 
 const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
-  "https://panaderia-backend-2xvd.onrender.com/api";
+  "https://panaderia-backend-vtdy.onrender.com/api";
 
 export class ApiError extends Error {
   errores?: string[];

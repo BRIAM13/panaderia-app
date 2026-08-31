@@ -1,6 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, CheckCircle2, Loader2, ShoppingBag } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  Loader2,
+  RotateCw,
+  ShoppingBag,
+  UserRound,
+  WifiOff,
+  Wheat,
+} from "lucide-react";
 import { PRODUCTOS } from "../data/config";
 import {
   ApiError,
@@ -22,11 +32,12 @@ import {
   horaMinimaHoy,
   hoyISO,
 } from "../utils/horariosPan";
+import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
+import { EncabezadoSeccion } from "./EncabezadoSeccion";
 import { SelectorFecha, type SelectorFechaHandle, formatearFechaBonita } from "./SelectorFecha";
 import { SelectorHora, type SelectorHoraHandle } from "./SelectorHora";
 import { SelectorProducto } from "./SelectorProducto";
 
-const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
 const NOMBRES_DISPONIBLES = new Set(PRODUCTOS.map((p) => p.nombreEnCatalogo));
 
 const FRASES_SALUDO = [
@@ -76,6 +87,7 @@ export function PedidoForm() {
   const [mensajeMascota, setMensajeMascota] = useState<string | null>(null);
   const mensajeTimeoutRef = useRef<number | undefined>(undefined);
   const agitadoTimeoutRef = useRef<number | undefined>(undefined);
+  const tituloExitoRef = useRef<HTMLHeadingElement>(null);
 
   // Un clic nuevo (u otro disparador, como llegar a esta sección) siempre
   // interrumpe el mensaje anterior en vez de sumarse — cancela el timeout
@@ -104,25 +116,38 @@ export function PedidoForm() {
     return () => window.clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    obtenerCatalogoPublico()
-      .then(({ productos: lista, horarios: horariosCatalogo }) => {
-        // Solo se ofrecen los panes que ya tienen foto y están en el menú
-        // de arriba (ver PRODUCTOS en data/config.ts) — el resto sigue
-        // existiendo en el sistema, pero todavía no se vende desde acá.
-        const disponibles = lista.filter((p) => NOMBRES_DISPONIBLES.has(p.nombre));
-        setProductos(disponibles);
-        setHorarios(horariosCatalogo);
-        // El producto arranca sin elegir a propósito — el cliente tiene que
-        // elegir uno de forma activa, no se preselecciona el primero.
-      })
-      .catch(() =>
-        setErrorCatalogo(
-          "No pudimos cargar el catálogo porque el servidor puede estar despertando. Intenta de nuevo en un momento.",
-        ),
-      )
-      .finally(() => setCargandoProductos(false));
+  // Una sola función para traer el catálogo, reusada por la carga inicial,
+  // por el sondeo periódico y por el botón "Reintentar" del estado de
+  // error — antes la carga inicial no tenía forma de repetirse sin recargar
+  // la página entera.
+  const cargarCatalogo = useCallback(async (esReintento: boolean) => {
+    if (esReintento) {
+      setCargandoProductos(true);
+      setErrorCatalogo(null);
+    }
+    try {
+      const { productos: lista, horarios: horariosCatalogo } = await obtenerCatalogoPublico();
+      // Solo se ofrecen los panes que ya tienen foto y están en el menú
+      // de arriba (ver PRODUCTOS en data/config.ts) — el resto sigue
+      // existiendo en el sistema, pero todavía no se vende desde acá.
+      const disponibles = lista.filter((p) => NOMBRES_DISPONIBLES.has(p.nombre));
+      setProductos(disponibles);
+      setHorarios(horariosCatalogo);
+      setErrorCatalogo(null);
+      // El producto arranca sin elegir a propósito — el cliente tiene que
+      // elegir uno de forma activa, no se preselecciona el primero.
+    } catch {
+      setErrorCatalogo(
+        "No pudimos cargar el catálogo porque el servidor puede estar despertando. Intenta de nuevo en un momento.",
+      );
+    } finally {
+      setCargandoProductos(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void cargarCatalogo(false);
+  }, [cargarCatalogo]);
 
   // Los horarios (y sobre todo los 2 interruptores de franja) pueden
   // cambiar en cualquier momento desde la app — sin este sondeo, alguien
@@ -139,6 +164,7 @@ export function PedidoForm() {
           const disponibles = lista.filter((p) => NOMBRES_DISPONIBLES.has(p.nombre));
           setProductos(disponibles);
           setHorarios(horariosCatalogo);
+          setErrorCatalogo(null);
         })
         .catch(() => {});
     }, 30000);
@@ -307,12 +333,19 @@ export function PedidoForm() {
   }, [fechaRecojo]);
 
   // El personaje festeja un instante cuando el pedido se confirma — un
-  // gesto puntual, no una animación que se repite sola sin parar.
+  // gesto puntual, no una animación que se repite sola sin parar. Además,
+  // el foco salta al título de la confirmación: quien navega con teclado o
+  // lector de pantalla necesita que se le anuncie que el formulario ya no
+  // está y qué lo reemplazó.
   useEffect(() => {
     if (!resultado) return;
     setMascotaAgitada(true);
+    const idFoco = window.setTimeout(() => tituloExitoRef.current?.focus(), 250);
     const id = window.setTimeout(() => setMascotaAgitada(false), 1400);
-    return () => window.clearTimeout(id);
+    return () => {
+      window.clearTimeout(id);
+      window.clearTimeout(idFoco);
+    };
   }, [resultado]);
 
   async function enviar(e: React.FormEvent) {
@@ -418,35 +451,33 @@ export function PedidoForm() {
     setHoraRecojo("");
   }
 
+  // Cada paso se marca como resuelto en cuanto sus campos están completos.
+  // No bloquea nada (el formulario sigue siendo una sola pantalla): sirve
+  // para que el cliente vea de un vistazo qué le falta antes de enviar.
+  const paso1Listo = documentoValido === true && telefono.trim().length === 9;
+  const paso2Listo =
+    idProducto !== "" && cantidadNum > 0 && (esPaquete || cantidadNum >= CANTIDAD_MINIMA_UNIDAD);
+  const paso3Listo = !mostrarCamposRecojo || Boolean(fechaRecojo && horaRecojo);
+
   return (
     <section id="pedido" className="px-6 py-24 sm:py-32">
       <div className="mx-auto max-w-xl">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={VIEWPORT_REVEAL}
           onViewportEnter={() =>
             window.setTimeout(() => mostrarMensajeMascota("Realiza tu pedido aquí 👇", 4000), 700)
           }
-          transition={{ duration: 0.6, ease: EASE_PREMIUM }}
-          className="text-center"
+          transition={{ duration: 0.4 }}
         >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.6, rotate: -20 }}
-            whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6, ease: EASE_PREMIUM }}
-            className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-pan-terracota-suave/60 text-pan-terracota"
-          >
-            <ShoppingBag className="h-7 w-7" />
-          </motion.div>
-          <h2 className="font-[family-name:var(--font-display-panaderia)] text-4xl font-semibold text-pan-carbon sm:text-5xl">
-            Haz tu pedido
-          </h2>
-          <p className="mt-4 text-lg text-pan-carbon-suave">
-            Déjanos tus datos y te llamamos para confirmarlo. No necesitas crear ninguna cuenta ni
-            contraseña.
-          </p>
+          <EncabezadoSeccion
+            etiqueta="Pedidos"
+            icono={ShoppingBag}
+            titulo="Haz tu"
+            tituloDestacado="pedido"
+            descripcion="Déjanos tus datos y te llamamos para confirmarlo. No necesitas crear ninguna cuenta ni contraseña."
+          />
         </motion.div>
 
         <div className="relative mt-32 sm:mt-36">
@@ -481,7 +512,7 @@ export function PedidoForm() {
                 ? { duration: 0.55, ease: "easeInOut" }
                 : { duration: 0.5, ease: EASE_PREMIUM }
             }
-            className="absolute -top-14 right-6 z-0 cursor-pointer sm:-top-20 sm:right-10"
+            className="absolute -top-14 right-6 z-0 cursor-pointer rounded-2xl sm:-top-20 sm:right-10"
           >
             <img
               src="/images/mascota/panadero.png"
@@ -503,16 +534,30 @@ export function PedidoForm() {
                 key="exito"
                 initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, ease: EASE_PREMIUM }}
                 className="py-6 text-center"
               >
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", stiffness: 260, damping: 15, delay: 0.1 }}
+                  className="relative mx-auto h-14 w-14"
                 >
-                  <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" />
+                  {/* Onda que se expande una sola vez detrás del check —
+                      el "clic" visual que confirma que algo se completó. */}
+                  <motion.span
+                    initial={{ scale: 0.6, opacity: 0.5 }}
+                    animate={{ scale: 2.1, opacity: 0 }}
+                    transition={{ duration: 1, ease: "easeOut", delay: 0.15 }}
+                    className="absolute inset-0 rounded-full bg-emerald-500/30"
+                  />
+                  <CheckCircle2 className="relative h-14 w-14 text-emerald-600" strokeWidth={1.6} />
                 </motion.div>
-                <h3 className="mt-4 font-[family-name:var(--font-display-panaderia)] text-2xl font-semibold text-pan-carbon">
+                <h3
+                  ref={tituloExitoRef}
+                  tabIndex={-1}
+                  className="mt-4 font-[family-name:var(--font-display-panaderia)] text-2xl font-semibold text-pan-carbon outline-none"
+                >
                   Pedido #{resultado.numeroPedidoDia} recibido
                 </h3>
                 <p className="mt-2 text-pan-carbon-suave">{resultado.mensaje}</p>
@@ -520,7 +565,7 @@ export function PedidoForm() {
                   Total: S/ {resultado.total.toFixed(2)}
                 </p>
 
-                <div className="mx-auto mt-5 max-w-sm space-y-2.5 rounded-2xl bg-pan-crema px-5 py-4 text-left text-sm">
+                <div className="mx-auto mt-5 max-w-sm space-y-2.5 rounded-2xl border border-pan-borde/25 bg-pan-crema px-5 py-4 text-left text-sm">
                   <FilaDetallePedido etiqueta="Producto" valor={productoSeleccionado?.nombre ?? "—"} />
                   <FilaDetallePedido
                     etiqueta={esPaquete ? "Paquetes" : "Cantidad"}
@@ -538,10 +583,13 @@ export function PedidoForm() {
                 </div>
 
                 {fueraDeVentanaAlEnviar && (
-                  <p className="mx-auto mt-4 max-w-sm rounded-xl bg-amber-50 px-4 py-3 text-left text-xs font-medium text-amber-800">
-                    Como el horario elegido ya cerró, te confirmaremos por WhatsApp al número que dejaste
-                    si tenemos stock disponible para separar tu pedido.
-                  </p>
+                  <div className="mx-auto mt-4 flex max-w-sm items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-left">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={1.75} />
+                    <p className="text-xs font-medium text-amber-800">
+                      Como el horario elegido ya cerró, te confirmaremos por WhatsApp al número que dejaste
+                      si tenemos stock disponible para separar tu pedido.
+                    </p>
+                  </div>
                 )}
                 <button
                   onClick={pedirOtroVez}
@@ -556,217 +604,352 @@ export function PedidoForm() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 onSubmit={enviar}
-                className="space-y-5"
+                className="space-y-8"
               >
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-pan-carbon">Documento</label>
-                  <div className="mb-2 inline-flex rounded-full border border-pan-borde bg-pan-crema p-1">
-                    {(["DNI", "RUC"] as const).map((tipo) => (
-                      <button
-                        key={tipo}
-                        type="button"
-                        onClick={() => {
-                          setTipoDocumento(tipo);
-                          setNumeroDocumento("");
-                        }}
-                        className={`rounded-full px-5 py-1.5 text-sm font-semibold transition-colors ${
-                          tipoDocumento === tipo
-                            ? "bg-pan-terracota text-pan-crema"
-                            : "text-pan-carbon-suave hover:text-pan-carbon"
-                        }`}
-                      >
-                        {tipo}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    id="documento"
-                    inputMode="numeric"
-                    maxLength={tipoDocumento === "DNI" ? 8 : 11}
-                    value={numeroDocumento}
-                    onChange={(e) => {
-                      const limpio = e.target.value.replace(/\D/g, "");
-                      setNumeroDocumento(limpio);
-                      // Al completar el largo esperado, se quita el foco
-                      // de una vez: no hace falta que el cliente toque
-                      // otro campo para que arranque la verificación.
-                      if (limpio.length === (tipoDocumento === "DNI" ? 8 : 11)) e.target.blur();
-                    }}
-                    placeholder={tipoDocumento === "DNI" ? "Ingresa tu DNI" : "Ingresa tu RUC"}
-                    required
-                    className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
-                  />
-                  {verificandoDocumento && (
-                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-pan-carbon-suave">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Verificando documento…
-                    </p>
-                  )}
-                  {!verificandoDocumento && avisoDocumento && (
-                    <p className="mt-1.5 text-xs font-medium text-red-700">{avisoDocumento}</p>
-                  )}
-                  {!verificandoDocumento && documentoValido === true && (
-                    <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-emerald-700">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Documento verificado.
-                    </p>
-                  )}
-                </div>
+                <fieldset className="space-y-5 border-0 p-0">
+                  <PasoFormulario numero={1} titulo="Tus datos" icono={UserRound} listo={paso1Listo} />
 
-                <div>
-                  <label htmlFor="telefono" className="mb-1.5 block text-sm font-medium text-pan-carbon">
-                    Celular
-                  </label>
-                  <input
-                    id="telefono"
-                    inputMode="numeric"
-                    maxLength={9}
-                    value={telefono}
-                    onChange={(e) => setTelefono(e.target.value.replace(/\D/g, ""))}
-                    placeholder="Ingresa tu número de celular"
-                    required
-                    className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="producto" className="mb-1.5 block text-sm font-medium text-pan-carbon">
-                    Producto
-                  </label>
-                  <SelectorProducto
-                    id="producto"
-                    productos={productos}
-                    valor={idProducto}
-                    onChange={setIdProducto}
-                    cargando={cargandoProductos}
-                  />
-                  {errorCatalogo && <p className="mt-1.5 text-xs text-red-700">{errorCatalogo}</p>}
-                  {productoSeleccionado && (
-                    <p className="mt-1.5 text-xs text-pan-carbon-suave">
-                      {esPaquete
-                        ? "Cada paquete trae 12 panes de hamburguesa."
-                        : `Pedido mínimo: ${CANTIDAD_MINIMA_UNIDAD} panes.`}
-                    </p>
-                  )}
-                </div>
-
-                {mostrarCamposRecojo && horarios && (
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-pan-carbon">Recojo</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <SelectorFecha
-                        ref={selectorFechaRef}
-                        id="fecha-recojo"
-                        valor={fechaRecojo}
-                        onChange={setFechaRecojo}
-                        minimo={minimoFechaRecojo}
-                        aviso={avisoFechaPrimero ? "Primero elige la fecha, después podrás elegir la hora." : undefined}
-                      />
-                      <SelectorHora
-                        ref={selectorHoraRef}
-                        id="hora-recojo"
-                        valor={horaRecojo}
-                        onChange={setHoraRecojo}
-                        minimoHoy={minimoHoraHoy}
-                        maximoHoy={maximoHoraHoy}
-                        minimoSiempre={minimoHoraSiempre}
-                        maximoSiempre={maximoHoraSiempre}
-                        puedeAbrir={!!fechaRecojo}
-                        onIntentoBloqueado={alIntentarAbrirHoraSinFecha}
-                      />
-                    </div>
-                    <p className="mt-1.5 text-xs text-pan-carbon-suave">
-                      {franja
-                        ? `Por ahora, el recojo está disponible de ${formatearHora12(franja.piso)} a ${formatearHora12(franja.tope)}. `
-                        : "Por ahora no estamos recibiendo pedidos nuevos. "}
-                      Pedidos hasta las {formatearHora12(horarios.horaLimitePedido)} se recogen hoy mismo
-                      desde las {formatearHora12(horarios.horaRecojoMismoDia)}. Después de esa hora, el
-                      recojo pasa para el día siguiente desde las{" "}
-                      {formatearHora12(horarios.horaRecojoDiaSiguiente)}, o desde las{" "}
-                      {formatearHora12(horarios.horaRecojoMismoDia)} si el pedido llega pasadas las{" "}
-                      {formatearHora12(horarios.horaInicioPedidoTarde)}.
-                    </p>
-                    <AnimatePresence>
-                      {fueraDeVentanaActual && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -4, height: 0 }}
-                          animate={{ opacity: 1, y: 0, height: "auto" }}
-                          exit={{ opacity: 0, y: -4, height: 0 }}
-                          transition={{ duration: 0.2, ease: EASE_PREMIUM }}
-                          className="mt-2 flex items-start gap-2.5 overflow-hidden rounded-xl border border-amber-300 bg-amber-50 px-4 py-3"
+                    <label htmlFor="documento" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                      Documento
+                    </label>
+                    {/* El indicador activo se DESLIZA entre DNI y RUC
+                        (layoutId) en vez de saltar de un botón al otro —
+                        el mismo gesto que ya usa el buscador de pedidos,
+                        para que los dos selectores se sientan iguales. */}
+                    <div
+                      role="radiogroup"
+                      aria-label="Tipo de documento"
+                      className="mb-2 inline-flex rounded-full border border-pan-borde bg-pan-crema p-1"
+                    >
+                      {(["DNI", "RUC"] as const).map((tipo) => (
+                        <button
+                          key={tipo}
+                          type="button"
+                          role="radio"
+                          aria-checked={tipoDocumento === tipo}
+                          onClick={() => {
+                            setTipoDocumento(tipo);
+                            setNumeroDocumento("");
+                          }}
+                          className={`relative rounded-full px-5 py-1.5 text-sm font-semibold transition-colors ${
+                            tipoDocumento === tipo
+                              ? "text-pan-crema"
+                              : "text-pan-carbon-suave hover:text-pan-carbon"
+                          }`}
                         >
-                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                          <p className="text-xs font-medium text-amber-800">
-                            Ese horario ya cerró para recojo. Igual registramos tu pedido y te
-                            confirmamos por WhatsApp, al número que dejes, si tenemos stock disponible
-                            para separarlo.
-                          </p>
+                          {tipoDocumento === tipo && (
+                            <motion.span
+                              layoutId="pedido-tipo-documento-activo"
+                              className="absolute inset-0 rounded-full bg-pan-terracota"
+                              transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                            />
+                          )}
+                          <span className="relative">{tipo}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="relative">
+                      <input
+                        id="documento"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        maxLength={tipoDocumento === "DNI" ? 8 : 11}
+                        value={numeroDocumento}
+                        onChange={(e) => {
+                          const limpio = e.target.value.replace(/\D/g, "");
+                          setNumeroDocumento(limpio);
+                          // Al completar el largo esperado, se quita el foco
+                          // de una vez: no hace falta que el cliente toque
+                          // otro campo para que arranque la verificación.
+                          if (limpio.length === (tipoDocumento === "DNI" ? 8 : 11)) e.target.blur();
+                        }}
+                        placeholder={tipoDocumento === "DNI" ? "Ingresa tu DNI" : "Ingresa tu RUC"}
+                        required
+                        aria-describedby="estado-documento"
+                        aria-invalid={documentoValido === false}
+                        className="campo-pan pr-11"
+                      />
+                      {/* El estado de la verificación vive DENTRO del campo:
+                          es donde el cliente ya está mirando, y no empuja el
+                          resto del formulario hacia abajo al aparecer. */}
+                      <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center">
+                        <AnimatePresence mode="wait" initial={false}>
+                          {verificandoDocumento ? (
+                            <motion.span
+                              key="verificando"
+                              initial={{ opacity: 0, scale: 0.7 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.7 }}
+                              transition={{ duration: 0.15 }}
+                            >
+                              <Loader2 className="h-4 w-4 animate-spin text-pan-bronce-oscuro" />
+                            </motion.span>
+                          ) : documentoValido === true ? (
+                            <motion.span
+                              key="valido"
+                              initial={{ opacity: 0, scale: 0.5 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.5 }}
+                              transition={{ type: "spring", stiffness: 400, damping: 18 }}
+                            >
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            </motion.span>
+                          ) : null}
+                        </AnimatePresence>
+                      </span>
+                    </div>
+                    <div id="estado-documento" aria-live="polite" className="min-h-[1.1rem]">
+                      {verificandoDocumento && (
+                        <p className="mt-1.5 text-xs text-pan-carbon-suave">Verificando documento…</p>
+                      )}
+                      {!verificandoDocumento && avisoDocumento && (
+                        <p className="mt-1.5 text-xs font-medium text-red-700">{avisoDocumento}</p>
+                      )}
+                      {!verificandoDocumento && documentoValido === true && (
+                        <p className="mt-1.5 text-xs font-medium text-emerald-700">Documento verificado.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="telefono" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                      Celular
+                    </label>
+                    <input
+                      id="telefono"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      maxLength={9}
+                      value={telefono}
+                      onChange={(e) => setTelefono(e.target.value.replace(/\D/g, ""))}
+                      placeholder="Ingresa tu número de celular"
+                      required
+                      className="campo-pan"
+                    />
+                  </div>
+                </fieldset>
+
+                <fieldset className="space-y-5 border-0 p-0">
+                  <PasoFormulario numero={2} titulo="Tu pedido" icono={Wheat} listo={paso2Listo} />
+
+                  <div>
+                    <label htmlFor="producto" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                      Producto
+                    </label>
+                    <SelectorProducto
+                      id="producto"
+                      productos={productos}
+                      valor={idProducto}
+                      onChange={setIdProducto}
+                      cargando={cargandoProductos}
+                    />
+                    {/* Estado de error del catálogo con salida: antes era
+                        una línea de texto rojo sin nada que hacer más que
+                        recargar la página a mano. */}
+                    <AnimatePresence>
+                      {errorCatalogo && !cargandoProductos && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-2 flex items-start gap-2.5 rounded-xl border border-pan-borde/50 bg-pan-crema px-4 py-3">
+                            <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-pan-terracota" strokeWidth={1.75} />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs leading-relaxed text-pan-carbon-suave">{errorCatalogo}</p>
+                              <button
+                                type="button"
+                                onClick={() => void cargarCatalogo(true)}
+                                className="mt-2 inline-flex items-center gap-1.5 rounded text-xs font-semibold text-pan-terracota transition-colors hover:text-pan-terracota-profundo"
+                              >
+                                <RotateCw className="h-3.5 w-3.5" />
+                                Reintentar
+                              </button>
+                            </div>
+                          </div>
                         </motion.div>
                       )}
                     </AnimatePresence>
+                    {productoSeleccionado && (
+                      <p className="mt-1.5 text-xs text-pan-carbon-suave">
+                        {esPaquete
+                          ? "Cada paquete trae 12 panes de hamburguesa."
+                          : `Pedido mínimo: ${CANTIDAD_MINIMA_UNIDAD} panes.`}
+                      </p>
+                    )}
                   </div>
-                )}
 
-                <div>
-                  <label htmlFor="cantidad" className="mb-1.5 block text-sm font-medium text-pan-carbon">
-                    {esPaquete ? "Cantidad de paquetes" : "Cantidad"}
-                  </label>
-                  <input
-                    id="cantidad"
-                    inputMode="numeric"
-                    maxLength={4}
-                    value={cantidad}
-                    onChange={(e) => setCantidad(e.target.value.replace(/\D/g, ""))}
-                    placeholder={esPaquete ? "Ingresa cantidad de paquetes" : "Ingresa cantidad de panes"}
-                    required
-                    className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
-                  />
-                </div>
+                  <div>
+                    <label htmlFor="cantidad" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                      {esPaquete ? "Cantidad de paquetes" : "Cantidad"}
+                    </label>
+                    <input
+                      id="cantidad"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={cantidad}
+                      onChange={(e) => setCantidad(e.target.value.replace(/\D/g, ""))}
+                      placeholder={esPaquete ? "Ingresa cantidad de paquetes" : "Ingresa cantidad de panes"}
+                      required
+                      className="campo-pan"
+                    />
+                  </div>
 
-                <div>
-                  <label htmlFor="notas" className="mb-1.5 block text-sm font-medium text-pan-carbon">
-                    Notas (opcional)
-                  </label>
-                  <textarea
-                    id="notas"
-                    value={notas}
-                    onChange={(e) => setNotas(e.target.value)}
-                    rows={2}
-                    placeholder="Ej: sin sésamo, o cualquier indicación"
-                    className="w-full resize-none rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
-                  />
-                </div>
+                  <div>
+                    <label htmlFor="notas" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                      Notas (opcional)
+                    </label>
+                    <textarea
+                      id="notas"
+                      value={notas}
+                      onChange={(e) => setNotas(e.target.value)}
+                      rows={2}
+                      placeholder="Ej: sin sésamo, o cualquier indicación"
+                      className="campo-pan resize-none"
+                    />
+                  </div>
+                </fieldset>
 
-                {productoSeleccionado && cantidadNum > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.25, ease: EASE_PREMIUM }}
-                    className="flex items-center justify-between rounded-xl bg-pan-terracota-suave/40 px-4 py-3"
-                  >
-                    <span className="text-sm font-medium text-pan-carbon">Total estimado</span>
-                    <span className="text-lg font-semibold text-pan-terracota">S/ {total.toFixed(2)}</span>
-                  </motion.div>
-                )}
+                {/* El bloque de recojo entra y sale animado, y va al final
+                    del formulario: al aparecer/desaparecer en el medio (que
+                    es donde estaba antes) empujaba de golpe los campos de
+                    abajo cada vez que se cambiaba de pan. */}
+                <AnimatePresence initial={false}>
+                  {mostrarCamposRecojo && horarios && (
+                    <motion.fieldset
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.35, ease: EASE_PREMIUM }}
+                      className="overflow-hidden border-0 p-0"
+                    >
+                      <div className="space-y-5">
+                        <PasoFormulario numero={3} titulo="Recojo" icono={CalendarClock} listo={paso3Listo} />
 
-                {error && <p className="text-sm font-medium text-red-700">{error}</p>}
-
-                <motion.button
-                  type="submit"
-                  disabled={enviando || cargandoProductos}
-                  whileHover={enviando ? undefined : { scale: 1.02, y: -1 }}
-                  whileTap={enviando ? undefined : { scale: 0.98 }}
-                  className="flex w-full items-center justify-center gap-2 rounded-full bg-pan-terracota px-6 py-3.5 font-semibold text-pan-crema shadow-lg shadow-pan-terracota/20 transition-shadow hover:shadow-xl hover:shadow-pan-terracota/30 disabled:opacity-60"
-                >
-                  {enviando ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Enviando…
-                    </>
-                  ) : (
-                    "Enviar pedido"
+                        <div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <SelectorFecha
+                              ref={selectorFechaRef}
+                              id="fecha-recojo"
+                              valor={fechaRecojo}
+                              onChange={setFechaRecojo}
+                              minimo={minimoFechaRecojo}
+                              aviso={avisoFechaPrimero ? "Primero elige la fecha, después podrás elegir la hora." : undefined}
+                            />
+                            <SelectorHora
+                              ref={selectorHoraRef}
+                              id="hora-recojo"
+                              valor={horaRecojo}
+                              onChange={setHoraRecojo}
+                              minimoHoy={minimoHoraHoy}
+                              maximoHoy={maximoHoraHoy}
+                              minimoSiempre={minimoHoraSiempre}
+                              maximoSiempre={maximoHoraSiempre}
+                              puedeAbrir={!!fechaRecojo}
+                              onIntentoBloqueado={alIntentarAbrirHoraSinFecha}
+                            />
+                          </div>
+                          <p className="mt-2 text-xs leading-relaxed text-pan-carbon-suave">
+                            {franja
+                              ? `Por ahora, el recojo está disponible de ${formatearHora12(franja.piso)} a ${formatearHora12(franja.tope)}. `
+                              : "Por ahora no estamos recibiendo pedidos nuevos. "}
+                            Pedidos hasta las {formatearHora12(horarios.horaLimitePedido)} se recogen hoy mismo
+                            desde las {formatearHora12(horarios.horaRecojoMismoDia)}. Después de esa hora, el
+                            recojo pasa para el día siguiente desde las{" "}
+                            {formatearHora12(horarios.horaRecojoDiaSiguiente)}, o desde las{" "}
+                            {formatearHora12(horarios.horaRecojoMismoDia)} si el pedido llega pasadas las{" "}
+                            {formatearHora12(horarios.horaInicioPedidoTarde)}.
+                          </p>
+                          <AnimatePresence>
+                            {fueraDeVentanaActual && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -4, height: 0 }}
+                                animate={{ opacity: 1, y: 0, height: "auto" }}
+                                exit={{ opacity: 0, y: -4, height: 0 }}
+                                transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                                className="mt-2 flex items-start gap-2.5 overflow-hidden rounded-xl border border-amber-300 bg-amber-50 px-4 py-3"
+                              >
+                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={1.75} />
+                                <p className="text-xs font-medium text-amber-800">
+                                  Ese horario ya cerró para recojo. Igual registramos tu pedido y te
+                                  confirmamos por WhatsApp, al número que dejes, si tenemos stock disponible
+                                  para separarlo.
+                                </p>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                    </motion.fieldset>
                   )}
-                </motion.button>
+                </AnimatePresence>
+
+                <div className="space-y-4">
+                  <AnimatePresence initial={false}>
+                    {productoSeleccionado && cantidadNum > 0 && (
+                      <motion.div
+                        key="total"
+                        initial={{ opacity: 0, scale: 0.96, height: 0 }}
+                        animate={{ opacity: 1, scale: 1, height: "auto" }}
+                        exit={{ opacity: 0, scale: 0.96, height: 0 }}
+                        transition={{ duration: 0.28, ease: EASE_PREMIUM }}
+                        className="flex items-center justify-between rounded-xl border border-pan-terracota/15 bg-pan-terracota-suave/40 px-4 py-3"
+                      >
+                        <span className="text-sm font-medium text-pan-carbon">Total estimado</span>
+                        {/* La cifra se reanima cada vez que cambia (`key`),
+                            así el cliente nota que se recalculó al escribir
+                            otra cantidad. */}
+                        <motion.span
+                          key={total}
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                          className="text-lg font-semibold text-pan-terracota"
+                        >
+                          S/ {total.toFixed(2)}
+                        </motion.span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.22, ease: EASE_PREMIUM }}
+                        role="alert"
+                        className="overflow-hidden"
+                      >
+                        <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" strokeWidth={1.75} />
+                          <p className="text-sm font-medium text-red-700">{error}</p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <motion.button
+                    type="submit"
+                    disabled={enviando || cargandoProductos}
+                    whileHover={enviando ? undefined : { scale: 1.02, y: -1 }}
+                    whileTap={enviando ? undefined : { scale: 0.98 }}
+                    className="flex w-full items-center justify-center gap-2 rounded-full bg-pan-terracota px-6 py-3.5 font-semibold text-pan-crema shadow-lg shadow-pan-terracota/20 transition-shadow hover:shadow-xl hover:shadow-pan-terracota/30 disabled:opacity-60"
+                  >
+                    {enviando ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Enviando…
+                      </>
+                    ) : (
+                      "Enviar pedido"
+                    )}
+                  </motion.button>
+                </div>
               </motion.form>
             )}
           </AnimatePresence>
@@ -774,6 +957,56 @@ export function PedidoForm() {
         </div>
       </div>
     </section>
+  );
+}
+
+/** Cabecera de un tramo del formulario: número, nombre y una marca que se
+ * enciende cuando ese tramo ya quedó completo. El formulario sigue siendo
+ * una sola pantalla (nada de pasos que obliguen a avanzar y retroceder),
+ * pero ahora se lee como tres bloques con principio y fin en vez de una
+ * lista larga de campos sueltos. */
+function PasoFormulario({
+  numero,
+  titulo,
+  icono: Icono,
+  listo,
+}: {
+  numero: number;
+  titulo: string;
+  icono: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  listo: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors duration-400 ${
+          listo ? "bg-emerald-600 text-white" : "bg-pan-terracota-suave/70 text-pan-terracota-profundo"
+        }`}
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          {listo ? (
+            <motion.span
+              key="listo"
+              initial={{ scale: 0, rotate: -45 }}
+              animate={{ scale: 1, rotate: 0 }}
+              exit={{ scale: 0 }}
+              transition={{ type: "spring", stiffness: 420, damping: 20 }}
+            >
+              <CheckCircle2 className="h-4 w-4" strokeWidth={2.4} />
+            </motion.span>
+          ) : (
+            <motion.span key="numero" initial={{ scale: 0.6 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+              {numero}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </span>
+      <span className="flex items-center gap-2 text-sm font-semibold tracking-wide text-pan-carbon">
+        <Icono className="h-4 w-4 text-pan-bronce-oscuro" strokeWidth={1.75} />
+        {titulo}
+      </span>
+      <span aria-hidden="true" className="h-px flex-1 bg-gradient-to-r from-pan-borde/40 to-transparent" />
+    </div>
   );
 }
 

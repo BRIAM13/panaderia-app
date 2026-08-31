@@ -56,6 +56,50 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* El navbar es fijo: sin este margen, llevar el scroll a una sección
+   (ver utils/scroll.ts) deja su borde superior justo debajo de la barra y
+   se pierde el "aire" con el que arranca cada sección. */
+section[id],
+footer[id] {
+  scroll-margin-top: 5.5rem;
+}
+
+/* Los títulos display quedan mejor repartidos entre líneas (sin una última
+   línea huérfana de una sola palabra) — se aplica solo a texto corto de
+   titular, no a párrafos. */
+.equilibrar-texto {
+  text-wrap: balance;
+}
+
+/* Foco de teclado visible y con la identidad del sitio. Sin esto, los
+   botones/enlaces solo mostraban el anillo por defecto del navegador (azul,
+   ajeno a la paleta) y los campos con `outline-none` no mostraban nada. */
+:focus-visible {
+  outline: 2px solid var(--color-pan-terracota);
+  outline-offset: 3px;
+}
+
+/* Enlace de salto para quien navega con teclado o lector de pantalla:
+   invisible hasta que recibe el foco, entonces aparece arriba a la
+   izquierda y permite ir directo al contenido sin recorrer el menú. */
+.salto-contenido {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  transition: transform 0.3s var(--ease-premium);
+  border-radius: 999px;
+  background: var(--color-pan-terracota);
+  color: var(--color-pan-crema);
+  padding: 0.6rem 1.1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.salto-contenido:focus-visible {
+  transform: translateY(0);
+}
+
 ::selection {
   background-color: var(--color-pan-terracota);
   color: var(--color-pan-crema);
@@ -144,4 +188,134 @@ body {
 .boton-relleno:hover::before,
 .boton-relleno:focus-visible::before {
   transform: scaleX(1);
+}
+
+/* Campo de formulario estándar del sitio. Antes cada input repetía la
+   misma tira de clases y su único estado de foco era cambiar el color del
+   borde (1px), casi imperceptible; ahora el foco además dibuja un halo
+   cálido y aclara el fondo, así se ve de un vistazo en qué campo se está
+   escribiendo — sobre todo al navegar con teclado. */
+.campo-pan {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-pan-borde);
+  background-color: var(--color-pan-crema);
+  padding: 0.75rem 1rem;
+  color: var(--color-pan-carbon);
+  outline: none;
+  transition:
+    border-color 0.25s var(--ease-premium),
+    box-shadow 0.25s var(--ease-premium),
+    background-color 0.25s var(--ease-premium);
+}
+.campo-pan::placeholder {
+  color: color-mix(in srgb, var(--color-pan-carbon-suave) 65%, transparent);
+}
+.campo-pan:hover:not(:disabled) {
+  border-color: var(--color-pan-bronce);
+}
+.campo-pan:focus,
+.campo-pan:focus-visible {
+  border-color: var(--color-pan-terracota);
+  background-color: var(--color-pan-crema-suave);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-pan-terracota) 20%, transparent);
+  outline: none;
+}
+.campo-pan:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Contorno degradado que se enciende al hacer hover sobre una tarjeta —
+   el "filo" cálido que le falta a una tarjeta plana, sin tener que
+   engrosar el borde permanente. Se combina con .shine-sweep (que usa
+   ::after) porque este ocupa ::before. */
+.tarjeta-realce {
+  position: relative;
+}
+.tarjeta-realce::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(140deg, var(--color-pan-oro), transparent 42%, var(--color-pan-terracota));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.45s var(--ease-premium);
+  pointer-events: none;
+}
+.tarjeta-realce:hover::before,
+.tarjeta-realce:focus-within::before {
+  opacity: 1;
+}
+
+/* Esqueleto de carga con barrido de brillo — en vez de un texto
+   "Cargando…" o un spinner suelto, el hueco mantiene la forma y el tamaño
+   de lo que va a llegar, así el layout no salta al aparecer el contenido. */
+.esqueleto {
+  position: relative;
+  overflow: hidden;
+  background-color: color-mix(in srgb, var(--color-pan-bronce-suave) 60%, var(--color-pan-crema));
+}
+.esqueleto::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  transform: translateX(-100%);
+  animation: barrido-esqueleto 1.5s var(--ease-premium) infinite;
+}
+@keyframes barrido-esqueleto {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Grano de papel muy tenue sobre los fondos "mesh". Los degradados
+   grandes y limpios tienden a verse digitales y planos en pantallas
+   grandes; una textura casi imperceptible les da el cuerpo de un papel de
+   estraza y refuerza lo artesanal de la marca. */
+.textura-grano {
+  position: relative;
+}
+.textura-grano::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.28;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23r)' opacity='0.16'/%3E%3C/svg%3E");
+}
+.textura-grano > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Respeta a quien pidió menos movimiento en su sistema operativo: se
+   apagan los bucles decorativos y las transiciones largas, pero el sitio
+   sigue siendo perfectamente usable (framer-motion se desactiva aparte,
+   con MotionConfig reducedMotion="user" en App.tsx). */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

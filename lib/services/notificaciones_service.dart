@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:ui' show Color;
 
@@ -6,8 +7,16 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../main.dart' show navigatorKey;
+import '../models/tienda_model.dart';
+import '../pages/hamburguesas/deudas_page.dart';
+import '../pages/hamburguesas/pedidos_page.dart';
+import '../pages/hub/mis_deudas_page.dart';
+import '../pages/hub/mis_pedidos_pendientes_view.dart';
+import '../widgets/page_transitions.dart';
 import 'api_client.dart';
 import 'secure_storage_service.dart';
+import 'tiendas_service.dart';
 
 const _canalId = 'notificaciones_generales';
 const _canalNombre = 'Notificaciones';
@@ -91,6 +100,72 @@ class NotificacionesService {
     );
   }
 
+  /// Lleva al usuario al apartado correspondiente cuando TOCA una
+  /// notificación (a diferencia de `_emitirSiEsEventoDePedido`, que solo
+  /// refresca listas ya abiertas). Se dispara desde tres caminos distintos
+  /// según en qué estado estaba la app al tocarla: en primer plano (la
+  /// notificación la mostramos nosotros con flutter_local_notifications,
+  /// ver `onDidReceiveNotificationResponse`), en segundo plano
+  /// (`onMessageOpenedApp`, la mostró el sistema) o cerrada del todo
+  /// (`getInitialMessage`, también la mostró el sistema).
+  ///
+  /// `idTienda` presente en los datos = notificación para el PERSONAL (ver
+  /// pedidosController.js/solicitudesPagoController.js: solo los pushes que
+  /// avisan al equipo de una tienda incluyen ese campo) → se resuelve el
+  /// objeto `Tienda` correspondiente y se abre Pedidos o Deudas. Sin
+  /// `idTienda` = notificación para el CLIENTE dueño del pedido → Mis
+  /// pedidos o Mis deudas.
+  static Future<void> _navegarSegunNotificacion(
+    Map<String, dynamic> datos,
+  ) async {
+    final tipo = datos['tipo'] as String?;
+    if (tipo == null || tipo == 'ROL_CAMBIADO') return;
+
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) return;
+
+    try {
+      final idTiendaTexto = datos['idTienda'] as String?;
+      if (idTiendaTexto != null) {
+        final idTienda = int.tryParse(idTiendaTexto);
+        if (idTienda == null) return;
+
+        final tiendas = await TiendasService().misTiendas();
+        Tienda? tienda;
+        for (final t in tiendas) {
+          if (t.idTienda == idTienda) {
+            tienda = t;
+            break;
+          }
+        }
+        if (tienda == null) return;
+
+        navigator.popUntil((ruta) => ruta.isFirst);
+        navigator.push(
+          SlideUpFadeRoute(
+            builder: (_) => tipo == 'PAGO_REPORTADO'
+                ? DeudasPage(tienda: tienda!)
+                : PedidosPage(tienda: tienda!),
+          ),
+        );
+      } else {
+        navigator.popUntil((ruta) => ruta.isFirst);
+        navigator.push(
+          SlideUpFadeRoute(
+            builder: (_) => tipo == 'DEUDA_PAGADA' || tipo == 'PAGO_RECHAZADO'
+                ? const MisDeudasPage()
+                : const MisPedidosPendientesPage(),
+          ),
+        );
+      }
+    } catch (_) {
+      // Silencioso: si no se pudo resolver la tienda (sin acceso, sin
+      // conexión), el usuario igual puede navegar a mano desde el drawer —
+      // el evento de refresco (`_emitirSiEsEventoDePedido`) ya se disparó
+      // aparte y no depende de esto.
+    }
+  }
+
   Future<void> inicializarYRegistrar() async {
     if (kIsWeb || !Platform.isAndroid) return;
 
@@ -108,6 +183,7 @@ class NotificacionesService {
       FirebaseMessaging.onMessageOpenedApp.listen((mensaje) {
         _emitirSiEsEventoDePedido(mensaje);
         _reaccionarSiEsCambioDeRol(mensaje);
+        _navegarSegunNotificacion(mensaje.data);
       });
 
       // App abierta desde cero (estaba cerrada) tocando la notificación.
@@ -115,6 +191,7 @@ class NotificacionesService {
       if (mensajeInicial != null) {
         _emitirSiEsEventoDePedido(mensajeInicial);
         _reaccionarSiEsCambioDeRol(mensajeInicial);
+        _navegarSegunNotificacion(mensajeInicial.data);
       }
 
       final token = await mensajeria.getToken();
@@ -143,6 +220,20 @@ class NotificacionesService {
       const InitializationSettings(
         android: AndroidInitializationSettings('@drawable/ic_notification'),
       ),
+      // Con la app en primer plano, la notificación la mostramos nosotros
+      // (ver `_mostrarNotificacionLocal`) — este es el único camino para
+      // enterarnos de que la TOCARON en ese caso, por eso viaja el `data`
+      // original codificado como JSON en el payload.
+      onDidReceiveNotificationResponse: (respuesta) {
+        final payload = respuesta.payload;
+        if (payload == null) return;
+        try {
+          final datos = jsonDecode(payload) as Map<String, dynamic>;
+          _navegarSegunNotificacion(datos);
+        } catch (_) {
+          // Payload corrupto/inesperado: no hay a dónde navegar.
+        }
+      },
     );
 
     const canal = AndroidNotificationChannel(
@@ -178,6 +269,7 @@ class NotificacionesService {
           color: Color(0xFFB5451B),
         ),
       ),
+      payload: jsonEncode(mensaje.data),
     );
   }
 }

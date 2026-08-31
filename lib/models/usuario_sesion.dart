@@ -5,7 +5,7 @@ class UsuarioSesion {
     required this.idUsuario,
     required this.idPersona,
     required this.nombreUsuario,
-    required this.rol,
+    required String rol,
     required this.requiereCambioPassword,
     required this.roles,
     required this.esCliente,
@@ -15,7 +15,7 @@ class UsuarioSesion {
     this.nombres,
     this.apellidoPaterno,
     this.apellidoMaterno,
-  });
+  }) : _rolCrudo = rol;
 
   factory UsuarioSesion.fromJson(Map<String, dynamic> json) {
     return UsuarioSesion(
@@ -40,7 +40,7 @@ class UsuarioSesion {
   final int idUsuario;
   final int idPersona;
   final String nombreUsuario;
-  final String rol;
+  final String _rolCrudo;
   final bool requiereCambioPassword;
   final List<String> roles;
   final bool esCliente;
@@ -50,6 +50,22 @@ class UsuarioSesion {
   final String? nombres;
   final String? apellidoPaterno;
   final String? apellidoMaterno;
+
+  /// Rol efectivo para decidir qué puede VER en la app. VISITOR (cuenta de
+  /// solo lectura para revisores externos — Google Play, Culqi, etc.) se
+  /// comporta como ADMIN en toda la interfaz; es el backend quien de
+  /// verdad le bloquea cualquier escritura sin importar qué se muestre
+  /// aquí (ver authMiddleware.js → verificarToken). Así ningún chequeo
+  /// `rol == 'ADMIN'` disperso por la app necesita enterarse de que este
+  /// rol existe.
+  String get rol => _rolCrudo == 'VISITOR' ? 'ADMIN' : _rolCrudo;
+
+  /// true solo para la cuenta de solo lectura — a diferencia de [rol]
+  /// (que la "disfraza" de ADMIN para que vea todo lo que un ADMIN vería),
+  /// esto expone el rol REAL sin disfrazar. Se usa únicamente para mostrar
+  /// la etiqueta correcta en el drawer ("Visitante" en vez de
+  /// "Administrador").
+  bool get esVisitante => _rolCrudo == 'VISITOR';
 
   /// Roles con privilegios de gestión (todo lo que no sea un cliente puro).
   bool get esPersonalDeGestion =>
@@ -73,7 +89,7 @@ class UsuarioSesion {
       idUsuario: idUsuario,
       idPersona: idPersona,
       nombreUsuario: nombreUsuario,
-      rol: rol,
+      rol: _rolCrudo,
       requiereCambioPassword:
           requiereCambioPassword ?? this.requiereCambioPassword,
       roles: roles,

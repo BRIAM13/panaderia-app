@@ -20,6 +20,8 @@ class RolAsignable {
         return 'Administrador';
       case 'SUPERADMIN':
         return 'Super administrador';
+      case 'VISITOR':
+        return 'Visitante';
       default:
         return nombreRol;
     }

@@ -1,0 +1,23 @@
+# Dependencias del microservicio de predicción de demanda.
+# Versiones fijadas (pinned) a propósito: una tesis tiene que poder
+# reproducirse años después, y un `pip install` sin pines instalaría versiones
+# futuras que podrían cambiar las métricas reportadas.
+#
+# Verificado con Python 3.12 (Windows). Recomendado: Python 3.11 o 3.12.
+
+# --- API HTTP ---
+fastapi==0.141.1
+uvicorn==0.52.4
+pydantic==2.13.5
+
+# --- Datos y modelado ---
+numpy==2.5.2
+pandas==3.0.5
+scikit-learn==1.9.0
+joblib==1.5.3
+
+# --- Calendario de feriados peruanos ---
+holidays==0.103
+
+# --- Solo para las pruebas de humo (prueba_humo.py) ---
+httpx==0.28.1

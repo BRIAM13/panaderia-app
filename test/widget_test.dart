@@ -116,7 +116,7 @@ void main() {
     },
   );
 
-  testWidgets('Un cliente puro no ve la sección de GESTIÓN en el drawer', (
+  testWidgets('Un cliente puro no ve la sección de MENÚ en el drawer', (
     WidgetTester tester,
   ) async {
     await _montar(tester, const HomePage(usuario: _clienteDemo));
@@ -124,13 +124,13 @@ void main() {
     await tester.tap(find.byIcon(Icons.menu));
     await _asentar(tester);
 
-    expect(find.text('GESTIÓN'), findsNothing);
+    expect(find.text('MENÚ'), findsNothing);
     expect(find.text('Mis pedidos'), findsOneWidget);
   });
 
   testWidgets(
     'Un usuario híbrido sigue viendo su Dashboard de gestión como pantalla '
-    'principal, y ve AMBAS secciones (GESTIÓN y MI CUENTA) en el drawer',
+    'principal, y ve AMBAS secciones (MENÚ y MI CUENTA) en el drawer',
     (WidgetTester tester) async {
       await _montar(tester, const HomePage(usuario: _hibridoDemo));
 
@@ -138,9 +138,10 @@ void main() {
       await _asentar(tester);
 
       expect(find.text('Cambiar de vista'), findsNothing);
-      expect(find.text('GESTIÓN'), findsOneWidget);
+      expect(find.text('MENÚ'), findsOneWidget);
       expect(find.text('MI CUENTA'), findsOneWidget);
-      expect(find.text('Hacer pedido'), findsOneWidget);
+      // "Hacer pedido" ya no vive en el drawer — es el FAB de la propia
+      // pantalla "Mis pedidos" (ver MisPedidosPendientesPage).
       expect(find.text('Mis pedidos'), findsOneWidget);
       expect(find.text('Mis deudas'), findsOneWidget);
     },

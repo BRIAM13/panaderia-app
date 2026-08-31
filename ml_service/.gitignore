@@ -1,0 +1,14 @@
+# Entorno virtual local
+.venv/
+__pycache__/
+*.pyc
+
+# Base de datos sintética: se regenera de forma determinista con
+# `python generar_datos_sinteticos.py` (semilla fija), así que no tiene
+# sentido versionar ~80.000 filas.
+data/*.db
+
+# El modelo entrenado (.joblib) y las métricas (metricas.json /
+# REPORTE_METRICAS.md) SÍ se versionan a propósito: son los artefactos que
+# cita el capítulo de resultados de la tesis y lo que permite levantar el
+# servicio sin reentrenar.

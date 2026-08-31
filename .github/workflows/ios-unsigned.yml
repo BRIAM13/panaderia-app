@@ -22,7 +22,7 @@ jobs:
       - name: Compilar iOS sin firma de código
         run: |
           flutter build ios --release --no-codesign \
-            --dart-define=API_BASE_URL=https://panaderia-backend-2xvd.onrender.com/api
+            --dart-define=API_BASE_URL=https://panaderia-backend-vtdy.onrender.com/api
 
       - name: Empaquetar como .ipa sin firmar
         # Un .ipa es, literalmente, un .zip con esta estructura interna

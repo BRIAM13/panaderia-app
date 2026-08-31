@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  AlertCircle,
   Ban,
   CheckCircle2,
   ChevronDown,
   Clock,
   Loader2,
   PackageSearch,
+  SearchX,
   Truck,
   X,
   XCircle,
@@ -18,8 +20,7 @@ import {
   type PedidoPublicoConsultaResultado,
 } from "../services/api";
 import { formatearHora12 } from "../utils/horariosPan";
-
-const EASE_PREMIUM = [0.16, 1, 0.3, 1] as const;
+import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
 
 const ESTADO_INFO = {
   SOLICITADO: {
@@ -195,21 +196,32 @@ export function SeguimientoPedido() {
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-80px" }}
+        viewport={VIEWPORT_REVEAL}
         transition={{ duration: 0.6, ease: EASE_PREMIUM }}
-        className="mx-auto max-w-4xl overflow-hidden rounded-3xl bg-gradient-to-br from-pan-terracota to-pan-terracota-profundo shadow-lg shadow-pan-terracota/20"
+        className="relative mx-auto max-w-4xl overflow-hidden rounded-3xl bg-gradient-to-br from-pan-terracota to-pan-terracota-profundo shadow-lg shadow-pan-terracota/20"
       >
+        {/* Brillo diagonal fijo sobre el degradado: sin él, este bloque —
+            el único de color sólido de toda la página — se veía como un
+            rectángulo plano frente al resto de superficies con textura. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_12%_0%,rgba(253,246,236,0.16),transparent_60%)]"
+        />
         <button
           onClick={alternar}
-          className="group flex w-full flex-col items-center gap-6 px-8 py-12 text-center sm:flex-row sm:text-left"
+          aria-expanded={abierto}
+          className="group relative flex w-full flex-col items-center gap-6 px-6 py-10 text-center sm:flex-row sm:px-8 sm:py-12 sm:text-left"
         >
           <motion.div
             whileHover={{ rotate: -8, scale: 1.05 }}
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-pan-crema/15 text-pan-crema"
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-pan-crema/15 text-pan-crema ring-1 ring-pan-crema/20"
           >
-            <PackageSearch className="h-7 w-7" />
+            <PackageSearch className="h-7 w-7" strokeWidth={1.6} />
           </motion.div>
           <div className="flex-1">
+            <p className="mb-1.5 text-[11px] font-semibold tracking-[0.18em] text-pan-crema/70 uppercase">
+              Seguimiento
+            </p>
             <h3 className="font-[family-name:var(--font-display-panaderia)] text-2xl font-semibold text-pan-crema">
               ¿Ya hiciste un pedido antes?
             </h3>
@@ -220,6 +232,10 @@ export function SeguimientoPedido() {
           </div>
           <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-pan-crema px-6 py-3.5 font-semibold text-pan-terracota shadow-md transition-transform duration-300 group-hover:scale-105">
             {abierto ? "Cerrar" : "Ver mi pedido"}
+            <ChevronDown
+              className={`h-4 w-4 transition-transform duration-300 ${abierto ? "rotate-180" : ""}`}
+              strokeWidth={2}
+            />
           </span>
         </button>
 
@@ -230,8 +246,9 @@ export function SeguimientoPedido() {
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.4, ease: EASE_PREMIUM }}
+              className="relative"
             >
-              <div className="border-t border-pan-crema/15 bg-pan-crema px-8 py-8">
+              <div className="border-t border-pan-crema/15 bg-pan-crema px-5 py-7 sm:px-8 sm:py-8">
                 <AnimatePresence mode="wait">
                   {resultado ? (
                     <motion.div
@@ -241,8 +258,19 @@ export function SeguimientoPedido() {
                       className="mx-auto max-w-md"
                     >
                       {resultado.pedidos.length === 0 ? (
-                        <div className="text-center">
-                          <p className="text-pan-carbon">
+                        // Estado vacío con cara propia: antes era una sola
+                        // línea de texto suelta en medio del panel y se
+                        // leía como si algo hubiera fallado.
+                        <div className="flex flex-col items-center gap-4 py-4 text-center">
+                          <motion.span
+                            initial={{ scale: 0.6, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ type: "spring", stiffness: 240, damping: 18 }}
+                            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-pan-bronce-suave/60 text-pan-bronce-oscuro"
+                          >
+                            <SearchX className="h-7 w-7" strokeWidth={1.6} />
+                          </motion.span>
+                          <p className="max-w-xs leading-relaxed text-pan-carbon">
                             {resultado.nombre
                               ? `Hola, ${resultado.nombre}. Todavía no tienes ningún pedido registrado.`
                               : `No encontramos ningún cliente con ese ${tipoDocumento} todavía. Si acabas de hacer tu primer pedido, revisa que el ${tipoDocumento} esté bien escrito.`}
@@ -267,9 +295,14 @@ export function SeguimientoPedido() {
                               const info = ESTADO_INFO[pedido.estado];
                               const Icono = info.icono;
                               return (
+                                // En pantallas angostas el chip de estado y
+                                // el nombre del pedido no entran en la misma
+                                // línea: el título terminaba recortado a
+                                // "Ped…". Ahí el estado pasa debajo, y solo
+                                // vuelven a compartir fila cuando hay ancho.
                                 <div
                                   key={pedido.idPedido}
-                                  className="flex items-center justify-between gap-3 rounded-xl border border-pan-borde/40 bg-pan-crema-suave px-4 py-3"
+                                  className="flex flex-col items-start gap-2 rounded-xl border border-pan-borde/40 bg-pan-crema-suave px-4 py-3 transition-colors duration-300 hover:border-pan-borde/70 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                                 >
                                   <div className="min-w-0">
                                     <p className="truncate text-sm font-semibold text-pan-carbon">
@@ -442,14 +475,20 @@ export function SeguimientoPedido() {
                             onChange={(e) => setDocumento(e.target.value.replace(/\D/g, ""))}
                             placeholder={`Tu ${tipoDocumento}, ${LONGITUD_DOCUMENTO[tipoDocumento]} dígitos`}
                             required
-                            className="w-full rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-pan-carbon outline-none focus:border-pan-terracota"
+                            aria-invalid={Boolean(error)}
+                            className="campo-pan"
                           />
-                          {error && <p className="mt-1.5 text-sm font-medium text-red-700">{error}</p>}
+                          {error && (
+                            <p role="alert" className="mt-1.5 flex items-start gap-1.5 text-sm font-medium text-red-700">
+                              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                              {error}
+                            </p>
+                          )}
                         </div>
                         <button
                           type="submit"
                           disabled={buscando}
-                          className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-pan-terracota px-6 py-3 font-semibold text-pan-crema transition-transform hover:scale-[1.02] disabled:opacity-60 disabled:hover:scale-100 sm:w-auto"
+                          className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-pan-terracota px-6 py-3 font-semibold text-pan-crema shadow-sm shadow-pan-terracota/25 transition-all duration-300 hover:scale-[1.02] hover:shadow-md hover:shadow-pan-terracota/35 disabled:opacity-60 disabled:hover:scale-100 sm:w-auto"
                         >
                           {buscando ? (
                             <>
@@ -461,6 +500,33 @@ export function SeguimientoPedido() {
                           )}
                         </button>
                       </form>
+
+                      {/* Mientras el servidor responde (que puede tardar si
+                          está despertando) se dibuja la silueta de las
+                          tarjetas que van a llegar, en vez de dejar el
+                          panel vacío con solo el botón girando. */}
+                      <AnimatePresence>
+                        {buscando && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.3, ease: EASE_PREMIUM }}
+                            aria-hidden="true"
+                            className="w-full overflow-hidden"
+                          >
+                            <div className="mt-2 space-y-2 pt-2">
+                              {[0, 1, 2].map((i) => (
+                                <div
+                                  key={i}
+                                  className="esqueleto h-[62px] w-full rounded-xl border border-pan-borde/25"
+                                  style={{ opacity: 1 - i * 0.25 }}
+                                />
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </motion.div>
                   )}
                 </AnimatePresence>

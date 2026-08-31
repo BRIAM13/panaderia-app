@@ -23,6 +23,25 @@
           "other_platform_oauth_client": []
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:84046109248:android:479c789a94a2c7640d1da5",
+        "android_client_info": {
+          "package_name": "com.ronceroslabs.panaderiaronceros"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtP4lbDdEfL1Oi3DRA5Xoy_HY6YaJ4bP0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
     }
   ],
   "configuration_version": "1"

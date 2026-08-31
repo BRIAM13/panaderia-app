@@ -60,6 +60,15 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/notification_color"/>
+        <!-- Canal que usa FCM para dibujar la notificación cuando la app
+             está en segundo plano o cerrada (nativo, no pasa por Flutter).
+             Sin esto, Android usa un canal de respaldo con importancia
+             normal: vibra y queda en la bandeja, pero no muestra el
+             banner emergente. Mismo ID que el canal que crea la app en
+             primer plano (ver notificaciones_service.dart). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="notificaciones_generales"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

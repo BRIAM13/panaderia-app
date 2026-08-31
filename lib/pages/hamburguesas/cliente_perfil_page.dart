@@ -6,6 +6,7 @@ import '../../models/perfil_cliente_model.dart';
 import '../../services/api_client.dart';
 import '../../services/clientes_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/segmento_utils.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
@@ -16,9 +17,21 @@ import 'cliente_form_page.dart';
 /// puntos de fidelidad (con canje) y notas internas del personal — todo lo
 /// que el módulo de Clientes ya guardaba pero nunca mostraba junto.
 class ClientePerfilPage extends StatefulWidget {
-  const ClientePerfilPage({super.key, required this.cliente});
+  const ClientePerfilPage({super.key, required Cliente this.cliente})
+    : _idCliente = null;
 
-  final Cliente cliente;
+  /// Entrada desde pantallas que solo conocen el id (ver `AnaliticaPage`,
+  /// que carga un resumen liviano de toda la cartera y no la ficha completa
+  /// de cada cliente). La ficha llega igual en la primera carga: el propio
+  /// endpoint de perfil ya la devuelve.
+  const ClientePerfilPage.porId({super.key, required int idCliente})
+    : cliente = null,
+      _idCliente = idCliente;
+
+  final Cliente? cliente;
+  final int? _idCliente;
+
+  int get idCliente => cliente?.idCliente ?? _idCliente!;
 
   @override
   State<ClientePerfilPage> createState() => _ClientePerfilPageState();
@@ -54,8 +67,8 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
 
     try {
       final resultados = await Future.wait([
-        _clientesService.obtenerPerfil(widget.cliente.idCliente),
-        _clientesService.listarNotas(widget.cliente.idCliente),
+        _clientesService.obtenerPerfil(widget.idCliente),
+        _clientesService.listarNotas(widget.idCliente),
       ]);
       setState(() {
         _perfil = resultados[0] as PerfilCliente;
@@ -70,10 +83,16 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
     }
   }
 
+  /// La ficha a editar sale del perfil ya cargado (no de `widget.cliente`),
+  /// que es la versión recién traída del servidor y existe también cuando se
+  /// entró solo con el id.
   Future<void> _editar() async {
+    final cliente = _perfil?.cliente ?? widget.cliente;
+    if (cliente == null) return;
+
     final guardado = await pushSlideUpFade<bool>(
       context,
-      (_) => ClienteFormPage(clienteExistente: widget.cliente),
+      (_) => ClienteFormPage(clienteExistente: cliente),
     );
     if (guardado == true) _cargar();
   }
@@ -84,10 +103,10 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
 
     setState(() => _guardandoNota = true);
     try {
-      await _clientesService.crearNota(widget.cliente.idCliente, texto);
+      await _clientesService.crearNota(widget.idCliente, texto);
       _notaController.clear();
       final notas = await _clientesService.listarNotas(
-        widget.cliente.idCliente,
+        widget.idCliente,
       );
       if (!mounted) return;
       setState(() => _notas = notas);
@@ -113,7 +132,7 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
     if (resultado == null || !mounted) return;
 
     try {
-      await _clientesService.canjearPuntos(widget.cliente.idCliente, resultado);
+      await _clientesService.canjearPuntos(widget.idCliente, resultado);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Se canjearon $resultado puntos.')),
@@ -191,49 +210,6 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
   }
 }
 
-class _EtiquetaSegmento {
-  const _EtiquetaSegmento(this.texto, this.color, this.icono);
-
-  final String texto;
-  final Color color;
-  final IconData icono;
-}
-
-_EtiquetaSegmento _etiquetaSegmento(SegmentoCliente segmento) {
-  switch (segmento) {
-    case SegmentoCliente.nuevo:
-      return const _EtiquetaSegmento(
-        'Nuevo',
-        Color(0xFF2563EB),
-        Icons.fiber_new_rounded,
-      );
-    case SegmentoCliente.enRiesgo:
-      return const _EtiquetaSegmento(
-        'En riesgo',
-        Color(0xFFDC2626),
-        Icons.warning_amber_rounded,
-      );
-    case SegmentoCliente.vip:
-      return const _EtiquetaSegmento(
-        'VIP',
-        Color(0xFFC08A3E),
-        Icons.workspace_premium_rounded,
-      );
-    case SegmentoCliente.frecuente:
-      return const _EtiquetaSegmento(
-        'Frecuente',
-        Color(0xFF2E7D32),
-        Icons.repeat_rounded,
-      );
-    case SegmentoCliente.regular:
-      return const _EtiquetaSegmento(
-        'Regular',
-        Color(0xFF6B5B4C),
-        Icons.person_rounded,
-      );
-  }
-}
-
 class _EncabezadoCliente extends StatelessWidget {
   const _EncabezadoCliente({required this.perfil});
 
@@ -243,7 +219,7 @@ class _EncabezadoCliente extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cliente = perfil.cliente;
-    final etiqueta = _etiquetaSegmento(perfil.segmento);
+    final etiqueta = etiquetaSegmento(perfil.segmento);
     final direccion = cliente.direccion;
     final telefono = cliente.telefono;
     final email = cliente.email;

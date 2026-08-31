@@ -30,9 +30,11 @@ class AppDrawer extends StatelessWidget {
     required this.onAbrirNuevoPedidoPanaderia,
     required this.onAbrirDeudasPanaderia,
     required this.onAbrirAjustePreciosPanaderia,
+    required this.onAbrirHorariosPanaderia,
     required this.onAbrirMiPerfil,
     required this.onAbrirMisPedidos,
     required this.onAbrirMisDeudas,
+    required this.onAbrirAnalitica,
     required this.onAbrirTrabajadores,
     required this.onAbrirTokenApiPeru,
     required this.onAbrirVersionApp,
@@ -53,9 +55,11 @@ class AppDrawer extends StatelessWidget {
   final VoidCallback onAbrirNuevoPedidoPanaderia;
   final VoidCallback onAbrirDeudasPanaderia;
   final VoidCallback onAbrirAjustePreciosPanaderia;
+  final VoidCallback onAbrirHorariosPanaderia;
   final VoidCallback onAbrirMiPerfil;
   final VoidCallback onAbrirMisPedidos;
   final VoidCallback onAbrirMisDeudas;
+  final VoidCallback onAbrirAnalitica;
   final VoidCallback onAbrirTrabajadores;
   final VoidCallback onAbrirTokenApiPeru;
   final VoidCallback onAbrirVersionApp;
@@ -84,9 +88,11 @@ class AppDrawer extends StatelessWidget {
         onAbrirNuevoPedidoPanaderia: onAbrirNuevoPedidoPanaderia,
         onAbrirDeudasPanaderia: onAbrirDeudasPanaderia,
         onAbrirAjustePreciosPanaderia: onAbrirAjustePreciosPanaderia,
+        onAbrirHorariosPanaderia: onAbrirHorariosPanaderia,
         onAbrirMiPerfil: onAbrirMiPerfil,
         onAbrirMisPedidos: onAbrirMisPedidos,
         onAbrirMisDeudas: onAbrirMisDeudas,
+        onAbrirAnalitica: onAbrirAnalitica,
         onAbrirTrabajadores: onAbrirTrabajadores,
         onAbrirTokenApiPeru: onAbrirTokenApiPeru,
         onAbrirVersionApp: onAbrirVersionApp,
@@ -120,9 +126,11 @@ class AppDrawerContenido extends StatefulWidget {
     required this.onAbrirNuevoPedidoPanaderia,
     required this.onAbrirDeudasPanaderia,
     required this.onAbrirAjustePreciosPanaderia,
+    required this.onAbrirHorariosPanaderia,
     required this.onAbrirMiPerfil,
     required this.onAbrirMisPedidos,
     required this.onAbrirMisDeudas,
+    required this.onAbrirAnalitica,
     required this.onAbrirTrabajadores,
     required this.onAbrirTokenApiPeru,
     required this.onAbrirVersionApp,
@@ -143,9 +151,11 @@ class AppDrawerContenido extends StatefulWidget {
   final VoidCallback onAbrirNuevoPedidoPanaderia;
   final VoidCallback onAbrirDeudasPanaderia;
   final VoidCallback onAbrirAjustePreciosPanaderia;
+  final VoidCallback onAbrirHorariosPanaderia;
   final VoidCallback onAbrirMiPerfil;
   final VoidCallback onAbrirMisPedidos;
   final VoidCallback onAbrirMisDeudas;
+  final VoidCallback onAbrirAnalitica;
   final VoidCallback onAbrirTrabajadores;
   final VoidCallback onAbrirTokenApiPeru;
   final VoidCallback onAbrirVersionApp;
@@ -276,6 +286,13 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
           icono: Icons.price_change_rounded,
           titulo: 'Ajustar precios',
           onTap: widget.onAbrirAjustePreciosPanaderia,
+          delay: 0,
+        ),
+      if (esAdmin)
+        _FilaMenu(
+          icono: Icons.schedule_rounded,
+          titulo: 'Horarios de pedido',
+          onTap: widget.onAbrirHorariosPanaderia,
           delay: 0,
         ),
     ];
@@ -432,7 +449,9 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Text(
-                                      _etiquetaRol(usuario.rol),
+                                      usuario.esVisitante
+                                          ? 'Visitante'
+                                          : _etiquetaRol(usuario.rol),
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w700,
@@ -495,13 +514,23 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                           if (tieneHorneados) filaHorneados(),
                         ],
                       ),
-                    if (usuario.rol == 'ADMIN' || usuario.rol == 'SUPERADMIN')
+                    if (usuario.rol == 'ADMIN' || usuario.rol == 'SUPERADMIN') ...[
+                      // Panel estratégico (segmentación de clientes +
+                      // predicción de demanda), aparte del Dashboard
+                      // operativo que ya es la pantalla de inicio.
+                      _FilaMenu(
+                        icono: Icons.insights_rounded,
+                        titulo: 'Analítica',
+                        onTap: widget.onAbrirAnalitica,
+                        delay: 120,
+                      ),
                       _FilaMenu(
                         icono: Icons.groups_2_rounded,
                         titulo: 'Trabajadores',
                         onTap: widget.onAbrirTrabajadores,
                         delay: 130,
                       ),
+                    ],
                   ],
                   if (usuario.rol == 'SUPERADMIN') ...[
                     const SizedBox(height: 8),

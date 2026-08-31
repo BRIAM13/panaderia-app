@@ -1,0 +1,193 @@
+{
+  "version_modelo": "1.0.0",
+  "modelo_seleccionado": "gradient_boosting",
+  "criterio_seleccion": "menor MAE en el conjunto de validación temporal",
+  "entrenado_en": "2026-08-30T05:48:53+00:00",
+  "origen_datos": "SINTÉTICO (data/entrenamiento.db) — no se usó la base de producción",
+  "particion": {
+    "tipo": "temporal (cronológica, sin barajar)",
+    "fecha_origen": "2023-08-31",
+    "fecha_corte": "2026-01-23",
+    "fecha_fin": "2026-08-29",
+    "filas_entrenamiento": 3504,
+    "filas_validacion": 876,
+    "dias_entrenamiento": 876,
+    "dias_validacion": 219
+  },
+  "metricas_validacion": {
+    "linea_base_estacional": {
+      "mae": 47.999,
+      "rmse": 72.304,
+      "mape_pct": 19.676,
+      "r2": 0.8104
+    },
+    "random_forest": {
+      "mae": 41.816,
+      "rmse": 58.164,
+      "mape_pct": 19.808,
+      "r2": 0.8773
+    },
+    "gradient_boosting": {
+      "mae": 41.708,
+      "rmse": 57.015,
+      "mape_pct": 20.228,
+      "r2": 0.8821
+    }
+  },
+  "metricas_por_producto": [
+    {
+      "id_tienda": 1,
+      "id_producto": 1,
+      "nombre_tienda": "Hamburguesas",
+      "nombre_producto": "Pan de Hamburguesa Clásico",
+      "unidad": "PAQUETES",
+      "demanda_media_diaria": 73.08,
+      "mae": 14.316,
+      "rmse": 18.815,
+      "mape_pct": 20.52,
+      "r2": 0.4258
+    },
+    {
+      "id_tienda": 2,
+      "id_producto": 2,
+      "nombre_tienda": "Horneados",
+      "nombre_producto": "Producto Horneados General",
+      "unidad": "UNIDADES",
+      "demanda_media_diaria": 142.64,
+      "mae": 35.655,
+      "rmse": 44.652,
+      "mape_pct": 28.955,
+      "r2": 0.3112
+    },
+    {
+      "id_tienda": 3,
+      "id_producto": 3,
+      "nombre_tienda": "Panadería",
+      "nombre_producto": "Pan de Agua",
+      "unidad": "UNIDADES",
+      "demanda_media_diaria": 429.7,
+      "mae": 58.793,
+      "rmse": 72.815,
+      "mape_pct": 14.27,
+      "r2": 0.4153
+    },
+    {
+      "id_tienda": 3,
+      "id_producto": 4,
+      "nombre_tienda": "Panadería",
+      "nombre_producto": "Pan Francés",
+      "unidad": "UNIDADES",
+      "demanda_media_diaria": 366.8,
+      "mae": 58.069,
+      "rmse": 73.164,
+      "mape_pct": 17.166,
+      "r2": 0.4045
+    }
+  ],
+  "cota_de_ruido": {
+    "descripcion": "MAE del modelo frente al MAE de un oráculo que conoce la demanda esperada real del generador. La razón mide qué fracción del error es atribuible al modelo y no al azar irreducible.",
+    "solo_valido_en_datos_sinteticos": true,
+    "mae_modelo": 41.708,
+    "mae_oraculo_irreducible": 38.8,
+    "razon": 1.075,
+    "por_producto": [
+      {
+        "id_producto": 1,
+        "nombre_producto": "Pan de Hamburguesa Clásico",
+        "mae_modelo": 14.316,
+        "mae_oraculo_irreducible": 12.294,
+        "razon": 1.164
+      },
+      {
+        "id_producto": 2,
+        "nombre_producto": "Producto Horneados General",
+        "mae_modelo": 35.655,
+        "mae_oraculo_irreducible": 33.556,
+        "razon": 1.063
+      },
+      {
+        "id_producto": 3,
+        "nombre_producto": "Pan de Agua",
+        "mae_modelo": 58.793,
+        "mae_oraculo_irreducible": 56.613,
+        "razon": 1.039
+      },
+      {
+        "id_producto": 4,
+        "nombre_producto": "Pan Francés",
+        "mae_modelo": 58.069,
+        "mae_oraculo_irreducible": 52.737,
+        "razon": 1.101
+      }
+    ]
+  },
+  "importancia_variables": [
+    {
+      "variable": "id_tienda",
+      "importancia": 0.7818
+    },
+    {
+      "variable": "id_producto",
+      "importancia": 0.0507
+    },
+    {
+      "variable": "dias_desde_inicio",
+      "importancia": 0.0377
+    },
+    {
+      "variable": "es_fin_de_semana",
+      "importancia": 0.0369
+    },
+    {
+      "variable": "es_feriado",
+      "importancia": 0.0259
+    },
+    {
+      "variable": "es_vispera_feriado",
+      "importancia": 0.0231
+    },
+    {
+      "variable": "semana_anio",
+      "importancia": 0.0113
+    },
+    {
+      "variable": "dia_semana",
+      "importancia": 0.0111
+    },
+    {
+      "variable": "mes",
+      "importancia": 0.0104
+    },
+    {
+      "variable": "dia_del_mes",
+      "importancia": 0.0071
+    },
+    {
+      "variable": "es_posterior_feriado",
+      "importancia": 0.0024
+    },
+    {
+      "variable": "es_quincena",
+      "importancia": 0.0009
+    },
+    {
+      "variable": "es_fin_de_mes",
+      "importancia": 0.0006
+    }
+  ],
+  "features": [
+    "id_tienda",
+    "id_producto",
+    "dia_semana",
+    "mes",
+    "dia_del_mes",
+    "semana_anio",
+    "es_fin_de_semana",
+    "es_feriado",
+    "es_vispera_feriado",
+    "es_posterior_feriado",
+    "es_quincena",
+    "es_fin_de_mes",
+    "dias_desde_inicio"
+  ]
+}

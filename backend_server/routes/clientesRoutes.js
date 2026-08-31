@@ -20,6 +20,7 @@ const {
   crearNotaCliente,
   canjearPuntos,
   enviarCampaniaReactivacion,
+  obtenerResumenSegmentos,
 } = require('../controllers/clientesController');
 const {
   validateCliente,
@@ -69,6 +70,13 @@ router.post('/', validateCliente, crearCliente);
 router.put('/:id', validateCliente, actualizarCliente);
 router.delete('/:id', desactivarCliente);
 router.put('/:id/reactivar', reactivarCliente);
+
+// Analítica de la cartera completa (conteo por segmento + clientes en
+// riesgo + top por gasto) — exclusivo ADMIN/SUPERADMIN, igual que la
+// campaña de reactivación: es información estratégica del negocio, no algo
+// que el personal de piso necesite para atender. Va ANTES de las rutas
+// '/:id/...' para que 'analitica' nunca se interprete como un id.
+router.get('/analitica/resumen-segmentos', autorizarRoles('ADMIN', 'SUPERADMIN'), obtenerResumenSegmentos);
 
 // CRM: perfil con historial agregado + segmento, notas internas del
 // personal, y canje de puntos de fidelidad.

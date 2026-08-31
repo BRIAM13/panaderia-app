@@ -1,3 +1,4 @@
+import '../models/analitica_model.dart';
 import '../models/cliente_model.dart';
 import '../models/perfil_cliente_model.dart';
 import 'api_client.dart';
@@ -286,6 +287,19 @@ class ClientesService {
       if (descripcion != null) 'descripcion': descripcion,
     }, token: token);
     return data['puntosFidelidad'] as int;
+  }
+
+  /// Analítica: conteo de clientes por segmento + los que están en riesgo +
+  /// los que más gastaron, todo en una sola llamada (el backend lo resuelve
+  /// con una consulta agregada, no cliente por cliente).
+  /// Exclusivo ADMIN/SUPERADMIN — el backend también lo exige.
+  Future<ResumenSegmentos> obtenerResumenSegmentos() async {
+    final token = await _storage.obtenerAccessToken();
+    final data = await _api.get(
+      '/clientes/analitica/resumen-segmentos',
+      token: token,
+    );
+    return ResumenSegmentos.fromJson(data);
   }
 
   /// Campaña de reactivación: push a todos los clientes "en riesgo".

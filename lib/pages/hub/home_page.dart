@@ -13,6 +13,7 @@ import '../../widgets/app_drawer.dart';
 import '../../widgets/page_transitions.dart';
 import '../auth/login_page.dart';
 import '../hamburguesas/ajuste_costos_page.dart';
+import '../hamburguesas/analitica_page.dart';
 import '../hamburguesas/clientes_page.dart';
 import '../hamburguesas/dashboard_page.dart';
 import '../hamburguesas/deudas_page.dart';
@@ -184,6 +185,13 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _abrirAnalitica() {
+    pushSlideUpFade(
+      context,
+      (context) => AnaliticaPage(usuario: widget.usuario),
+    );
+  }
+
   void _abrirTrabajadores() {
     pushSlideUpFade(context, (context) => const TrabajadoresPage());
   }
@@ -270,6 +278,7 @@ class _HomePageState extends State<HomePage> {
       onAbrirMiPerfil: _abrirMiPerfil,
       onAbrirMisPedidos: _abrirMisPedidos,
       onAbrirMisDeudas: _abrirMisDeudas,
+      onAbrirAnalitica: _abrirAnalitica,
       onAbrirTrabajadores: _abrirTrabajadores,
       onAbrirTokenApiPeru: _abrirTokenApiPeru,
       onAbrirVersionApp: _abrirVersionApp,

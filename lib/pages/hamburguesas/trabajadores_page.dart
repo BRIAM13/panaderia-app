@@ -273,6 +273,8 @@ class _TrabajadorCard extends StatelessWidget {
         return 'Super administrador';
       case 'TRABAJADOR':
         return 'Trabajador';
+      case 'VISITOR':
+        return 'Visitante';
       default:
         return trabajador.cargo;
     }

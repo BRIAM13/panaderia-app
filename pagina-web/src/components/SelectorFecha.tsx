@@ -105,11 +105,11 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
         id={id}
         type="button"
         onClick={abrir}
-        className={`flex w-full items-center gap-2.5 rounded-xl border border-pan-borde bg-pan-crema px-4 py-3 text-left outline-none focus:border-pan-terracota ${
+        className={`campo-pan flex items-center gap-2.5 text-left ${
           valor ? "text-pan-carbon" : "text-pan-carbon-suave"
         }`}
       >
-        <CalendarDays className="h-4 w-4 shrink-0 text-pan-terracota" />
+        <CalendarDays className="h-4 w-4 shrink-0 text-pan-terracota" strokeWidth={1.75} />
         <span>{valor ? formatearFechaBonita(valor) : placeholder}</span>
       </button>
 
@@ -165,14 +165,14 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
                 type="button"
                 disabled={deshabilitado}
                 onClick={() => setDraft(clave)}
-                className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-sm transition-colors ${
+                className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-sm transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                   seleccionado
-                    ? "bg-pan-terracota font-semibold text-pan-crema"
+                    ? "scale-110 bg-pan-terracota font-semibold text-pan-crema shadow-md shadow-pan-terracota/35"
                     : deshabilitado
                       ? "cursor-not-allowed text-pan-carbon-suave/35"
                       : esHoy
                         ? "border border-pan-terracota font-semibold text-pan-terracota hover:bg-pan-terracota-suave/50"
-                        : "text-pan-carbon hover:bg-pan-terracota-suave/50"
+                        : "text-pan-carbon hover:scale-110 hover:bg-pan-terracota-suave/50"
                 }`}
               >
                 {dia.getDate()}
