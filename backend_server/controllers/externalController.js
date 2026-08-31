@@ -44,6 +44,68 @@ function crearClienteApiPeru(token) {
   });
 }
 
+/**
+ * Memoria de corta duración de las respuestas DEFINITIVAS de apiperu.dev.
+ *
+ * Existe por una razón muy concreta de costo: apiperu.dev es una API PAGA
+ * con cupo limitado, y desde que el backend dejó de creerle al cliente HTTP
+ * cuando dice `origenValidacion: 'RENIEC'` (ver utils/verificacionDocumento.js),
+ * el MISMO documento se consulta dos veces en un alta normal: una cuando el
+ * formulario pulsa "Buscar" (POST /api/externo/dni) y otra cuando el
+ * servidor comprueba por su cuenta al guardar el cliente. Con esta memoria,
+ * la segunda consulta la responde el propio proceso — sin gastar un consumo
+ * más — pero la respuesta sigue siendo del servidor, nunca del cliente: es
+ * la respuesta que ESTE proceso recibió de la API real, no un dato que
+ * viajó por la red y podría venir manipulado.
+ *
+ * Solo se recuerdan las respuestas AUTORITATIVAS de la API real
+ * ('API_REAL' y 'NO_ENCONTRADO'). 'SIMULADO' nunca se guarda: es una
+ * respuesta degradada (la API no estaba disponible) y recordarla dejaría al
+ * servidor devolviendo datos inventados durante media hora después de que
+ * apiperu.dev ya volvió a funcionar.
+ */
+const MEMORIA_TTL_MS = Number(process.env.VERIFICACION_DOCUMENTO_TTL_MS) || 30 * 60 * 1000;
+const MEMORIA_MAXIMA = 300;
+const memoriaDocumentos = new Map();
+
+function purgarMemoriaVencida(ahora) {
+  for (const [clave, entrada] of memoriaDocumentos) {
+    if (entrada.expiraEn <= ahora) memoriaDocumentos.delete(clave);
+  }
+}
+
+function recordarConsulta(documento, resultado) {
+  if (resultado.fuente !== 'API_REAL' && resultado.fuente !== 'NO_ENCONTRADO') return resultado;
+
+  const ahora = Date.now();
+  if (memoriaDocumentos.size >= MEMORIA_MAXIMA) {
+    purgarMemoriaVencida(ahora);
+    // Tope duro: si después de purgar sigue llena (mucho movimiento en poco
+    // tiempo), se descarta la entrada más antigua. Es una caché, no un
+    // registro — perder una entrada solo cuesta una consulta más.
+    if (memoriaDocumentos.size >= MEMORIA_MAXIMA) {
+      memoriaDocumentos.delete(memoriaDocumentos.keys().next().value);
+    }
+  }
+  memoriaDocumentos.set(documento, { resultado, expiraEn: ahora + MEMORIA_TTL_MS });
+  return resultado;
+}
+
+function leerConsultaRecordada(documento) {
+  const entrada = memoriaDocumentos.get(documento);
+  if (!entrada) return null;
+  if (entrada.expiraEn <= Date.now()) {
+    memoriaDocumentos.delete(documento);
+    return null;
+  }
+  return entrada.resultado;
+}
+
+/** Solo para pruebas: deja la memoria en blanco entre casos. */
+function olvidarConsultasRecordadas() {
+  memoriaDocumentos.clear();
+}
+
 const NOMBRES = [
   'Carlos', 'María', 'José', 'Ana', 'Luis', 'Rosa', 'Jorge', 'Carmen', 'Miguel', 'Lucía',
   'Pedro', 'Elena', 'Juan', 'Sofía', 'Diego', 'Valentina', 'Fernando', 'Gabriela', 'Ricardo', 'Patricia',
@@ -169,30 +231,34 @@ function simularEmpresaPorRuc(ruc) {
  * Devuelve `fuente`: 'API_REAL' | 'SIMULADO' | 'NO_ENCONTRADO'.
  */
 async function buscarPersonaPorDni(dni) {
+  const documento = String(dni).trim();
+  const recordado = leerConsultaRecordada(documento);
+  if (recordado) return recordado;
+
   const tokenApiPeru = await obtenerTokenApiPeru();
   if (tokenApiPeru) {
     const cliente = crearClienteApiPeru(tokenApiPeru);
-    const resultado = await consultarApiPeru(cliente, '/dni', { dni }, (data) => Boolean(data?.success && data.data?.nombres));
+    const resultado = await consultarApiPeru(cliente, '/dni', { dni: documento }, (data) => Boolean(data?.success && data.data?.nombres));
 
     if (resultado.estado === 'ENCONTRADO') {
       const { data } = resultado;
-      return {
+      return recordarConsulta(documento, {
         fuente: 'API_REAL',
-        dni: data.data.numero || dni,
+        dni: data.data.numero || documento,
         nombres: data.data.nombres,
         apellidoPaterno: data.data.apellido_paterno || '',
         apellidoMaterno: data.data.apellido_materno || '',
-      };
+      });
     }
 
     if (resultado.estado === 'NO_ENCONTRADO') {
-      return { fuente: 'NO_ENCONTRADO' };
+      return recordarConsulta(documento, { fuente: 'NO_ENCONTRADO' });
     }
 
     console.warn('apiperu.dev /dni no disponible, usando simulador:', resultado.error.message);
   }
 
-  return { fuente: 'SIMULADO', ...simularPersonaPorDni(String(dni)) };
+  return { fuente: 'SIMULADO', ...simularPersonaPorDni(documento) };
 }
 
 async function consultarDni(req, res) {
@@ -226,16 +292,20 @@ async function consultarDni(req, res) {
  * Devuelve `fuente`: 'API_REAL' | 'SIMULADO' | 'NO_ENCONTRADO'.
  */
 async function buscarEmpresaPorRuc(ruc) {
+  const documento = String(ruc).trim();
+  const recordado = leerConsultaRecordada(documento);
+  if (recordado) return recordado;
+
   const tokenApiPeru = await obtenerTokenApiPeru();
   if (tokenApiPeru) {
     const cliente = crearClienteApiPeru(tokenApiPeru);
-    const resultado = await consultarApiPeru(cliente, '/ruc', { ruc }, (data) => Boolean(data?.success && data.data?.nombre_o_razon_social));
+    const resultado = await consultarApiPeru(cliente, '/ruc', { ruc: documento }, (data) => Boolean(data?.success && data.data?.nombre_o_razon_social));
 
     if (resultado.estado === 'ENCONTRADO') {
       const { data } = resultado;
-      return {
+      return recordarConsulta(documento, {
         fuente: 'API_REAL',
-        ruc: data.data.ruc || ruc,
+        ruc: data.data.ruc || documento,
         razonSocial: data.data.nombre_o_razon_social,
         // Si SUNAT no tiene nombre comercial registrado, se deja vacío
         // (nunca se rellena con la razón social) para que el vendedor
@@ -244,17 +314,31 @@ async function buscarEmpresaPorRuc(ruc) {
         direccion: limpiarValorSunat(data.data.direccion_completa || data.data.direccion),
         estado: data.data.estado || '',
         condicion: data.data.condicion || '',
-      };
+      });
     }
 
     if (resultado.estado === 'NO_ENCONTRADO') {
-      return { fuente: 'NO_ENCONTRADO' };
+      return recordarConsulta(documento, { fuente: 'NO_ENCONTRADO' });
     }
 
     console.warn('apiperu.dev /ruc no disponible, usando simulador:', resultado.error.message);
   }
 
-  return { fuente: 'SIMULADO', ...simularEmpresaPorRuc(String(ruc)) };
+  return { fuente: 'SIMULADO', ...simularEmpresaPorRuc(documento) };
+}
+
+/**
+ * Un único punto de entrada para "que el servidor compruebe este documento
+ * por su cuenta", sin que quien llama tenga que saber si el número es un DNI
+ * (8 dígitos -> RENIEC) o un RUC (11 -> SUNAT). Un documento con cualquier
+ * otra forma no es consultable: se responde 'NO_ENCONTRADO' sin gastar un
+ * consumo de la API paga.
+ */
+async function verificarDocumentoOficial(documento) {
+  const limpio = String(documento || '').trim();
+  if (/^\d{11}$/.test(limpio)) return buscarEmpresaPorRuc(limpio);
+  if (/^\d{8}$/.test(limpio)) return buscarPersonaPorDni(limpio);
+  return { fuente: 'NO_ENCONTRADO' };
 }
 
 async function consultarRuc(req, res) {
@@ -279,4 +363,14 @@ async function consultarRuc(req, res) {
   return res.status(200).json({ mensaje, ...resultado });
 }
 
-module.exports = { consultarDni, consultarRuc, buscarPersonaPorDni, buscarEmpresaPorRuc };
+module.exports = {
+  consultarDni,
+  consultarRuc,
+  buscarPersonaPorDni,
+  buscarEmpresaPorRuc,
+  verificarDocumentoOficial,
+  // Reexportados para pruebas unitarias (__tests__/verificacionDocumento.test.js).
+  olvidarConsultasRecordadas,
+  leerConsultaRecordada,
+  recordarConsulta,
+};

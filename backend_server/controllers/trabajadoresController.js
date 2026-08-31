@@ -3,6 +3,7 @@ const { sql, getPool } = require('../config/db');
 const { registrarAuditoria } = require('../utils/auditLog');
 const { obtenerIdTrabajador, tieneAccesoATienda } = require('../utils/tiendaAcceso');
 const { enviarPush } = require('../services/pushService');
+const { resolverOrigenValidacion } = require('../utils/verificacionDocumento');
 
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
 
@@ -254,6 +255,23 @@ async function crearTrabajador(req, res, next) {
     return res.status(403).json({ mensaje: 'No tienes permiso para asignar ese rol.' });
   }
 
+  // Mismo criterio que clientesController: `origenValidacion` del body es
+  // una petición, no un hecho. El servidor comprueba el DNI contra RENIEC
+  // por su cuenta y decide él el origen y los nombres a guardar — si no lo
+  // hiciera, un ADMIN podría dar de alta un trabajador con identidad
+  // completamente inventada y marcarla como "validada por RENIEC".
+  // Ver utils/verificacionDocumento.js.
+  let verificacion;
+  try {
+    verificacion = await resolverOrigenValidacion({ documento: dniLimpio, origenSolicitado: origenValidacion });
+  } catch (err) {
+    return next(err);
+  }
+  if (!verificacion.aceptado) {
+    return res.status(400).json({ mensaje: verificacion.mensaje });
+  }
+  const oficial = verificacion.oficial;
+
   const pool = await getPool();
 
   // Ver comentario de MENSAJE_PROTECCION_PROPIETARIO: si este DNI ya es el
@@ -312,13 +330,15 @@ async function crearTrabajador(req, res, next) {
     } else {
       const nuevaPersona = await new sql.Request(transaction)
         .input('DNI', sql.VarChar(15), dniLimpio)
-        .input('Nombres', sql.NVarChar(100), mayuscula(nombres))
-        .input('ApellidoPaterno', sql.NVarChar(100), mayuscula(apellidoPaterno))
-        .input('ApellidoMaterno', sql.NVarChar(100), mayuscula(apellidoMaterno))
+        // Si RENIEC confirmó el DNI, se guardan SUS nombres, no los del
+        // formulario (escribirlos a mano deja de tener efecto).
+        .input('Nombres', sql.NVarChar(100), oficial ? oficial.nombres : mayuscula(nombres))
+        .input('ApellidoPaterno', sql.NVarChar(100), oficial ? oficial.apellidoPaterno : mayuscula(apellidoPaterno))
+        .input('ApellidoMaterno', sql.NVarChar(100), oficial ? oficial.apellidoMaterno : mayuscula(apellidoMaterno))
         .input('Telefono', sql.VarChar(20), telefono ? telefono.trim() : null)
         .input('Email', sql.VarChar(150), email ? email.trim() : null)
         .input('Direccion', sql.NVarChar(250), mayuscula(direccion))
-        .input('OrigenValidacion', sql.VarChar(20), origenValidacion === 'RENIEC' ? 'RENIEC' : 'MANUAL')
+        .input('OrigenValidacion', sql.VarChar(20), verificacion.origen)
         .query(`
           INSERT INTO Personas (DNI, Nombres, ApellidoPaterno, ApellidoMaterno, Telefono, Email, Direccion, OrigenValidacion)
           OUTPUT INSERTED.IdPersona
@@ -487,7 +507,7 @@ async function crearTrabajador(req, res, next) {
       accion: 'CREAR_TRABAJADOR',
       tablaAfectada: 'Trabajadores',
       registroAfectadoId: String(idTrabajador),
-      datosNuevos: { dni: dniLimpio, rol, tiendas, cuentaCreada },
+      datosNuevos: { dni: dniLimpio, rol, tiendas, cuentaCreada, origenValidacionResuelto: verificacion.origen },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });

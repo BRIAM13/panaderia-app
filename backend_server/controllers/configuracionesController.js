@@ -65,7 +65,11 @@ async function actualizarConfiguracion(req, res, next) {
       accion: 'ACTUALIZAR_CONFIGURACION',
       tablaAfectada: 'Configuraciones',
       registroAfectadoId: clave,
-      datosNuevos: { valor },
+      // El token de apiperu.dev es una credencial: dejarlo escrito en claro
+      // en Auditoria lo volvería legible desde una tabla pensada para
+      // consultarse con otros criterios (y para exportarse). Se registra QUE
+      // cambió y quién lo cambió, nunca el valor.
+      datosNuevos: CLAVES_SOLO_SUPERADMIN.includes(clave) ? { valor: '***' } : { valor },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });

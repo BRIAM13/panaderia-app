@@ -300,9 +300,11 @@ async function crearPedidoPublico(req, res, next) {
       const nombres = esRuc ? datosDocumento.razonSocial : datosDocumento.nombres;
       const apellidoPaterno = esRuc ? '' : datosDocumento.apellidoPaterno || '';
       const apellidoMaterno = esRuc ? null : datosDocumento.apellidoMaterno || null;
-      const origenValidacion = esRuc
-        ? (datosDocumento.fuente === 'API_REAL' ? 'SUNAT' : 'MANUAL')
-        : (datosDocumento.fuente === 'API_REAL' ? 'RENIEC' : 'MANUAL');
+      // 'RENIEC' para cualquier documento (DNI o RUC) confirmado por la API
+      // real: la columna solo admite 'RENIEC'/'MANUAL' (ver
+      // CK_Personas_OrigenValidacion en database_schema.sql), igual criterio
+      // que resolverOrigenValidacion() en utils/verificacionDocumento.js.
+      const origenValidacion = datosDocumento.fuente === 'API_REAL' ? 'RENIEC' : 'MANUAL';
 
       const nuevaPersona = await new sql.Request(transaction)
         .input('DNI', sql.VarChar(15), documentoLimpio)

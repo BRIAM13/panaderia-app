@@ -12,6 +12,10 @@ Fecha de la revisión: agosto de 2026.
 | CORS abierto a cualquier origen | `cors()` sin restricción | Lista blanca de orígenes (`panaderiaronceros.com`, `www.`, `app.`) |
 | Sin límite de intentos en `/auth/login` | Sin protección propia (las rutas públicas de `publicoController.js` sí tenían límites ad-hoc) | `express-rate-limit`: 20 intentos / 15 min por IP |
 | 2 dependencias con vulnerabilidad **alta** | `brace-expansion`, `fast-xml-parser` desactualizadas | Actualizadas vía `npm audit fix` |
+| **Identidad "verificada por RENIEC/SUNAT" decidida por el cliente HTTP** | `crearCliente`/`actualizarCliente`/`crearTrabajador` guardaban `OrigenValidacion` tal como venía en el body: bastaba mandar `origenValidacion: "RENIEC"` para inscribir una identidad inventada como validada — y en `actualizarCliente` eso además congelaba el nombre para siempre | El servidor consulta RENIEC/SUNAT por su cuenta (`utils/verificacionDocumento.js`) y guarda los nombres que devolvió la fuente oficial; el body ya no influye en la decisión |
+| Sin límite de intentos en `/auth/register` | Sin protección propia (cualquiera podía crear cuentas en masa) | `express-rate-limit`: 10 registros / 15 min por IP |
+| Sin límite en `/externo/dni` y `/externo/ruc` (API **paga**) | Solo JWT: un token filtrado podía agotar el cupo mensual de apiperu.dev en minutos | `express-rate-limit`: 60 consultas / 15 min por IP |
+| Token de apiperu.dev escrito en claro en la auditoría | `ACTUALIZAR_CONFIGURACION` guardaba el valor nuevo tal cual | Las claves secretas se registran como `***` (queda el quién/cuándo, no el secreto) |
 
 ## Mapeo OWASP Top 10 (2021)
 
@@ -28,7 +32,10 @@ Fecha de la revisión: agosto de 2026.
 - Validación de entrada centralizada en `middlewares/validators.js` antes de que cualquier controlador toque la base de datos (confirmado en las pruebas de integración de `POST /auth/login`).
 
 ### A04 — Insecure Design
-- **Estado: cubierto para el caso de negocio real.** El flujo de verificación de identidad (DNI/RUC contra RENIEC/SUNAT antes de clonar una cuenta) evita que alguien se registre con datos inventados. Las reglas de horario de pedido/recojo se revalidan siempre en el servidor con la hora real (nunca se confía en lo que mande el cliente — ver `utils/horariosPanaderia.js` y sus pruebas unitarias).
+- **Corregido en esta pasada (hallazgo principal).** El flujo de verificación de identidad estaba mal diseñado en su base: la app consultaba RENIEC/SUNAT, y luego le *decía* al servidor el resultado (`origenValidacion`, `dniVerificadoApiReal`, `nombreComercialOficial` en el body). El servidor guardaba esa afirmación sin comprobar nada, así que cualquiera con una sesión de TRABAJADOR —o directamente con `curl`, sin pasar por la app— podía registrar una identidad inventada marcada como "validada por RENIEC". En `actualizarCliente` era peor: al quedar marcada `RENIEC`, el nombre se congelaba contra ediciones futuras, o sea que el dato falso ya no se podía corregir nunca.
+- Ahora el body solo puede **pedir** la verificación; el veredicto lo emite el servidor consultando la fuente oficial por su cuenta (`utils/verificacionDocumento.js` → `controllers/externalController.js`), y cuando la confirma escribe **los nombres que devolvió RENIEC/SUNAT**, no los del formulario. Un documento que la fuente oficial no reconoce (el caso reportado: DNI `99999999`) se rechaza con 400 en vez de guardarse como verificado. Si apiperu.dev no está disponible y responde el simulador local, el registro se guarda como `MANUAL` (editable, reverificable más adelante) en vez de congelarse — mismo criterio que ya usaba `publicoController.crearPedidoPublico`.
+- Costo: la comprobación del servidor **no** duplica el gasto de la API paga. `externalController` recuerda por 30 minutos las respuestas definitivas de apiperu.dev, así que reusa la misma respuesta que ya obtuvo el "Buscar" del formulario. Solo se recuerdan las respuestas autoritativas (`API_REAL`/`NO_ENCONTRADO`), nunca las del simulador.
+- Las reglas de horario de pedido/recojo se revalidan siempre en el servidor con la hora real (nunca se confía en lo que mande el cliente — ver `utils/horariosPanaderia.js` y sus pruebas unitarias).
 
 ### A05 — Security Misconfiguration
 - **Corregido en esta pasada:** faltaban las cabeceras de seguridad estándar (`X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`, etc.) — ahora las agrega `helmet`. CORS aceptaba peticiones de cualquier origen web — ahora restringido a los 3 dominios reales que consumen la API desde un navegador.
@@ -44,6 +51,7 @@ Fecha de la revisión: agosto de 2026.
 
 ### A08 — Software and Data Integrity Failures
 - **Estado: cubierto para el alcance actual.** No hay actualizaciones automáticas ni deserialización de datos no confiables. El pipeline de despliegue es manual (`git push` → Render/Vercel), sin pasos de CI que ejecuten código de terceros sin revisión.
+- **Corregido en esta pasada:** el caso más claro de "integridad decidida por el cliente" era `OrigenValidacion` (ver A04). Se revisó el resto del backend buscando el mismo patrón — un estado *verificado/oficial* que en realidad se determina por lo que afirma el cliente HTTP — y no quedó ninguno: la identidad y el rol siempre salen de `req.usuario` (nunca del body), `EstadoPago = 'PAGADO'` solo lo puede poner el personal con acceso a esa tienda (el cliente únicamente puede *reportar* un pago, que es una afirmación explícitamente marcada como tal), `TelefonoVerificado`/`EmailVerificado` solo se activan tras consumir un código de un solo uso, y `/auth/register` nunca escribe `OrigenValidacion` (una cuenta creada por su propio dueño queda `MANUAL`, como corresponde).
 
 ### A09 — Security Logging and Monitoring Failures
 - **Estado: parcialmente cubierto.** Existe una tabla `Auditoria_Log` que registra acciones sensibles (login, cambios de cliente, canjes de puntos, campañas de reactivación, etc.) con usuario, IP, user-agent y datos antes/después.
@@ -55,3 +63,7 @@ Fecha de la revisión: agosto de 2026.
 ## Pruebas automatizadas relacionadas
 
 Ver `__tests__/app.test.js`: confirma que `POST /auth/login` rechaza credenciales inválidas con 400 **antes** de tocar la base de datos (evita filtrar si un usuario existe o no vía tiempos de respuesta distintos), y que una ruta inexistente responde 404 en vez de un error 500 que exponga detalles internos.
+
+Ver `__tests__/verificacionDocumento.test.js`: fija el contrato de A04 — un documento que RENIEC/SUNAT no reconoce se rechaza, una respuesta del simulador nunca se guarda como verificada, y mandar un `origenValidacion` inventado en el body no abre ninguna puerta (siempre cae a `MANUAL`).
+
+Ver `__tests__/memoriaDocumentos.test.js`: fija las dos reglas de la memoria que evita pagar dos consultas a apiperu.dev por cliente — solo se recuerdan las respuestas autoritativas, y una entrada vencida no se reusa.

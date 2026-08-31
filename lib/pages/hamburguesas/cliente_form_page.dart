@@ -453,8 +453,6 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
     );
   }
 
-  void _expandirCampos() => setState(() => _camposExpandidos = true);
-
   Future<void> _autocompletarConGps() async {
     setState(() {
       _obteniendoUbicacion = true;
@@ -548,10 +546,12 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
   @override
   Widget build(BuildContext context) {
     final esRuc = _tipoDocumento == _TipoDocumento.ruc;
-    // En modo RUC nada de "Razón social" en adelante se muestra hasta que
-    // la búsqueda tenga éxito; en modo DNI, "Nombres" siempre es visible.
-    final mostrarNombres = _editando || !esRuc || _camposExpandidos;
-    final mostrarBotonExpandir = !_editando && !esRuc && !_camposExpandidos;
+    // Ni en DNI ni en RUC se muestra "Nombres" (ni nada después) hasta que
+    // la búsqueda contra RENIEC/SUNAT tenga éxito: el cliente se crea
+    // principalmente con su documento verificado, no con datos escritos a
+    // mano sin ninguna validación. (Antes DNI tenía un atajo que saltaba
+    // esto por completo — bug real, reportado en producción.)
+    final mostrarNombres = _editando || _camposExpandidos;
 
     final escritorio = esEscritorio(context);
 
@@ -624,8 +624,6 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
                           : null,
                     ),
                   ],
-                  if (mostrarBotonExpandir)
-                    _BotonExpandirCampos(onTap: _expandirCampos),
                   AnimatedSize(
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeInOut,
@@ -889,56 +887,6 @@ class _SeccionBusquedaDocumento extends StatelessWidget {
             ),
           ],
         ],
-      ],
-    );
-  }
-}
-
-/// Flecha animada "Más datos" que despliega los campos secundarios — solo
-/// aparece para un cliente NUEVO en modo DNI, antes de tocar "Buscar".
-class _BotonExpandirCampos extends StatelessWidget {
-  const _BotonExpandirCampos({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      children: [
-        const SizedBox(height: 12),
-        Center(
-          child:
-              Material(
-                    color: scheme.secondaryContainer,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: onTap,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: PhosphorIcon(
-                          PhosphorIconsBold.caretDoubleDown,
-                          color: scheme.primary,
-                          size: 26,
-                        ),
-                      ),
-                    ),
-                  )
-                  .animate(onPlay: (c) => c.repeat(reverse: true))
-                  .moveY(
-                    begin: 0,
-                    end: 6,
-                    duration: 700.ms,
-                    curve: Curves.easeInOut,
-                  ),
-        ),
-        Center(
-          child: Text(
-            'Más datos',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ),
       ],
     );
   }

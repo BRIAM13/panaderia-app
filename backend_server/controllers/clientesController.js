@@ -3,6 +3,7 @@ const { sql, getPool } = require('../config/db');
 const { registrarAuditoria } = require('../utils/auditLog');
 const { solicitarCodigo, verificarCodigo, OtpError } = require('../services/otpService');
 const { enviarPush } = require('../services/pushService');
+const { resolverOrigenValidacion } = require('../utils/verificacionDocumento');
 
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
 
@@ -625,11 +626,26 @@ async function crearCliente(req, res, next) {
     email,
     direccion,
     descripcionNegocio,
-    nombreComercialOficial,
     origenValidacion,
-    dniVerificadoApiReal,
   } = req.body;
   const dniLimpio = dni ? String(dni).trim() : null;
+
+  // `origenValidacion` (y el antiguo `nombreComercialOficial`/
+  // `dniVerificadoApiReal`) llegan del cliente HTTP y NO se guardan tal
+  // cual: el servidor comprueba el documento por su cuenta contra
+  // RENIEC/SUNAT y él decide el origen y los nombres. Ver
+  // utils/verificacionDocumento.js. Va antes de abrir la transacción para
+  // no dejar la base bloqueada mientras se espera una respuesta de red.
+  let verificacion;
+  try {
+    verificacion = await resolverOrigenValidacion({ documento: dniLimpio, origenSolicitado: origenValidacion });
+  } catch (err) {
+    return next(err);
+  }
+  if (!verificacion.aceptado) {
+    return res.status(400).json({ mensaje: verificacion.mensaje });
+  }
+  const oficial = verificacion.oficial;
 
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
@@ -660,15 +676,21 @@ async function crearCliente(req, res, next) {
 
     if (!idPersona) {
       const esEmpresa = esRucPersonaJuridica(dniLimpio);
+      // Si el servidor confirmó el documento contra RENIEC/SUNAT, se guardan
+      // los nombres que devolvió la fuente oficial — NO los que vinieron en
+      // el body. Así "verificado por RENIEC" significa literalmente que esos
+      // nombres los escribió RENIEC, y escribirlos a mano deja de servir de
+      // algo. Si no hubo confirmación, se guarda lo del formulario y el
+      // origen queda 'MANUAL'.
       const nuevaPersona = await new sql.Request(transaction)
         .input('DNI', sql.VarChar(15), dniLimpio)
-        .input('Nombres', sql.NVarChar(100), mayuscula(nombres))
-        .input('ApellidoPaterno', sql.NVarChar(100), esEmpresa ? '' : mayuscula(apellidoPaterno || ''))
-        .input('ApellidoMaterno', sql.NVarChar(100), esEmpresa ? null : mayuscula(apellidoMaterno))
+        .input('Nombres', sql.NVarChar(100), oficial ? oficial.nombres : mayuscula(nombres))
+        .input('ApellidoPaterno', sql.NVarChar(100), esEmpresa ? '' : (oficial ? oficial.apellidoPaterno : mayuscula(apellidoPaterno || '')))
+        .input('ApellidoMaterno', sql.NVarChar(100), esEmpresa ? null : (oficial ? oficial.apellidoMaterno : mayuscula(apellidoMaterno)))
         .input('Telefono', sql.VarChar(20), telefono ? telefono.trim() : null)
         .input('Email', sql.VarChar(150), email ? email.trim() : null)
         .input('Direccion', sql.NVarChar(250), mayuscula(direccion))
-        .input('OrigenValidacion', sql.VarChar(20), origenValidacion === 'RENIEC' ? 'RENIEC' : 'MANUAL')
+        .input('OrigenValidacion', sql.VarChar(20), verificacion.origen)
         .query(`
           INSERT INTO Personas (DNI, Nombres, ApellidoPaterno, ApellidoMaterno, Telefono, Email, Direccion, OrigenValidacion)
           OUTPUT INSERTED.IdPersona
@@ -677,10 +699,19 @@ async function crearCliente(req, res, next) {
       idPersona = nuevaPersona.recordset[0].IdPersona;
     }
 
+    // El nombre comercial solo es "oficial" (y por lo tanto se congela contra
+    // ediciones futuras) si SUNAT lo devolvió en ESTA verificación hecha por
+    // el servidor. Antes bastaba con mandar `nombreComercialOficial: true` en
+    // el body para congelar cualquier texto inventado.
+    const nombreComercialOficialFinal = Boolean(oficial && oficial.nombreComercial);
+    const descripcionNegocioFinal = nombreComercialOficialFinal
+      ? oficial.nombreComercial
+      : mayuscula(descripcionNegocio);
+
     const nuevoCliente = await new sql.Request(transaction)
       .input('IdPersona', sql.Int, idPersona)
-      .input('DescripcionNegocio', sql.NVarChar(300), mayuscula(descripcionNegocio))
-      .input('NombreComercialOficial', sql.Bit, nombreComercialOficial === true)
+      .input('DescripcionNegocio', sql.NVarChar(300), descripcionNegocioFinal)
+      .input('NombreComercialOficial', sql.Bit, nombreComercialOficialFinal)
       .query(`
         INSERT INTO Clientes (IdPersona, DescripcionNegocio, NombreComercialOficial)
         OUTPUT INSERTED.IdCliente
@@ -705,8 +736,11 @@ async function crearCliente(req, res, next) {
         WHERE NOT EXISTS (SELECT 1 FROM PersonaRoles WHERE IdPersona = @IdPersona AND IdRol = @IdRol)
       `);
 
+    // La clonación de cuenta exige datos REALES de la API (no el simulador),
+    // que es exactamente lo que significa que `oficial` no sea null — ya no
+    // depende del `dniVerificadoApiReal` que mandaba el cliente HTTP.
     let clonacion = { creado: false, motivo: 'No verificado con datos reales de la API' };
-    if (dniVerificadoApiReal === true && dniLimpio) {
+    if (oficial && dniLimpio) {
       clonacion = await intentarClonarUsuarioCliente(transaction, idPersona, dniLimpio);
     }
 
@@ -717,7 +751,14 @@ async function crearCliente(req, res, next) {
       accion: 'CREAR_CLIENTE',
       tablaAfectada: 'Clientes',
       registroAfectadoId: String(idCliente),
-      datosNuevos: { ...req.body, cuentaClonada: clonacion.creado },
+      // Se deja constancia tanto de lo que PIDIÓ el cliente HTTP como de lo
+      // que RESOLVIÓ el servidor: si alguien intenta pasar un 'RENIEC'
+      // inventado, la auditoría muestra el intento y el veredicto real.
+      datosNuevos: {
+        ...req.body,
+        origenValidacionResuelto: verificacion.origen,
+        cuentaClonada: clonacion.creado,
+      },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -756,9 +797,7 @@ async function actualizarCliente(req, res, next) {
     email,
     direccion,
     descripcionNegocio,
-    nombreComercialOficial,
     origenValidacion,
-    dniVerificadoApiReal,
   } = req.body;
 
   const pool = await getPool();
@@ -798,32 +837,26 @@ async function actualizarCliente(req, res, next) {
       });
     }
 
-    // El nombre comercial oficial de SUNAT se bloquea igual que los nombres:
-    // una vez que vino de una búsqueda real, no se puede pisar a mano.
-    const descripcionNegocioNueva = mayuscula(descripcionNegocio);
-    if (cliente.NombreComercialOficial && descripcionNegocioNueva !== mayuscula(cliente.DescripcionNegocio)) {
-      await transaction.rollback();
-      return res.status(403).json({
-        mensaje: 'El nombre comercial de este cliente fue validado por SUNAT y no se puede editar manualmente',
-      });
-    }
-    // Se bloquea a partir de ahora si esta actualización trae uno oficial
-    // (nueva búsqueda de RUC exitosa) y aún no estaba bloqueado; si ya lo
-    // estaba, se queda así para siempre.
-    const nombreComercialOficialFinal = cliente.NombreComercialOficial || nombreComercialOficial === true;
-
     // Transición de "registro rápido" (manual/sin documento) a verificado:
     // solo se permite mientras el cliente no esté ya bloqueado permanentemente.
-    // A partir de aquí OrigenValidacion pasa a RENIEC y queda fijo para siempre.
+    // A partir de aquí OrigenValidacion pasa a RENIEC y queda fijo para
+    // siempre — por eso es el punto MÁS delicado de todo el módulo: antes
+    // bastaba con mandar `origenValidacion: 'RENIEC'` en el body para
+    // congelar un nombre inventado y que ya nadie pudiera corregirlo. Ahora
+    // el congelamiento solo ocurre si el SERVIDOR confirmó el documento
+    // contra RENIEC/SUNAT (ver utils/verificacionDocumento.js).
     let dniFinal = cliente.DNI;
     let origenFinal = cliente.OrigenValidacion;
+    let oficial = null;
     const dniNuevo = dni !== undefined && dni !== null && String(dni).trim() !== '' ? String(dni).trim() : null;
 
-    // Se usa origenValidacion (no dniVerificadoApiReal) como disparador: una
-    // búsqueda exitosa por API simulada también debe congelar y actualizar
-    // el DNI, igual que en crearCliente. dniVerificadoApiReal solo decide si
-    // además se clona una cuenta de acceso (eso sí exige la API real).
     if (!yaVerificadoPermanente && origenValidacion === 'RENIEC' && dniNuevo) {
+      const verificacion = await resolverOrigenValidacion({ documento: dniNuevo, origenSolicitado: origenValidacion });
+      if (!verificacion.aceptado) {
+        await transaction.rollback();
+        return res.status(400).json({ mensaje: verificacion.mensaje });
+      }
+
       if (dniNuevo !== cliente.DNI) {
         const dniTomado = await new sql.Request(transaction)
           .input('DNI', sql.VarChar(15), dniNuevo)
@@ -836,18 +869,44 @@ async function actualizarCliente(req, res, next) {
         }
       }
 
+      oficial = verificacion.oficial;
       dniFinal = dniNuevo;
-      origenFinal = 'RENIEC';
+      // 'MANUAL' si apiperu.dev no estaba disponible y respondió el
+      // simulador: el DNI igual se guarda, pero sin congelarse — el cliente
+      // se puede reverificar más adelante, cuando la API vuelva.
+      origenFinal = verificacion.origen;
     }
 
+    // El nombre comercial oficial de SUNAT se bloquea igual que los nombres:
+    // una vez que vino de una búsqueda real, no se puede pisar a mano. Y solo
+    // cuenta como oficial el que devolvió SUNAT en la verificación que acaba
+    // de hacer el servidor, nunca un `nombreComercialOficial: true` del body.
+    const nombreComercialOficialEntrante = Boolean(oficial && oficial.nombreComercial);
+    const descripcionNegocioNueva = nombreComercialOficialEntrante
+      ? oficial.nombreComercial
+      : mayuscula(descripcionNegocio);
+    if (cliente.NombreComercialOficial && descripcionNegocioNueva !== mayuscula(cliente.DescripcionNegocio)) {
+      await transaction.rollback();
+      return res.status(403).json({
+        mensaje: 'El nombre comercial de este cliente fue validado por SUNAT y no se puede editar manualmente',
+      });
+    }
+    // Se bloquea a partir de ahora si esta actualización trae uno oficial
+    // (nueva búsqueda de RUC exitosa) y aún no estaba bloqueado; si ya lo
+    // estaba, se queda así para siempre.
+    const nombreComercialOficialFinal = Boolean(cliente.NombreComercialOficial) || nombreComercialOficialEntrante;
+
     const esEmpresa = esRucPersonaJuridica(dniFinal);
-    const apellidoPaternoFinal = esEmpresa ? '' : nuevoApellidoPaterno;
-    const apellidoMaternoFinal = esEmpresa ? null : nuevoApellidoMaterno;
+    // Igual que en crearCliente: si hubo confirmación oficial, los nombres
+    // que se guardan son los de RENIEC/SUNAT, no los del formulario.
+    const nombresFinal = oficial ? oficial.nombres : mayuscula(nombres);
+    const apellidoPaternoFinal = esEmpresa ? '' : (oficial ? oficial.apellidoPaterno : nuevoApellidoPaterno);
+    const apellidoMaternoFinal = esEmpresa ? null : (oficial ? oficial.apellidoMaterno : nuevoApellidoMaterno);
 
     await new sql.Request(transaction)
       .input('IdPersona', sql.Int, cliente.IdPersona)
       .input('DNI', sql.VarChar(15), dniFinal)
-      .input('Nombres', sql.NVarChar(100), mayuscula(nombres))
+      .input('Nombres', sql.NVarChar(100), nombresFinal)
       .input('ApellidoPaterno', sql.NVarChar(100), apellidoPaternoFinal)
       .input('ApellidoMaterno', sql.NVarChar(100), apellidoMaternoFinal)
       .input('Telefono', sql.VarChar(20), telefono ? telefono.trim() : null)
@@ -869,8 +928,11 @@ async function actualizarCliente(req, res, next) {
         'UPDATE Clientes SET DescripcionNegocio = @DescripcionNegocio, NombreComercialOficial = @NombreComercialOficial WHERE IdCliente = @IdCliente',
       );
 
+    // Igual que en crearCliente: `oficial` no-null es la prueba de que los
+    // datos vinieron de la API real, así que reemplaza al antiguo
+    // `dniVerificadoApiReal` que mandaba el cliente HTTP.
     let clonacion = { creado: false, motivo: 'No verificado con datos reales de la API' };
-    if (dniVerificadoApiReal === true && origenFinal === 'RENIEC' && dniFinal) {
+    if (oficial && dniFinal) {
       clonacion = await intentarClonarUsuarioCliente(transaction, cliente.IdPersona, dniFinal);
     }
 
@@ -881,7 +943,11 @@ async function actualizarCliente(req, res, next) {
       accion: 'ACTUALIZAR_CLIENTE',
       tablaAfectada: 'Clientes',
       registroAfectadoId: String(id),
-      datosNuevos: { ...req.body, cuentaClonada: clonacion.creado },
+      datosNuevos: {
+        ...req.body,
+        origenValidacionResuelto: origenFinal,
+        cuentaClonada: clonacion.creado,
+      },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
