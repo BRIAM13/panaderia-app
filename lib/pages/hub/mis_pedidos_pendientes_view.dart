@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
 import '../../widgets/ad_banner.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
@@ -125,6 +127,40 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
     }
   }
 
+  /// Lista/estado vacío de pedidos — igual en celular y escritorio; lo
+  /// único que cambia entre ramas es el encabezado y el marco de ancho.
+  Widget _contenidoPedidos() {
+    if (_pedidos.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: EstadoVacio(
+          icono: PhosphorIconsRegular.receipt,
+          titulo: 'Aún no tienes pedidos registrados',
+          subtitulo: 'Tu historial con la panadería va a aparecer acá.',
+        ),
+      );
+    }
+    if (_pedidos.every((p) => p.esFinalizado)) {
+      // Tiene historial, pero nada pendiente ahora mismo — sin este
+      // chequeo, ListaPedidosPorSeccion quedaba en blanco (cada sección se
+      // oculta sola si no tiene pedidos activos) en vez de avisar que está
+      // al día.
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: EstadoVacio(
+          icono: PhosphorIconsRegular.checkCircle,
+          titulo: 'No tienes pedidos pendientes',
+          subtitulo: 'Estás al día — tu próximo pedido va a aparecer acá.',
+        ),
+      );
+    }
+    return ListaPedidosPorSeccion(
+      pedidos: _pedidos,
+      mostrarNombreCliente: false,
+      onCancelar: _cancelar,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -135,6 +171,37 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
 
     if (_error != null) {
       return EstadoError(mensaje: _error!, onReintentar: _cargar);
+    }
+
+    // Escritorio (>= Breakpoints.escritorio): esta vista vive dentro del
+    // shell del Hub, que ya se queda con ~300 px de panel lateral. Sin un
+    // techo de ancho, cada tarjeta de pedido se estiraba hasta 1500 px con
+    // dos datos adentro. Se centra con tope y el encabezado pasa al mismo
+    // formato de título grande del resto de pantallas de gestión.
+    if (esEscritorio(context)) {
+      return RefreshIndicator(
+        onRefresh: _cargar,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(32, 28, 32, 60),
+          children: [
+            ContenidoCentrado(
+              anchoMaximo: 1100,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const EncabezadoEscritorio(
+                    anteTitulo: 'MI CUENTA',
+                    titulo: 'Tus pedidos',
+                    subtitulo: 'Así va tu historial con la panadería.',
+                  ),
+                  const SizedBox(height: espacioEscritorio),
+                  _contenidoPedidos(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     return RefreshIndicator(
@@ -158,35 +225,7 @@ class MisPedidosPendientesViewState extends State<MisPedidosPendientesView> {
                       .fadeIn(delay: 60.ms, duration: 300.ms)
                       .moveY(begin: 6, end: 0),
                   const SizedBox(height: 20),
-                  if (_pedidos.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: EstadoVacio(
-                        icono: Icons.receipt_long_outlined,
-                        titulo: 'Aún no tienes pedidos registrados',
-                        subtitulo:
-                            'Tu historial con la panadería va a aparecer acá.',
-                      ),
-                    )
-                  else if (_pedidos.every((p) => p.esFinalizado))
-                    // Tiene historial, pero nada pendiente ahora mismo —
-                    // sin este chequeo, ListaPedidosPorSeccion quedaba en
-                    // blanco (cada sección se oculta sola si no tiene
-                    // pedidos activos) en vez de avisar que está al día.
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: EstadoVacio(
-                        icono: Icons.task_alt_rounded,
-                        titulo: 'No tienes pedidos pendientes',
-                        subtitulo: 'Estás al día — tu próximo pedido va a aparecer acá.',
-                      ),
-                    )
-                  else
-                    ListaPedidosPorSeccion(
-                      pedidos: _pedidos,
-                      mostrarNombreCliente: false,
-                      onCancelar: _cancelar,
-                    ),
+                  _contenidoPedidos(),
                 ],
               ),
         ],
@@ -224,10 +263,16 @@ class _MisPedidosPendientesPageState extends State<MisPedidosPendientesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mis pedidos')),
+      appBar: esEscritorio(context)
+          ? appBarGestion(
+              context,
+              titulo: 'Mis pedidos',
+              subtitulo: 'Atrasados, de hoy y próximos',
+            )
+          : AppBar(title: const Text('Mis pedidos')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _hacerPedido,
-        icon: const Icon(Icons.add_shopping_cart_rounded),
+        icon: const PhosphorIcon(PhosphorIconsRegular.shoppingCartSimple),
         label: const Text('Hacer pedido'),
       ),
       bottomNavigationBar: widget.mostrarAnuncio ? const AdBanner() : null,

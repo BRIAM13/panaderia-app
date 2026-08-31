@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../theme/app_theme.dart';
 
@@ -56,19 +57,26 @@ class _DialogoCalendarioVentasState extends State<_DialogoCalendarioVentas> {
     final primero = widget.fechasHabilitadas.reduce(
       (a, b) => a.isBefore(b) ? a : b,
     );
-    return DateTime(_mesMostrado.year, _mesMostrado.month - 1)
-        .isAfter(DateTime(primero.year, primero.month - 1));
+    return DateTime(
+      _mesMostrado.year,
+      _mesMostrado.month - 1,
+    ).isAfter(DateTime(primero.year, primero.month - 1));
   }
 
   bool get _puedeIrAdelante {
     final ahora = DateTime.now();
-    return DateTime(_mesMostrado.year, _mesMostrado.month)
-        .isBefore(DateTime(ahora.year, ahora.month));
+    return DateTime(
+      _mesMostrado.year,
+      _mesMostrado.month,
+    ).isBefore(DateTime(ahora.year, ahora.month));
   }
 
   void _cambiarMes(int delta) {
     setState(
-      () => _mesMostrado = DateTime(_mesMostrado.year, _mesMostrado.month + delta),
+      () => _mesMostrado = DateTime(
+        _mesMostrado.year,
+        _mesMostrado.month + delta,
+      ),
     );
   }
 
@@ -101,7 +109,7 @@ class _DialogoCalendarioVentasState extends State<_DialogoCalendarioVentas> {
               children: [
                 IconButton(
                   onPressed: _puedeIrAtras ? () => _cambiarMes(-1) : null,
-                  icon: const Icon(Icons.chevron_left_rounded),
+                  icon: const PhosphorIcon(PhosphorIconsBold.caretLeft),
                 ),
                 Expanded(
                   child: Text(
@@ -115,7 +123,7 @@ class _DialogoCalendarioVentasState extends State<_DialogoCalendarioVentas> {
                 ),
                 IconButton(
                   onPressed: _puedeIrAdelante ? () => _cambiarMes(1) : null,
-                  icon: const Icon(Icons.chevron_right_rounded),
+                  icon: const PhosphorIcon(PhosphorIconsBold.caretRight),
                 ),
               ],
             ),

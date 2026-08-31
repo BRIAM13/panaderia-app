@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../../services/clientes_service.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/premium_button.dart';
 import '../../widgets/verificacion_otp.dart';
@@ -13,6 +15,12 @@ import '../../widgets/verificacion_otp.dart';
 /// verificado. Así, si alguien más usa la sesión ya iniciada del dueño de
 /// la cuenta (ej. la prestó a un trabajador), no puede cambiar la
 /// contraseña sin tener acceso real a ese celular o correo.
+///
+/// Escritorio (>= Breakpoints.escritorio, vía `esEscritorio`): el
+/// formulario NO se estira a toda la ventana — es un trámite de dos campos,
+/// así que se centra en un panel con techo de ancho (560 px), que es el
+/// ancho de lectura cómoda para un formulario de una sola columna. Por
+/// debajo de ese umbral el árbol de widgets es idéntico al de siempre.
 class CambiarPasswordSeguroPage extends StatefulWidget {
   const CambiarPasswordSeguroPage({super.key});
 
@@ -120,144 +128,195 @@ class _CambiarPasswordSeguroPageState extends State<CambiarPasswordSeguroPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final escritorio = esEscritorio(context);
+
+    final cuerpo = _cargandoPerfil
+        ? const Center(child: AppLoadingIndicator())
+        : SingleChildScrollView(
+            padding: escritorio
+                ? const EdgeInsets.fromLTRB(32, 32, 32, 48)
+                : const EdgeInsets.all(24),
+            child: !_tieneCanalVerificado
+                ? (escritorio
+                      ? ContenidoCentrado(
+                          anchoMaximo: 560,
+                          child: TarjetaEscritorio(
+                            padding: const EdgeInsets.fromLTRB(36, 40, 36, 40),
+                            radio: 26,
+                            child: _AvisoSinVerificar(theme: theme),
+                          ),
+                        )
+                      : _AvisoSinVerificar(theme: theme))
+                : escritorio
+                ? ContenidoCentrado(
+                    anchoMaximo: 560,
+                    child:
+                        PanelEscritorio(
+                              padding: const EdgeInsets.fromLTRB(
+                                32,
+                                28,
+                                32,
+                                32,
+                              ),
+                              titulo: 'Cambia tu contraseña de forma segura',
+                              subtitulo:
+                                  'Necesitas un código enviado a tu celular '
+                                  'o correo verificado.',
+                              icono: PhosphorIconsRegular.password,
+                              child: _formulario(theme, scheme),
+                            )
+                            .animate()
+                            .fadeIn(duration: 320.ms)
+                            .moveY(
+                              begin: 14,
+                              end: 0,
+                              curve: Curves.easeOutCubic,
+                            ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                            width: 76,
+                            height: 76,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: scheme.secondaryContainer,
+                            ),
+                            child: PhosphorIcon(
+                              PhosphorIconsRegular.password,
+                              color: scheme.primary,
+                              size: 34,
+                            ),
+                          )
+                          .animate()
+                          .fadeIn(duration: 300.ms)
+                          .scale(
+                            begin: const Offset(0.85, 0.85),
+                            end: const Offset(1, 1),
+                          ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Cambia tu contraseña de forma segura',
+                        style: theme.textTheme.titleLarge,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      _formulario(theme, scheme),
+                    ],
+                  ),
+          );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Cambiar contraseña')),
-      body: SafeArea(
-        child: _cargandoPerfil
-            ? const Center(child: AppLoadingIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: !_tieneCanalVerificado
-                    ? _AvisoSinVerificar(theme: theme)
-                    : Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Container(
-                                  width: 76,
-                                  height: 76,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: scheme.secondaryContainer,
-                                  ),
-                                  child: Icon(
-                                    Icons.password_rounded,
-                                    color: scheme.primary,
-                                    size: 34,
-                                  ),
-                                )
-                                .animate()
-                                .fadeIn(duration: 300.ms)
-                                .scale(
-                                  begin: const Offset(0.85, 0.85),
-                                  end: const Offset(1, 1),
-                                ),
-                            const SizedBox(height: 20),
-                            Text(
-                              'Cambia tu contraseña de forma segura',
-                              style: theme.textTheme.titleLarge,
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 20),
-                            Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: scheme.secondaryContainer,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    _autorizacion != null
-                                        ? Icons.check_circle_rounded
-                                        : Icons.shield_outlined,
-                                    color: _autorizacion != null
-                                        ? const Color(0xFF2E7D32)
-                                        : scheme.primary,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      _autorizacion != null
-                                          ? 'Cambio autorizado por ${_autorizacion!.canal == 'SMS' ? 'SMS' : 'correo'}'
-                                          : 'Este cambio requiere autorización',
-                                    ),
-                                  ),
-                                  if (_autorizacion == null)
-                                    FilledButton(
-                                      onPressed: _autorizar,
-                                      child: const Text('Autorizar'),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            TextFormField(
-                              controller: _nuevaController,
-                              obscureText: true,
-                              enabled: _autorizacion != null,
-                              decoration: const InputDecoration(
-                                labelText: 'Nueva contraseña',
-                                prefixIcon: Icon(Icons.lock_rounded),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.length < 8) {
-                                  return 'Debe tener al menos 8 caracteres';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _confirmarController,
-                              obscureText: true,
-                              enabled: _autorizacion != null,
-                              decoration: const InputDecoration(
-                                labelText: 'Confirmar nueva contraseña',
-                                prefixIcon: Icon(
-                                  Icons.check_circle_outline_rounded,
-                                ),
-                              ),
-                              validator: (value) =>
-                                  (value != _nuevaController.text)
-                                  ? 'Las contraseñas no coinciden'
-                                  : null,
-                            ),
-                            if (_error != null) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                _error!,
-                                style: TextStyle(
-                                  color: scheme.error,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                            if (_mensajeExito != null) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                _mensajeExito!,
-                                style: const TextStyle(
-                                  color: Color(0xFF16A34A),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 20),
-                            PremiumButton(
-                              label: 'Actualizar contraseña',
-                              icono: Icons.lock_reset_rounded,
-                              cargando: _guardando,
-                              onPressed: _autorizacion == null
-                                  ? null
-                                  : _guardar,
-                            ),
-                          ],
-                        ),
-                      ),
+      appBar: escritorio
+          ? appBarGestion(
+              context,
+              titulo: 'Cambiar contraseña',
+              subtitulo: 'Requiere autorización por SMS o correo',
+            )
+          : AppBar(title: const Text('Cambiar contraseña')),
+      body: SafeArea(child: cuerpo),
+    );
+  }
+
+  /// Cuerpo del formulario (tarjeta de autorización + los dos campos +
+  /// mensajes + botón). Idéntico en celular y escritorio: lo único que
+  /// cambia entre ramas es el marco que lo envuelve.
+  Widget _formulario(ThemeData theme, ColorScheme scheme) {
+    final autorizado = _autorizacion != null;
+
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: scheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                PhosphorIcon(
+                  autorizado
+                      ? PhosphorIconsFill.checkCircle
+                      : PhosphorIconsRegular.shield,
+                  color: autorizado ? const Color(0xFF2E7D32) : scheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    autorizado
+                        ? 'Cambio autorizado por ${_autorizacion!.canal == 'SMS' ? 'SMS' : 'correo'}'
+                        : 'Este cambio requiere autorización',
+                  ),
+                ),
+                if (!autorizado)
+                  FilledButton(
+                    onPressed: _autorizar,
+                    child: const Text('Autorizar'),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextFormField(
+            controller: _nuevaController,
+            obscureText: true,
+            enabled: autorizado,
+            decoration: const InputDecoration(
+              labelText: 'Nueva contraseña',
+              prefixIcon: PhosphorIcon(PhosphorIconsRegular.lockKey),
+            ),
+            validator: (value) {
+              if (value == null || value.length < 8) {
+                return 'Debe tener al menos 8 caracteres';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _confirmarController,
+            obscureText: true,
+            enabled: autorizado,
+            decoration: const InputDecoration(
+              labelText: 'Confirmar nueva contraseña',
+              prefixIcon: PhosphorIcon(PhosphorIconsRegular.checkCircle),
+            ),
+            validator: (value) => (value != _nuevaController.text)
+                ? 'Las contraseñas no coinciden'
+                : null,
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: scheme.error,
+                fontWeight: FontWeight.w600,
               ),
+            ),
+          ],
+          if (_mensajeExito != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _mensajeExito!,
+              style: const TextStyle(
+                color: Color(0xFF16A34A),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          PremiumButton(
+            label: 'Actualizar contraseña',
+            icono: PhosphorIconsRegular.lockKeyOpen,
+            cargando: _guardando,
+            onPressed: autorizado ? _guardar : null,
+          ),
+        ],
       ),
     );
   }
@@ -273,7 +332,11 @@ class _AvisoSinVerificar extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.shield_outlined, size: 48, color: theme.colorScheme.error),
+        PhosphorIcon(
+          PhosphorIconsDuotone.shieldWarning,
+          size: 56,
+          color: theme.colorScheme.error,
+        ),
         const SizedBox(height: 16),
         Text(
           'Verifica tu celular o correo primero',

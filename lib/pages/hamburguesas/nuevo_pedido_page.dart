@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/cliente_model.dart';
 import '../../models/tienda_model.dart';
@@ -14,9 +15,11 @@ import '../../services/tiendas_service.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../utils/text_formatters.dart';
 import '../../utils/texto_utils.dart';
+import 'escritorio_hamburguesas.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/premium_button.dart';
+import '../../widgets/selector_desplegable.dart';
 import '../../widgets/segmented_switch.dart';
 
 const _tiposPedido = ['UNIDADES', 'PAQUETES'];
@@ -274,7 +277,9 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
       final resultado = await _pedidosService.crear(
         idCliente: _clienteSeleccionado!.idCliente,
         idProducto: idProducto,
-        tipoPedido: _esHamburguesas ? _tiposPedido[_tipoPedidoIndex] : 'UNIDADES',
+        tipoPedido: _esHamburguesas
+            ? _tiposPedido[_tipoPedidoIndex]
+            : 'UNIDADES',
         cantidad: _cantidad,
         precioUnitario: _precioUnitarioParaEnviar,
         fechaEntrega: fechaHora,
@@ -309,8 +314,8 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
     return showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: Icon(
-          Icons.check_circle_rounded,
+        icon: PhosphorIcon(
+          PhosphorIconsFill.checkCircle,
           color: const Color(0xFF2E7D32),
           size: 36,
         ),
@@ -320,21 +325,21 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _FilaResumen(
-              icono: Icons.person_rounded,
+              icono: PhosphorIconsRegular.user,
               texto: cliente.nombreParaMostrar,
               destacado: true,
             ),
             if (nombreComercial != null) ...[
               const SizedBox(height: 4),
               _FilaResumen(
-                icono: Icons.storefront_rounded,
+                icono: PhosphorIconsRegular.storefront,
                 texto: nombreComercial,
                 color: scheme.secondary,
               ),
             ],
             const SizedBox(height: 10),
             _FilaResumen(
-              icono: Icons.event_available_rounded,
+              icono: PhosphorIconsRegular.calendarCheck,
               texto: resultado.fechaEntrega != null
                   ? formatearFechaEntrega(
                       resultado.fechaEntrega!,
@@ -344,7 +349,7 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
             ),
             const SizedBox(height: 4),
             _FilaResumen(
-              icono: Icons.history_rounded,
+              icono: PhosphorIconsRegular.clockCounterClockwise,
               texto:
                   'Registrado el ${formatoFechaHoraCreacion.format(resultado.fechaCreacion)}',
             ),
@@ -383,245 +388,256 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final esPaquete = _esPaquete;
+    final escritorio = esEscritorio(context);
+    // La partición en dos columnas solo se justifica con ancho de laptop
+    // en adelante: entre 900 y 1100 el formulario y el resumen quedarían
+    // los dos apretados, así que ahí se usa una sola columna centrada.
+    final dosColumnas = esEscritorioComodo(context);
+
+    // Todo lo que se captura: cliente, tipo/producto, cantidad y precio,
+    // fecha y hora de entrega, notas.
+    final camposFormulario = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Cliente', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        _SelectorCliente(
+          clientes: _clientes,
+          seleccionado: _clienteSeleccionado,
+          onSeleccionado: (c) => setState(() => _clienteSeleccionado = c),
+        ),
+        const SizedBox(height: 24),
+        if (_esHamburguesas) ...[
+          Text('Tipo de pedido', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          SegmentedSwitch(
+            opciones: const ['Unidades individuales', 'Paquetes de 12 panes'],
+            indiceSeleccionado: _tipoPedidoIndex,
+            onChanged: _cambiarTipoPedido,
+          ),
+          if (!esPaquete) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Pedido especial: ingresa manualmente la cantidad y el precio a cobrar por unidad.',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+        ] else ...[
+          Text('Producto', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          SelectorDesplegable<ProductoAutoservicio>(
+            valor: _productoSeleccionado,
+            opciones: _productos,
+            etiqueta: (p) => p.nombre,
+            icono: PhosphorIconsRegular.package,
+            onChanged: _cambiarProducto,
+          ),
+        ],
+        const SizedBox(height: 20),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _cantidadController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  labelText: !_esHamburguesas
+                      ? 'Cantidad'
+                      : esPaquete
+                      ? 'Cantidad de paquetes'
+                      : 'Cantidad de unidades',
+                  prefixIcon: const PhosphorIcon(PhosphorIconsRegular.hash),
+                ),
+                validator: (v) {
+                  final n = int.tryParse(v ?? '');
+                  if (n == null || n <= 0) {
+                    return 'Ingresa una cantidad válida';
+                  }
+                  return null;
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _precioController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: const [DecimalTextInputFormatter()],
+                decoration: InputDecoration(
+                  labelText: !_esHamburguesas
+                      ? 'Precio unitario (S/)'
+                      : esPaquete
+                      ? 'Precio del paquete (S/)'
+                      : 'Precio Total del Pedido (S/)',
+                  prefixIcon: const PhosphorIcon(PhosphorIconsRegular.tag),
+                ),
+                validator: (v) {
+                  final n = double.tryParse((v ?? '').replaceAll(',', '.'));
+                  if (n == null || n <= 0) {
+                    return 'Ingresa un precio válido';
+                  }
+                  return null;
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _elegirFecha,
+                icon: const PhosphorIcon(
+                  PhosphorIconsRegular.calendarBlank,
+                  size: 18,
+                ),
+                label: Text(
+                  _fechaEntrega == null
+                      ? 'Fecha de entrega'
+                      : DateFormat('dd/MM/yyyy').format(_fechaEntrega!),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _elegirHora,
+                icon: const PhosphorIcon(PhosphorIconsRegular.clock, size: 18),
+                label: Text(
+                  _horaEntrega == null
+                      ? 'Hora de entrega'
+                      : _horaEntrega!.format(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _notasController,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: const [UpperCaseTextFormatter()],
+          decoration: const InputDecoration(labelText: 'Notas'),
+          maxLines: 2,
+        ),
+      ],
+    );
+
+    // Resumen de plata + botón de registrar. En celular va al final de la
+    // misma columna (como siempre); en escritorio ancho se va a una
+    // columna propia a la derecha y queda pegado arriba, así el total y el
+    // botón siguen a la vista mientras se completan los campos.
+    final panelResumen = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: scheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_precioEsPorUnidad) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Precio unitario'),
+                    Text('S/ ${_valorIngresado.toStringAsFixed(2)}'),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Total', style: theme.textTheme.titleMedium),
+                  Text(
+                        'S/ ${_total.toStringAsFixed(2)}',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      )
+                      .animate(target: 1)
+                      .scaleXY(
+                        begin: 0.9,
+                        end: 1,
+                        duration: 200.ms,
+                        curve: Curves.easeOut,
+                      ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _error!,
+            style: TextStyle(color: scheme.error, fontWeight: FontWeight.w600),
+          ),
+        ],
+        const SizedBox(height: 20),
+        PremiumButton(
+          label: 'Registrar pedido',
+          icono: PhosphorIconsBold.shoppingCartSimple,
+          cargando: _enviando,
+          onPressed: _registrarPedido,
+        ),
+      ],
+    );
+
+    final Widget cuerpoFormulario = dosColumnas
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: camposFormulario),
+              const SizedBox(width: 28),
+              SizedBox(
+                width: 340,
+                child: PanelEscritorio(
+                  titulo: 'Resumen',
+                  icono: PhosphorIconsRegular.receipt,
+                  child: panelResumen,
+                ),
+              ),
+            ],
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              camposFormulario,
+              const SizedBox(height: 24),
+              panelResumen,
+            ],
+          );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Nuevo pedido')),
+      appBar: appBarGestion(
+        context,
+        titulo: 'Nuevo pedido',
+        subtitulo: 'Elige el cliente, la cantidad y cuándo se entrega',
+      ),
       body: SafeArea(
         child: _cargandoDatos
             ? const Center(child: AppLoadingIndicator())
             : _errorCarga != null
             ? EstadoError(mensaje: _errorCarga!, onReintentar: _cargarDatos)
             : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('Cliente', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      _SelectorCliente(
-                        clientes: _clientes,
-                        seleccionado: _clienteSeleccionado,
-                        onSeleccionado: (c) =>
-                            setState(() => _clienteSeleccionado = c),
-                      ),
-                      const SizedBox(height: 24),
-                      if (_esHamburguesas) ...[
-                        Text(
-                          'Tipo de pedido',
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        SegmentedSwitch(
-                          opciones: const [
-                            'Unidades individuales',
-                            'Paquetes de 12 panes',
-                          ],
-                          indiceSeleccionado: _tipoPedidoIndex,
-                          onChanged: _cambiarTipoPedido,
-                        ),
-                        if (!esPaquete) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'Pedido especial: ingresa manualmente la cantidad y el precio a cobrar por unidad.',
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ],
-                      ] else ...[
-                        Text('Producto', style: theme.textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<ProductoAutoservicio>(
-                          initialValue: _productoSeleccionado,
-                          items: _productos
-                              .map(
-                                (p) => DropdownMenuItem(
-                                  value: p,
-                                  child: Text(
-                                    p.nombre,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: _cambiarProducto,
-                          decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.inventory_2_rounded),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: _cantidadController,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              decoration: InputDecoration(
-                                labelText: !_esHamburguesas
-                                    ? 'Cantidad'
-                                    : esPaquete
-                                    ? 'Cantidad de paquetes'
-                                    : 'Cantidad de unidades',
-                                prefixIcon: const Icon(Icons.numbers_rounded),
-                              ),
-                              validator: (v) {
-                                final n = int.tryParse(v ?? '');
-                                if (n == null || n <= 0) {
-                                  return 'Ingresa una cantidad válida';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextFormField(
-                              controller: _precioController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              inputFormatters: const [
-                                DecimalTextInputFormatter(),
-                              ],
-                              decoration: InputDecoration(
-                                labelText: !_esHamburguesas
-                                    ? 'Precio unitario (S/)'
-                                    : esPaquete
-                                    ? 'Precio del paquete (S/)'
-                                    : 'Precio Total del Pedido (S/)',
-                                prefixIcon: const Icon(Icons.sell_outlined),
-                              ),
-                              validator: (v) {
-                                final n = double.tryParse(
-                                  (v ?? '').replaceAll(',', '.'),
-                                );
-                                if (n == null || n <= 0) {
-                                  return 'Ingresa un precio válido';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _elegirFecha,
-                              icon: const Icon(
-                                Icons.calendar_today_rounded,
-                                size: 18,
-                              ),
-                              label: Text(
-                                _fechaEntrega == null
-                                    ? 'Fecha de entrega'
-                                    : DateFormat(
-                                        'dd/MM/yyyy',
-                                      ).format(_fechaEntrega!),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _elegirHora,
-                              icon: const Icon(
-                                Icons.access_time_rounded,
-                                size: 18,
-                              ),
-                              label: Text(
-                                _horaEntrega == null
-                                    ? 'Hora de entrega'
-                                    : _horaEntrega!.format(context),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _notasController,
-                        textCapitalization: TextCapitalization.characters,
-                        inputFormatters: const [UpperCaseTextFormatter()],
-                        decoration: const InputDecoration(labelText: 'Notas'),
-                        maxLines: 2,
-                      ),
-                      const SizedBox(height: 24),
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: scheme.secondaryContainer,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (_precioEsPorUnidad) ...[
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Precio unitario'),
-                                  Text(
-                                    'S/ ${_valorIngresado.toStringAsFixed(2)}',
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                            ],
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Total',
-                                  style: theme.textTheme.titleMedium,
-                                ),
-                                Text(
-                                      'S/ ${_total.toStringAsFixed(2)}',
-                                      style: theme.textTheme.titleLarge
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                    )
-                                    .animate(target: 1)
-                                    .scaleXY(
-                                      begin: 0.9,
-                                      end: 1,
-                                      duration: 200.ms,
-                                      curve: Curves.easeOut,
-                                    ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          _error!,
-                          style: TextStyle(
-                            color: scheme.error,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      PremiumButton(
-                        label: 'Registrar pedido',
-                        icono: Icons.add_shopping_cart_rounded,
-                        cargando: _enviando,
-                        onPressed: _registrarPedido,
-                      ),
-                    ],
-                  ),
+                padding: EdgeInsets.all(escritorio ? 32 : 20),
+                child: ContenidoCentrado(
+                  // Con dos columnas hace falta más ancho útil que el de un
+                  // formulario simple, pero igual se topa: sin tope, en un
+                  // monitor de 1920px los campos quedan a media pantalla de
+                  // distancia del resumen.
+                  ancho: dosColumnas ? 1180 : 620,
+                  child: Form(key: _formKey, child: cuerpoFormulario),
                 ),
               ),
       ),
@@ -664,7 +680,7 @@ class _SelectorCliente extends StatelessWidget {
           focusNode: focusNode,
           decoration: const InputDecoration(
             labelText: 'Buscar cliente por nombre, RUC o DNI',
-            prefixIcon: Icon(Icons.person_search_rounded),
+            prefixIcon: PhosphorIcon(PhosphorIconsRegular.userFocus),
           ),
         );
       },
@@ -723,7 +739,11 @@ class _FilaResumen extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icono, size: 18, color: color ?? theme.colorScheme.primary),
+        PhosphorIcon(
+          icono,
+          size: 18,
+          color: color ?? theme.colorScheme.primary,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(

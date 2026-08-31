@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../../services/horneados_service.dart';
@@ -12,11 +13,19 @@ import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/pedidos_secciones.dart';
 import '../../widgets/tarjeta_3d.dart';
+import 'escritorio_horneados.dart';
+
+/// Color de "deuda" — el mismo rojo ladrillo que usa Hamburguesas.
+const _rojoDeuda = Color(0xFFC62828);
 
 /// Deudas pendientes (pedidos ENTREGADO con EstadoPago=DEUDA) de Horneados,
 /// agrupadas por cliente — mismo tema que Deudas de Hamburguesas, pero sin
 /// la sección de pagos reportados por QR (ese flujo de Yape/Plin todavía
 /// no está conectado a Horneados).
+///
+/// En escritorio (>= [anchoEscritorio]) suma una fila de KPIs (total por
+/// cobrar, clientes y pedidos involucrados) y reparte los grupos en 2/3
+/// columnas con hover. Por debajo del umbral, el árbol es el de siempre.
 class DeudasHorneadosPage extends StatefulWidget {
   const DeudasHorneadosPage({super.key});
 
@@ -95,7 +104,7 @@ class _DeudasHorneadosPageState extends State<DeudasHorneadosPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Deudas de Horneados')),
+      appBar: appBarGestion(context, titulo: 'Deudas de Horneados'),
       body: SafeArea(child: _construirCuerpo()),
     );
   }
@@ -107,7 +116,7 @@ class _DeudasHorneadosPageState extends State<DeudasHorneadosPage> {
     }
     if (_deudas.isEmpty) {
       return EstadoVacio(
-        icono: Icons.check_circle_outline_rounded,
+        icono: PhosphorIconsLight.checkCircle,
         titulo: 'No hay deudas pendientes',
         subtitulo: 'Cuando algún pedido de Horneados quede como deuda, aparece acá.',
         onRefrescar: _cargar,
@@ -116,23 +125,140 @@ class _DeudasHorneadosPageState extends State<DeudasHorneadosPage> {
 
     final grupos = _agruparPorCliente(_deudas);
 
+    if (!esEscritorio(context)) {
+      return RefreshIndicator(
+        onRefresh: _cargar,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+          children: grupos
+              .asMap()
+              .entries
+              .map(
+                (entry) => _GrupoDeudaHorneado(
+                      grupo: entry.value,
+                      onMarcarPagada: _marcarPagada,
+                    )
+                    .animate(delay: (60 * entry.key).ms)
+                    .fadeIn(duration: 300.ms)
+                    .moveY(begin: 10, end: 0),
+              )
+              .toList(),
+        ),
+      );
+    }
+
+    final totalGeneral = grupos.fold(0.0, (acc, g) => acc + g.total);
+
     return RefreshIndicator(
       onRefresh: _cargar,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-        children: grupos
-            .asMap()
-            .entries
-            .map(
-              (entry) => _GrupoDeudaHorneado(
-                    grupo: entry.value,
-                    onMarcarPagada: _marcarPagada,
-                  )
-                  .animate(delay: (60 * entry.key).ms)
-                  .fadeIn(duration: 300.ms)
-                  .moveY(begin: 10, end: 0),
-            )
-            .toList(),
+        padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
+        children: [
+          ContenidoCentrado(
+            maxAncho: 1440,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                EncabezadoEscritorio(
+                      icono: PhosphorIconsDuotone.wallet,
+                      titulo: 'Deudas de Horneados',
+                      descripcion:
+                          'Pedidos ya entregados que quedaron por cobrar, '
+                          'agrupados por cliente y ordenados por monto.',
+                      acento: _rojoDeuda,
+                      acciones: [
+                        OutlinedButton.icon(
+                          onPressed: _cargar,
+                          icon: const PhosphorIcon(
+                            PhosphorIconsRegular.arrowsClockwise,
+                            size: 18,
+                          ),
+                          label: const Text('Actualizar'),
+                        ),
+                      ],
+                    )
+                    .animate()
+                    .fadeIn(duration: 300.ms)
+                    .moveY(begin: 10, end: 0),
+                const SizedBox(height: 26),
+                LayoutBuilder(
+                  builder: (context, restricciones) {
+                    final ancho = anchoColumna(restricciones.maxWidth, 3, 18);
+                    final kpis = <Widget>[
+                      TarjetaKpi(
+                        icono: PhosphorIconsDuotone.coins,
+                        etiqueta: 'Total por cobrar',
+                        valor: 'S/ ${totalGeneral.toStringAsFixed(2)}',
+                        color: _rojoDeuda,
+                      ),
+                      TarjetaKpi(
+                        icono: PhosphorIconsDuotone.users,
+                        etiqueta: 'Clientes con deuda',
+                        valor: '${grupos.length}',
+                        color: AppColors.primary,
+                      ),
+                      TarjetaKpi(
+                        icono: PhosphorIconsDuotone.receipt,
+                        etiqueta: 'Pedidos impagos',
+                        valor: '${_deudas.length}',
+                        color: AppColors.secondary,
+                      ),
+                    ];
+                    return Wrap(
+                      spacing: 18,
+                      runSpacing: 18,
+                      children: kpis
+                          .asMap()
+                          .entries
+                          .map(
+                            (entry) => SizedBox(
+                              width: ancho,
+                              child: entry.value
+                                  .animate(delay: (70 * entry.key).ms)
+                                  .fadeIn(duration: 280.ms)
+                                  .moveY(begin: 10, end: 0),
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 30),
+                LayoutBuilder(
+                  builder: (context, restricciones) {
+                    final columnas = columnasGrilla(
+                      restricciones.maxWidth,
+                      maximo: 3,
+                      minimo: 420,
+                    );
+                    final ancho = anchoColumna(restricciones.maxWidth, columnas, 18);
+                    return Wrap(
+                      spacing: 18,
+                      runSpacing: 4,
+                      children: grupos
+                          .asMap()
+                          .entries
+                          .map(
+                            (entry) => SizedBox(
+                              width: ancho,
+                              child:
+                                  _GrupoDeudaHorneado(
+                                        grupo: entry.value,
+                                        onMarcarPagada: _marcarPagada,
+                                      )
+                                      .animate(delay: (60 * entry.key).ms)
+                                      .fadeIn(duration: 300.ms)
+                                      .moveY(begin: 10, end: 0),
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -168,95 +294,108 @@ class _GrupoDeudaHorneado extends StatelessWidget {
     final theme = Theme.of(context);
     final nombreComercial = grupo.cliente.nombreComercial;
 
+    final contenido = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    grupo.cliente.nombreParaMostrar,
+                    style: theme.textTheme.titleMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (nombreComercial != null)
+                    Text(
+                      nombreComercial,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.secondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _rojoDeuda.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'S/ ${grupo.total.toStringAsFixed(2)}',
+                style: const TextStyle(color: _rojoDeuda, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        const Divider(height: 20),
+        ...grupo.pedidos.map((horneado) {
+          final pedido = horneado.pedido;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Pedido #${pedido.numeroPedidoDia} · ${horneado.carne ?? '—'} · S/ ${pedido.total.toStringAsFixed(2)}',
+                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      if (pedido.fechaEntregaReal != null)
+                        Text(
+                          'Entregado el ${formatearFechaEntrega(pedido.fechaEntregaReal!)}',
+                          style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                        ),
+                      if (pedido.entregadoPor != null)
+                        Text(
+                          'Entregado por: ${pedido.entregadoPor}',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      NotaPedido(pedido: pedido),
+                    ],
+                  ),
+                ),
+                OutlinedButton(
+                  onPressed: () => onMarcarPagada(horneado),
+                  child: const Text('Marcar pagada'),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+
+    if (esEscritorio(context)) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 18),
+        child: TarjetaEscritorio(
+          acento: _rojoDeuda,
+          padding: const EdgeInsets.all(16),
+          child: contenido,
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Tarjeta3D(
         child: Container(
           color: AppColors.surface,
           padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          grupo.cliente.nombreParaMostrar,
-                          style: theme.textTheme.titleMedium,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (nombreComercial != null)
-                          Text(
-                            nombreComercial,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.secondary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFC62828).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'S/ ${grupo.total.toStringAsFixed(2)}',
-                      style: const TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(height: 20),
-              ...grupo.pedidos.map((horneado) {
-                final pedido = horneado.pedido;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Pedido #${pedido.numeroPedidoDia} · ${horneado.carne ?? '—'} · S/ ${pedido.total.toStringAsFixed(2)}',
-                              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            if (pedido.fechaEntregaReal != null)
-                              Text(
-                                'Entregado el ${formatearFechaEntrega(pedido.fechaEntregaReal!)}',
-                                style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
-                              ),
-                            if (pedido.entregadoPor != null)
-                              Text(
-                                'Entregado por: ${pedido.entregadoPor}',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            NotaPedido(pedido: pedido),
-                          ],
-                        ),
-                      ),
-                      OutlinedButton(
-                        onPressed: () => onMarcarPagada(horneado),
-                        child: const Text('Marcar pagada'),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ),
+          child: contenido,
         ),
       ),
     );

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../models/usuario_sesion.dart';
 import '../theme/app_theme.dart';
+import 'escritorio.dart';
 
 /// Drawer de perfil: sección "MENÚ" para el personal (trabajador/admin/
 /// superadmin) — con "Inicio" y, directo debajo, las acciones de su tienda
@@ -198,39 +200,39 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
     final esSuperAdmin = usuario.rol == 'SUPERADMIN';
     return [
       _FilaMenu(
-        icono: Icons.groups_rounded,
+        icono: PhosphorIconsRegular.users,
         titulo: 'Clientes',
         onTap: widget.onAbrirClientesHamburguesas,
         delay: 0,
       ),
       _FilaMenu(
-        icono: Icons.receipt_long_rounded,
+        icono: PhosphorIconsRegular.receipt,
         titulo: 'Pedidos',
         onTap: widget.onAbrirPedidosHamburguesas,
         delay: 0,
       ),
       _FilaMenu(
-        icono: Icons.add_shopping_cart_rounded,
+        icono: PhosphorIconsBold.shoppingCartSimple,
         titulo: 'Nuevo pedido',
         onTap: widget.onAbrirNuevoPedidoHamburguesas,
         delay: 0,
       ),
       _FilaMenu(
-        icono: Icons.account_balance_wallet_rounded,
+        icono: PhosphorIconsRegular.wallet,
         titulo: 'Deudas',
         onTap: widget.onAbrirDeudasHamburguesas,
         delay: 0,
       ),
       if (esSuperAdmin)
         _FilaMenu(
-          icono: Icons.qr_code_2_rounded,
+          icono: PhosphorIconsRegular.qrCode,
           titulo: 'Métodos de pago',
           onTap: widget.onAbrirMediosPagoHamburguesas,
           delay: 0,
         ),
       if (esAdmin)
         _FilaMenu(
-          icono: Icons.price_change_rounded,
+          icono: PhosphorIconsRegular.currencyCircleDollar,
           titulo: 'Ajuste de costos',
           onTap: widget.onAbrirAjusteCostosHamburguesas,
           delay: 0,
@@ -251,46 +253,46 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
     final esSuperAdmin = usuario.rol == 'SUPERADMIN';
     return [
       _FilaMenu(
-        icono: Icons.groups_rounded,
+        icono: PhosphorIconsRegular.users,
         titulo: 'Clientes',
         onTap: widget.onAbrirClientesHamburguesas,
         delay: 0,
       ),
       _FilaMenu(
-        icono: Icons.receipt_long_rounded,
+        icono: PhosphorIconsRegular.receipt,
         titulo: 'Pedidos',
         onTap: widget.onAbrirPedidosPanaderia,
         delay: 0,
       ),
       _FilaMenu(
-        icono: Icons.add_shopping_cart_rounded,
+        icono: PhosphorIconsBold.shoppingCartSimple,
         titulo: 'Nuevo pedido',
         onTap: widget.onAbrirNuevoPedidoPanaderia,
         delay: 0,
       ),
       _FilaMenu(
-        icono: Icons.account_balance_wallet_rounded,
+        icono: PhosphorIconsRegular.wallet,
         titulo: 'Deudas',
         onTap: widget.onAbrirDeudasPanaderia,
         delay: 0,
       ),
       if (esSuperAdmin)
         _FilaMenu(
-          icono: Icons.qr_code_2_rounded,
+          icono: PhosphorIconsRegular.qrCode,
           titulo: 'Métodos de pago',
           onTap: widget.onAbrirMediosPagoHamburguesas,
           delay: 0,
         ),
       if (esAdmin)
         _FilaMenu(
-          icono: Icons.price_change_rounded,
+          icono: PhosphorIconsRegular.currencyCircleDollar,
           titulo: 'Ajustar precios',
           onTap: widget.onAbrirAjustePreciosPanaderia,
           delay: 0,
         ),
       if (esAdmin)
         _FilaMenu(
-          icono: Icons.schedule_rounded,
+          icono: PhosphorIconsRegular.clock,
           titulo: 'Horarios de pedido',
           onTap: widget.onAbrirHorariosPanaderia,
           delay: 0,
@@ -322,14 +324,14 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
         // "Hamburguesas" de por medio que solo agregaría un toque extra.
         return Column(
           children: [
-            const _EncabezadoSeccion(texto: 'HAMBURGUESAS'),
+            const _EncabezadoSeccion(texto: 'PAN DE HAMBURGUESA'),
             ...acciones,
           ],
         );
       }
       return _FilaMenuExpandible(
-        icono: Icons.lunch_dining_rounded,
-        titulo: 'Hamburguesas',
+        icono: PhosphorIconsRegular.hamburger,
+        titulo: 'Pan de Hamburguesa',
         expandido: _abiertas.contains('hamburguesas'),
         onTap: () => _alternar('hamburguesas'),
         delay: 70,
@@ -348,7 +350,7 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
         );
       }
       return _FilaMenuExpandible(
-        icono: Icons.bakery_dining_rounded,
+        icono: PhosphorIconsFill.bread,
         titulo: 'Panadería',
         expandido: _abiertas.contains('panaderia'),
         onTap: () => _alternar('panaderia'),
@@ -358,9 +360,9 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
     }
 
     Widget filaHorneados() => _FilaMenu(
-      icono: Icons.bakery_dining_rounded,
+      icono: PhosphorIconsFill.bread,
       titulo: 'Horneados',
-      onTap: () => widget.onAbrirGestion('Horneados', Icons.bakery_dining_rounded),
+      onTap: () => widget.onAbrirGestion('Horneados', PhosphorIconsFill.bread),
       delay: 100,
     );
 
@@ -462,8 +464,8 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                                 ],
                               ),
                             ),
-                            Icon(
-                              Icons.chevron_right_rounded,
+                            PhosphorIcon(
+                              PhosphorIconsBold.caretRight,
                               color: Colors.white.withValues(alpha: 0.75),
                             ),
                           ],
@@ -482,7 +484,7 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                   if (usuario.esPersonalDeGestion) ...[
                     const _EncabezadoSeccion(texto: 'MENÚ'),
                     _FilaMenu(
-                      icono: Icons.home_rounded,
+                      icono: PhosphorIconsRegular.house,
                       titulo: 'Inicio',
                       onTap: widget.onIrAInicio,
                       delay: 20,
@@ -501,7 +503,7 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                       ],
                     ] else if (cantidadTiendas > 1)
                       _FilaMenuExpandible(
-                        icono: Icons.storefront_rounded,
+                        icono: PhosphorIconsRegular.storefront,
                         titulo: 'Tiendas',
                         expandido: _abiertas.contains('tiendas'),
                         onTap: () => _alternar('tiendas'),
@@ -519,13 +521,13 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                       // predicción de demanda), aparte del Dashboard
                       // operativo que ya es la pantalla de inicio.
                       _FilaMenu(
-                        icono: Icons.insights_rounded,
+                        icono: PhosphorIconsRegular.chartLineUp,
                         titulo: 'Analítica',
                         onTap: widget.onAbrirAnalitica,
                         delay: 120,
                       ),
                       _FilaMenu(
-                        icono: Icons.groups_2_rounded,
+                        icono: PhosphorIconsRegular.usersThree,
                         titulo: 'Trabajadores',
                         onTap: widget.onAbrirTrabajadores,
                         delay: 130,
@@ -537,13 +539,13 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                     const Divider(height: 1),
                     const _EncabezadoSeccion(texto: 'SISTEMA'),
                     _FilaMenu(
-                      icono: Icons.vpn_key_rounded,
+                      icono: PhosphorIconsRegular.key,
                       titulo: 'Token API Perú',
                       onTap: widget.onAbrirTokenApiPeru,
                       delay: 160,
                     ),
                     _FilaMenu(
-                      icono: Icons.system_update_rounded,
+                      icono: PhosphorIconsRegular.downloadSimple,
                       titulo: 'Versión de la app',
                       onTap: widget.onAbrirVersionApp,
                       delay: 175,
@@ -556,19 +558,19 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                     ],
                     const _EncabezadoSeccion(texto: 'MI CUENTA'),
                     _FilaMenu(
-                      icono: Icons.receipt_long_rounded,
+                      icono: PhosphorIconsRegular.receipt,
                       titulo: 'Mis pedidos',
                       onTap: widget.onAbrirMisPedidos,
                       delay: 190,
                     ),
                     _FilaMenu(
-                      icono: Icons.account_balance_wallet_rounded,
+                      icono: PhosphorIconsRegular.wallet,
                       titulo: 'Mis deudas',
                       onTap: widget.onAbrirMisDeudas,
                       delay: 220,
                     ),
                     _FilaMenu(
-                      icono: Icons.badge_outlined,
+                      icono: PhosphorIconsRegular.identificationBadge,
                       titulo: 'Mi perfil',
                       onTap: widget.onAbrirMiPerfil,
                       delay: 250,
@@ -581,7 +583,7 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
               child: _FilaMenu(
-                icono: Icons.logout_rounded,
+                icono: PhosphorIconsRegular.signOut,
                 titulo: 'Cerrar sesión',
                 onTap: widget.onCerrarSesion,
                 color: AppColors.error,
@@ -618,6 +620,12 @@ class _EncabezadoSeccion extends StatelessWidget {
 /// Fila táctil del drawer: ícono en una insignia redondeada de color +
 /// título + flecha, con feedback de presión y entrada escalonada — en vez
 /// del `ListTile` plano por defecto.
+///
+/// En escritorio/web el menú vive SIEMPRE visible como panel lateral y hay
+/// un mouse: la fila responde también al hover (fondo teñido, insignia más
+/// saturada y flecha que se corre 3 px). En un celular no existe puntero,
+/// así que [ZonaHover] siempre entrega `hover == false` y el resultado es
+/// idéntico al de antes, píxel por píxel.
 class _FilaMenu extends StatelessWidget {
   const _FilaMenu({
     required this.icono,
@@ -635,49 +643,67 @@ class _FilaMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-            child: InkWell(
+    return ZonaHover(
+          builder: (context, hover) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Material(
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(16),
-              onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: onTap,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOut,
+                  decoration: BoxDecoration(
+                    color: hover
+                        ? color.withValues(alpha: 0.09)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 160),
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: hover ? 0.20 : 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: PhosphorIcon(icono, color: color, size: 19),
                       ),
-                      child: Icon(icono, color: color, size: 19),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        titulo,
-                        style: Theme.of(context).textTheme.bodyMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: color == AppColors.error
-                                  ? AppColors.error
-                                  : AppColors.textPrimary,
-                            ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          titulo,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: color == AppColors.error
+                                    ? AppColors.error
+                                    : AppColors.textPrimary,
+                              ),
+                        ),
                       ),
-                    ),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 18,
-                      color: AppColors.textSecondary.withValues(alpha: 0.6),
-                    ),
-                  ],
+                      AnimatedSlide(
+                        duration: const Duration(milliseconds: 160),
+                        curve: Curves.easeOut,
+                        offset: Offset(hover ? 0.16 : 0, 0),
+                        child: PhosphorIcon(
+                          PhosphorIconsBold.caretRight,
+                          size: 18,
+                          color: hover
+                              ? color
+                              : AppColors.textSecondary.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -714,52 +740,73 @@ class _FilaMenuExpandible extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Material(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(16),
-                child: InkWell(
+        ZonaHover(
+              builder: (context, hover) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Material(
+                  color: Colors.transparent,
                   borderRadius: BorderRadius.circular(16),
-                  onTap: onTap,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 10,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: onTap,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeOut,
+                      decoration: BoxDecoration(
+                        color: hover
+                            ? AppColors.primary.withValues(alpha: 0.09)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(
+                                alpha: hover ? 0.20 : 0.12,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: PhosphorIcon(
+                              icono,
+                              color: AppColors.primary,
+                              size: 19,
+                            ),
                           ),
-                          child: Icon(icono, color: AppColors.primary, size: 19),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Text(
-                            titulo,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Text(
+                              titulo,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                            ),
                           ),
-                        ),
-                        AnimatedRotation(
-                          turns: expandido ? 0.25 : 0,
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOutCubic,
-                          child: Icon(
-                            Icons.chevron_right_rounded,
-                            size: 18,
-                            color: AppColors.textSecondary.withValues(alpha: 0.6),
+                          AnimatedRotation(
+                            turns: expandido ? 0.25 : 0,
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutCubic,
+                            child: PhosphorIcon(
+                              PhosphorIconsBold.caretRight,
+                              size: 18,
+                              color: hover
+                                  ? AppColors.primary
+                                  : AppColors.textSecondary.withValues(
+                                      alpha: 0.6,
+                                    ),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

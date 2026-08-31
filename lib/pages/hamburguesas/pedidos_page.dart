@@ -2,16 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/tienda_model.dart';
 import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
+import 'escritorio_hamburguesas.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/pedidos_secciones.dart';
+import '../../widgets/premium_button.dart';
 import 'nuevo_pedido_page.dart';
 
 /// Dashboard de Pedidos para el personal de una tienda de catálogo simple
@@ -92,7 +95,9 @@ class _PedidosPageState extends State<PedidosPage> {
       NotificacionesService.avisarCambioPedido();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pedido #${pedido.numeroPedidoDia} confirmado.')),
+        SnackBar(
+          content: Text('Pedido #${pedido.numeroPedidoDia} confirmado.'),
+        ),
       );
       _cargar();
     } on ApiException catch (e) {
@@ -230,15 +235,52 @@ class _PedidosPageState extends State<PedidosPage> {
 
   @override
   Widget build(BuildContext context) {
+    final escritorio = esEscritorio(context);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Pedidos')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _nuevoPedido,
-        icon: const Icon(Icons.add_shopping_cart_rounded),
-        label: const Text('Nuevo pedido'),
+      // En escritorio la acción principal sube al AppBar: un FAB flotando
+      // en la esquina inferior derecha de un monitor de 1600px queda lejos
+      // de todo y tapa la última tarjeta de la lista.
+      appBar: appBarGestion(
+        context,
+        titulo: 'Pedidos',
+        subtitulo: _resumenCabecera(),
+        acciones: [
+          if (escritorio)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: PremiumButton(
+                label: 'Nuevo pedido',
+                icono: PhosphorIconsBold.shoppingCartSimple,
+                expandido: false,
+                onPressed: _nuevoPedido,
+              ),
+            ),
+        ],
       ),
+      floatingActionButton: escritorio
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _nuevoPedido,
+              icon: const PhosphorIcon(PhosphorIconsBold.shoppingCartSimple),
+              label: const Text('Nuevo pedido'),
+            ),
       body: SafeArea(child: _construirCuerpo()),
     );
+  }
+
+  /// Bajada del AppBar en escritorio — de un vistazo, cuántos pedidos
+  /// esperan una decisión ahora mismo, sin tener que contar tarjetas.
+  String? _resumenCabecera() {
+    if (_cargando || _error != null || _pedidos.isEmpty) return null;
+    final porConfirmar = _pedidos.where((p) => p.esSolicitado).length;
+    final activos = _pedidos.where((p) => !p.esFinalizado).length;
+    if (activos == 0) return 'Todo al día — no hay pedidos pendientes';
+    final partes = <String>[
+      '$activos pendiente${activos == 1 ? '' : 's'}',
+      if (porConfirmar > 0) '$porConfirmar por confirmar',
+    ];
+    return partes.join(' · ');
   }
 
   Widget _construirCuerpo() {
@@ -254,7 +296,7 @@ class _PedidosPageState extends State<PedidosPage> {
 
     if (_pedidos.isEmpty) {
       return EstadoVacio(
-        icono: Icons.receipt_long_rounded,
+        icono: PhosphorIconsRegular.receipt,
         titulo: 'Aún no hay pedidos registrados',
         subtitulo: 'Los pedidos de tus tiendas van a aparecer acá.',
         onRefrescar: _cargar,
@@ -267,86 +309,165 @@ class _PedidosPageState extends State<PedidosPage> {
     // avisar que no hay nada pendiente ahora mismo.
     if (_pedidos.every((p) => p.esFinalizado)) {
       return EstadoVacio(
-        icono: Icons.task_alt_rounded,
+        icono: PhosphorIconsRegular.checkSquare,
         titulo: 'No hay pedidos pendientes',
-        subtitulo: 'Todos los pedidos ya se resolvieron. El historial está en Ventas de hoy.',
+        subtitulo:
+            'Todos los pedidos ya se resolvieron. El historial está en Ventas de hoy.',
         onRefrescar: _cargar,
       );
     }
 
     final solicitados = _pedidos.where((p) => p.esSolicitado).toList();
     final resto = _pedidos.where((p) => !p.esSolicitado).toList();
+    final escritorio = esEscritorio(context);
+    const ambar = Color(0xFFEA8C1B);
+
+    // "Por confirmar" es la cola de decisiones: son los pedidos que un
+    // cliente mandó y están esperando que alguien acepte o rechace. En
+    // escritorio se le da un bloque teñido propio para que se despegue del
+    // resto de la lista, en vez de ser un encabezado más entre otros.
+    final tarjetasSolicitados = solicitados.asMap().entries.map(
+      (entry) =>
+          PedidoCard(
+                pedido: entry.value,
+                colorSeccion: ambar,
+                onAprobar: () => _aprobar(entry.value),
+                onRechazar: () => _rechazar(entry.value),
+              )
+              .animate(delay: (40 * entry.key).ms)
+              .fadeIn(duration: 250.ms)
+              .moveY(begin: 8, end: 0),
+    );
+
+    final encabezadoSolicitados = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            PhosphorIcon(
+              PhosphorIconsFill.hourglassHigh,
+              color: ambar,
+              size: escritorio ? 22 : 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Por confirmar',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: ambar,
+                fontSize: escritorio ? 18 : null,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: ambar.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${solicitados.length}',
+                style: const TextStyle(
+                  color: ambar,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            if (escritorio) ...[
+              const SizedBox(width: 14),
+              Expanded(
+                child: Container(
+                  height: 1,
+                  color: ambar.withValues(alpha: 0.20),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 2),
+        Padding(
+          padding: const EdgeInsets.only(left: 28),
+          child: Text(
+            'Solicitados por clientes — revisa el stock',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+      ],
+    );
+
+    // Misma grilla justificada que usan las secciones de abajo, para que la
+    // cola de decisiones no se vea con otra retícula que el resto.
+    final grillaSolicitados = LayoutBuilder(
+      builder: (context, constraints) {
+        if (!escritorio) {
+          return Column(children: tarjetasSolicitados.toList());
+        }
+        const separacion = 14.0;
+        const anchoObjetivo = 380.0;
+        final columnas =
+            ((constraints.maxWidth + separacion) / (anchoObjetivo + separacion))
+                .floor()
+                .clamp(1, 4);
+        final ancho =
+            (constraints.maxWidth - separacion * (columnas - 1)) / columnas;
+        return Wrap(
+          spacing: separacion,
+          runSpacing: 0,
+          children: tarjetasSolicitados
+              .map((t) => SizedBox(width: ancho, child: t))
+              .toList(),
+        );
+      },
+    );
+
+    final bloqueSolicitados = escritorio
+        ? Container(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 6),
+            decoration: BoxDecoration(
+              color: ambar.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: ambar.withValues(alpha: 0.22)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                encabezadoSolicitados,
+                const SizedBox(height: 14),
+                grillaSolicitados,
+              ],
+            ),
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              encabezadoSolicitados,
+              const SizedBox(height: 10),
+              grillaSolicitados,
+            ],
+          );
 
     return RefreshIndicator(
       onRefresh: _cargar,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
-        children: [
-          if (solicitados.isNotEmpty) ...[
-            Row(
-              children: [
-                const Icon(
-                  Icons.hourglass_top_rounded,
-                  color: Color(0xFFEA8C1B),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Por confirmar',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: const Color(0xFFEA8C1B),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEA8C1B).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${solicitados.length}',
-                    style: const TextStyle(
-                      color: Color(0xFFEA8C1B),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Padding(
-              padding: const EdgeInsets.only(left: 28),
-              child: Text(
-                'Solicitados por clientes — revisa el stock',
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ...solicitados.asMap().entries.map(
-              (entry) =>
-                  PedidoCard(
-                        pedido: entry.value,
-                        colorSeccion: const Color(0xFFEA8C1B),
-                        onAprobar: () => _aprobar(entry.value),
-                        onRechazar: () => _rechazar(entry.value),
-                      )
-                      .animate(delay: (40 * entry.key).ms)
-                      .fadeIn(duration: 250.ms)
-                      .moveY(begin: 8, end: 0),
-            ),
-            const SizedBox(height: 10),
-          ],
-          ListaPedidosPorSeccion(
-            pedidos: resto,
-            onEntregar: _entregar,
-            onCancelar: _cancelar,
+      child: ContenidoCentrado(
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            escritorio ? 28 : 20,
+            escritorio ? 20 : 12,
+            escritorio ? 28 : 20,
+            escritorio ? 40 : 100,
           ),
-        ],
+          children: [
+            if (solicitados.isNotEmpty) ...[
+              bloqueSolicitados,
+              SizedBox(height: escritorio ? 28 : 10),
+            ],
+            ListaPedidosPorSeccion(
+              pedidos: resto,
+              onEntregar: _entregar,
+              onCancelar: _cancelar,
+            ),
+          ],
+        ),
       ),
     );
   }

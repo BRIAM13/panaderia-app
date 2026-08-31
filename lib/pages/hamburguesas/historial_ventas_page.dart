@@ -10,6 +10,7 @@ import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../widgets/contador_animado.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/pedidos_secciones.dart';
@@ -146,6 +147,20 @@ class _HistorialVentasPageState extends State<HistorialVentasPage> {
 
   @override
   Widget build(BuildContext context) {
+    // En escritorio el nombre de la tienda va como subtítulo de la barra
+    // (alineado a la izquierda), no como una segunda línea centrada debajo
+    // del título: con 1900 px de ancho ese bloque centrado queda flotando.
+    if (esEscritorio(context)) {
+      return Scaffold(
+        appBar: appBarGestion(
+          context,
+          titulo: 'Historial de ventas',
+          subtitulo: widget.tienda.nombre,
+        ),
+        body: SafeArea(child: _construirCuerpo()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Historial de ventas'),
@@ -188,6 +203,19 @@ class _HistorialVentasPageState extends State<HistorialVentasPage> {
     final cobradoTotal = pagados.fold(0.0, (a, p) => a + p.total);
     final deudaCantidad = deuda.length;
     final deudaTotal = deuda.fold(0.0, (a, p) => a + p.total);
+
+    if (esEscritorio(context)) {
+      return _cuerpoEscritorio(
+        pagados: pagados,
+        deuda: deuda,
+        cancelados: cancelados,
+        rechazados: rechazados,
+        cobradoCantidad: cobradoCantidad,
+        cobradoTotal: cobradoTotal,
+        deudaCantidad: deudaCantidad,
+        deudaTotal: deudaTotal,
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _cargar,
@@ -323,6 +351,235 @@ class _HistorialVentasPageState extends State<HistorialVentasPage> {
               onToggle: () => _alternarSeccion('Rechazados'),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // ESCRITORIO
+  // ---------------------------------------------------------------------
+
+  /// Los controles (día / "Ver todo") y los dos montos comparten una sola
+  /// banda superior, y las cuatro secciones del historial se reparten en dos
+  /// columnas: en celular hay que desplazarse por las cuatro para saber
+  /// cuántos pedidos quedaron en cada estado.
+  Widget _cuerpoEscritorio({
+    required List<Pedido> pagados,
+    required List<Pedido> deuda,
+    required List<Pedido> cancelados,
+    required List<Pedido> rechazados,
+    required int cobradoCantidad,
+    required double cobradoTotal,
+    required int deudaCantidad,
+    required double deudaTotal,
+  }) {
+    final vacio =
+        pagados.isEmpty &&
+        deuda.isEmpty &&
+        cancelados.isEmpty &&
+        rechazados.isEmpty;
+
+    Widget seccion({
+      required String titulo,
+      required String subtitulo,
+      required IconData icono,
+      required Color color,
+      required List<Pedido> pedidos,
+      required String mensajeSinDatos,
+    }) {
+      if (pedidos.isEmpty) {
+        // Antes esto no dibujaba nada — si las dos secciones de una columna
+        // quedaban vacías, la columna entera se veía como un vacío sin
+        // explicación al lado de la otra sí llena. Un aviso chico y en tono
+        // positivo dice lo mismo que "no hay nada" pero sin dejar la mitad
+        // de la pantalla en blanco.
+        return Padding(
+          padding: const EdgeInsets.only(bottom: espacioEscritorio),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: AppColors.surfaceMuted,
+                width: 1.2,
+                style: BorderStyle.solid,
+              ),
+            ),
+            child: Row(
+              children: [
+                // Verde fijo (no el color de la sección): "sin deudas" o
+                // "sin rechazados" es una buena noticia, no debería leerse
+                // en el mismo rojo/ámbar de advertencia que la sección usa
+                // cuando SÍ tiene datos.
+                const Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: Color(0xFF2E7D32),
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    mensajeSinDatos,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF2E7D32),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      return Padding(
+        padding: const EdgeInsets.only(bottom: espacioEscritorio),
+        child: PanelEscritorio(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+          child: _SeccionHistorial(
+            titulo: titulo,
+            subtitulo: subtitulo,
+            icono: icono,
+            color: color,
+            pedidos: pedidos,
+            expandida: _seccionesExpandidas.contains(titulo),
+            onToggle: () => _alternarSeccion(titulo),
+          ),
+        ),
+      );
+    }
+
+    final columnaIzquierda = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        seccion(
+          titulo: 'Completados y pagados',
+          subtitulo: 'Entregados y ya cobrados',
+          icono: Icons.check_circle_rounded,
+          color: const Color(0xFF2E7D32),
+          pedidos: pagados,
+          mensajeSinDatos: 'Sin ventas completadas este día.',
+        ),
+        seccion(
+          titulo: 'Cancelados',
+          subtitulo: 'No llegaron a entregarse',
+          icono: Icons.block_rounded,
+          color: const Color(0xFF6D4C41),
+          pedidos: cancelados,
+          mensajeSinDatos: 'Sin pedidos cancelados este día.',
+        ),
+      ],
+    );
+
+    final columnaDerecha = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        seccion(
+          titulo: 'Con deuda',
+          subtitulo: 'Entregados, el cliente todavía debe',
+          icono: Icons.account_balance_wallet_rounded,
+          color: const Color(0xFFC62828),
+          pedidos: deuda,
+          mensajeSinDatos: 'Sin deudas pendientes este día.',
+        ),
+        seccion(
+          titulo: 'Rechazados',
+          subtitulo: 'El personal no los aceptó',
+          icono: Icons.cancel_rounded,
+          color: AppColors.textSecondary,
+          pedidos: rechazados,
+          mensajeSinDatos: 'Sin pedidos rechazados este día.',
+        ),
+      ],
+    );
+
+    return RefreshIndicator(
+      onRefresh: _cargar,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(32, 24, 32, 56),
+        children: [
+          ContenidoCentrado(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 300,
+                      child: _TarjetaMontoDia(
+                        titulo: _verTodo ? 'Cobrado (total)' : 'Cobrado',
+                        icono: Icons.trending_up_rounded,
+                        colores: const [AppColors.primary, AppColors.secondary],
+                        cantidad: cobradoCantidad,
+                        total: cobradoTotal,
+                        etiquetaCantidad: 'cobrado(s)',
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: 300,
+                      child: _TarjetaMontoDia(
+                        titulo: _verTodo ? 'Deuda (total)' : 'Deuda del día',
+                        icono: Icons.account_balance_wallet_rounded,
+                        colores: const [Color(0xFFC62828), Color(0xFFE57373)],
+                        cantidad: deudaCantidad,
+                        total: deudaTotal,
+                        etiquetaCantidad: 'con deuda',
+                      ),
+                    ),
+                    const Spacer(),
+                    SizedBox(
+                      width: 280,
+                      child: _SelectorFecha(
+                        fecha: _fechaSeleccionada,
+                        verTodo: _verTodo,
+                        habilitado: _fechasConDatos.isNotEmpty,
+                        onTap: _seleccionarFecha,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton(
+                      onPressed: _alternarVerTodo,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 18,
+                        ),
+                        backgroundColor: _verTodo
+                            ? AppColors.primary.withValues(alpha: 0.12)
+                            : null,
+                      ),
+                      child: Text(_verTodo ? 'Ver por día' : 'Ver todo'),
+                    ),
+                  ],
+                ).animate().fadeIn(delay: 60.ms, duration: 320.ms),
+                const SizedBox(height: 28),
+                if (vacio)
+                  SizedBox(
+                    height: 320,
+                    child: EstadoVacio(
+                      icono: Icons.receipt_long_rounded,
+                      titulo: _verTodo
+                          ? 'Todavía no hay ventas en el historial'
+                          : 'No hay ventas resueltas este día',
+                      subtitulo: _verTodo
+                          ? 'Los pedidos entregados, cancelados o rechazados de esta tienda van a aparecer acá.'
+                          : 'Prueba "Ver todo" o elige otro día en el calendario.',
+                    ),
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: columnaIzquierda),
+                      const SizedBox(width: espacioEscritorio),
+                      Expanded(child: columnaDerecha),
+                    ],
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );

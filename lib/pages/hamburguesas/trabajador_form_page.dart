@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/rol_model.dart';
 import '../../models/tienda_model.dart';
@@ -13,7 +14,9 @@ import '../../services/roles_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../services/trabajadores_service.dart';
 import '../../utils/text_formatters.dart';
+import 'escritorio_hamburguesas.dart';
 import '../../widgets/premium_button.dart';
+import '../../widgets/selector_desplegable.dart';
 import '../../widgets/skeleton_loader.dart';
 
 /// Alta de un trabajador con el mismo "Estándar Briam" que Clientes: el DNI
@@ -327,79 +330,91 @@ class _TrabajadorFormPageState extends State<TrabajadorFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    final escritorio = esEscritorio(context);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Nuevo trabajador')),
+      appBar: appBarGestion(
+        context,
+        titulo: 'Nuevo trabajador',
+        subtitulo: 'Busca por DNI y asígnale rol y tienda',
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _SeccionBusquedaDni(
-                  dniController: _dniController,
-                  buscando: _buscando,
-                  esCliente: _esCliente,
-                  yaEsTrabajador: _yaEsTrabajador,
-                  tiendasAsignadasOtras: _tiendasAsignadasOtras,
-                  origenValidacion: _origenValidacion,
-                  camposExpandidos: _camposExpandidos,
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w600,
+          padding: EdgeInsets.all(escritorio ? 32 : 20),
+          // En escritorio el formulario se topa a ancho de panel y se
+          // centra — estirar estos campos a toda la ventana no aporta nada
+          // y obliga al ojo a barrer de un borde al otro por cada línea.
+          child: FormularioEscritorio(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _SeccionBusquedaDni(
+                    dniController: _dniController,
+                    buscando: _buscando,
+                    esCliente: _esCliente,
+                    yaEsTrabajador: _yaEsTrabajador,
+                    tiendasAsignadasOtras: _tiendasAsignadasOtras,
+                    origenValidacion: _origenValidacion,
+                    camposExpandidos: _camposExpandidos,
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
+                  ],
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    alignment: Alignment.topCenter,
+                    child: !_camposExpandidos
+                        ? const SizedBox(width: double.infinity)
+                        : _CamposSecundariosTrabajador(
+                            soloLectura: _soloLectura,
+                            nombresController: _nombresController,
+                            apellidoPaternoController:
+                                _apellidoPaternoController,
+                            apellidoMaternoController:
+                                _apellidoMaternoController,
+                            telefonoController: _telefonoController,
+                            emailController: _emailController,
+                            direccionController: _direccionController,
+                            salarioController: _salarioController,
+                            cargandoRoles: _cargandoRoles,
+                            rolesAsignables: _rolesAsignables,
+                            rolSeleccionado: _rolSeleccionado,
+                            onRolCambiado: (v) =>
+                                setState(() => _rolSeleccionado = v),
+                            cargandoTiendas: _cargandoTiendas,
+                            misTiendas: _misTiendas,
+                            tiendasYaAsignadas: _tiendasYaAsignadas,
+                            tiendasReactivando: _tiendasReactivando,
+                            tiendasSeleccionadas: _tiendasSeleccionadas,
+                            onTiendaCambiada: (idTienda, marcado) =>
+                                setState(() {
+                                  if (marcado) {
+                                    _tiendasSeleccionadas.add(idTienda);
+                                  } else {
+                                    _tiendasSeleccionadas.remove(idTienda);
+                                  }
+                                }),
+                          ),
+                  ),
+                  const SizedBox(height: 24),
+                  PremiumButton(
+                    label: 'Registrar trabajador',
+                    icono: PhosphorIconsRegular.identificationBadge,
+                    cargando: _guardando,
+                    onPressed: _puedeGuardar ? _guardar : null,
                   ),
                 ],
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  alignment: Alignment.topCenter,
-                  child: !_camposExpandidos
-                      ? const SizedBox(width: double.infinity)
-                      : _CamposSecundariosTrabajador(
-                          soloLectura: _soloLectura,
-                          nombresController: _nombresController,
-                          apellidoPaternoController:
-                              _apellidoPaternoController,
-                          apellidoMaternoController:
-                              _apellidoMaternoController,
-                          telefonoController: _telefonoController,
-                          emailController: _emailController,
-                          direccionController: _direccionController,
-                          salarioController: _salarioController,
-                          cargandoRoles: _cargandoRoles,
-                          rolesAsignables: _rolesAsignables,
-                          rolSeleccionado: _rolSeleccionado,
-                          onRolCambiado: (v) =>
-                              setState(() => _rolSeleccionado = v),
-                          cargandoTiendas: _cargandoTiendas,
-                          misTiendas: _misTiendas,
-                          tiendasYaAsignadas: _tiendasYaAsignadas,
-                          tiendasReactivando: _tiendasReactivando,
-                          tiendasSeleccionadas: _tiendasSeleccionadas,
-                          onTiendaCambiada: (idTienda, marcado) => setState(() {
-                            if (marcado) {
-                              _tiendasSeleccionadas.add(idTienda);
-                            } else {
-                              _tiendasSeleccionadas.remove(idTienda);
-                            }
-                          }),
-                        ),
-                ),
-                const SizedBox(height: 24),
-                PremiumButton(
-                  label: 'Registrar trabajador',
-                  icono: Icons.badge_outlined,
-                  cargando: _guardando,
-                  onPressed: _puedeGuardar ? _guardar : null,
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -472,7 +487,10 @@ class _SeccionBusquedaDni extends StatelessWidget {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.search_rounded, size: 18),
+                    : const PhosphorIcon(
+                        PhosphorIconsRegular.magnifyingGlass,
+                        size: 18,
+                      ),
                 label: const Text('Buscar'),
               ),
             ),
@@ -481,7 +499,7 @@ class _SeccionBusquedaDni extends StatelessWidget {
         if (esCliente) ...[
           const SizedBox(height: 10),
           _AvisoInfo(
-            icono: Icons.badge_outlined,
+            icono: PhosphorIconsRegular.identificationBadge,
             texto:
                 'Esta persona ya es cliente registrado — seguirá siéndolo, solo se le agrega el acceso como trabajador.',
             color: scheme.primary,
@@ -490,7 +508,7 @@ class _SeccionBusquedaDni extends StatelessWidget {
         if (yaEsTrabajador && tiendasAsignadasOtras.isNotEmpty) ...[
           const SizedBox(height: 10),
           _AvisoInfo(
-            icono: Icons.storefront_outlined,
+            icono: PhosphorIconsRegular.storefront,
             texto:
                 'Ya es trabajador en: ${tiendasAsignadasOtras.map((t) => t.activo ? t.nombre : '${t.nombre} (inactivo)').join(', ')}.',
             color: const Color(0xFFEA8C1B),
@@ -499,8 +517,8 @@ class _SeccionBusquedaDni extends StatelessWidget {
         if (origenValidacion == 'RENIEC' && camposExpandidos) ...[
           const SizedBox(height: 10),
           Chip(
-            avatar: const Icon(
-              Icons.verified_rounded,
+            avatar: const PhosphorIcon(
+              PhosphorIconsFill.sealCheck,
               size: 16,
               color: Colors.white,
             ),
@@ -577,7 +595,7 @@ class _CamposSecundariosTrabajador extends StatelessWidget {
           inputFormatters: const [UpperCaseTextFormatter()],
           decoration: const InputDecoration(
             labelText: 'Nombres',
-            prefixIcon: Icon(Icons.person_outline_rounded),
+            prefixIcon: PhosphorIcon(PhosphorIconsRegular.user),
           ),
           validator: (v) =>
               (v == null || v.trim().isEmpty) ? 'Ingresa los nombres' : null,
@@ -608,7 +626,7 @@ class _CamposSecundariosTrabajador extends StatelessWidget {
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           decoration: const InputDecoration(
             labelText: 'Teléfono',
-            prefixIcon: Icon(Icons.phone_outlined),
+            prefixIcon: PhosphorIcon(PhosphorIconsRegular.phone),
           ),
         ),
         const SizedBox(height: 16),
@@ -617,7 +635,7 @@ class _CamposSecundariosTrabajador extends StatelessWidget {
           keyboardType: TextInputType.emailAddress,
           decoration: const InputDecoration(
             labelText: 'Email',
-            prefixIcon: Icon(Icons.email_outlined),
+            prefixIcon: PhosphorIcon(PhosphorIconsRegular.envelopeSimple),
           ),
         ),
         const SizedBox(height: 16),
@@ -627,28 +645,22 @@ class _CamposSecundariosTrabajador extends StatelessWidget {
           inputFormatters: const [UpperCaseTextFormatter()],
           decoration: const InputDecoration(
             labelText: 'Dirección',
-            prefixIcon: Icon(Icons.place_outlined),
+            prefixIcon: PhosphorIcon(PhosphorIconsRegular.mapPin),
           ),
         ),
         const SizedBox(height: 16),
         if (cargandoRoles)
           const SkeletonBox(height: 58, borderRadius: 12)
         else
-          DropdownButtonFormField<String>(
-            initialValue: rolSeleccionado,
-            items: rolesAsignables
-                .map(
-                  (r) => DropdownMenuItem(
-                    value: r.nombreRol,
-                    child: Text(r.etiqueta),
-                  ),
-                )
-                .toList(),
+          SelectorDesplegable<String>(
+            valor: rolSeleccionado,
+            opciones: rolesAsignables.map((r) => r.nombreRol).toList(),
+            etiqueta: (nombreRol) => rolesAsignables
+                .firstWhere((r) => r.nombreRol == nombreRol)
+                .etiqueta,
+            label: 'Rol',
+            icono: PhosphorIconsRegular.briefcase,
             onChanged: onRolCambiado,
-            decoration: const InputDecoration(
-              labelText: 'Rol',
-              prefixIcon: Icon(Icons.work_outline_rounded),
-            ),
             validator: (v) => v == null ? 'Selecciona un rol' : null,
           ),
         const SizedBox(height: 16),
@@ -658,7 +670,7 @@ class _CamposSecundariosTrabajador extends StatelessWidget {
           inputFormatters: const [DecimalTextInputFormatter()],
           decoration: const InputDecoration(
             labelText: 'Salario (S/, opcional)',
-            prefixIcon: Icon(Icons.payments_outlined),
+            prefixIcon: PhosphorIcon(PhosphorIconsRegular.money),
           ),
         ),
         const SizedBox(height: 20),
@@ -725,7 +737,7 @@ class _AvisoInfo extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icono, size: 18, color: color),
+          PhosphorIcon(icono, size: 18, color: color),
           const SizedBox(width: 8),
           Expanded(
             child: Text(texto, style: TextStyle(color: color)),

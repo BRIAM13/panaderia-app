@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 /// Indicador de carga personalizado: un arco que gira de forma continua
@@ -40,8 +41,8 @@ class AppLoadingIndicator extends StatelessWidget {
                     end: Alignment.bottomRight,
                   ),
                 ),
-                child: Icon(
-                  Icons.bakery_dining_rounded,
+                child: PhosphorIcon(
+                  PhosphorIconsFill.bread,
                   color: Colors.white,
                   size: size * 0.26,
                 ),

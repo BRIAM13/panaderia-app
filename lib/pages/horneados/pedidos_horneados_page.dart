@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../../services/horneados_service.dart';
@@ -16,6 +17,7 @@ import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/pedidos_secciones.dart';
 import '../../widgets/tarjeta_3d.dart';
+import 'escritorio_horneados.dart';
 import 'nuevo_pedido_horneados_page.dart';
 
 /// Lista de pedidos de Horneados para el personal — mismo tema visual y
@@ -24,6 +26,12 @@ import 'nuevo_pedido_horneados_page.dart';
 /// acciones pegan directo a los endpoints ya genéricos de
 /// `PedidosService` — no son exclusivos de Hamburguesas, solo resuelven la
 /// tienda real de cada pedido (ver pedidosController.js).
+///
+/// En escritorio (>= [anchoEscritorio]) el contenido se centra con ancho
+/// máximo, la grilla de tarjetas pasa a 2/3/4 columnas según la ventana y el
+/// FAB se reemplaza por el botón "Nuevo pedido" del encabezado. Por debajo de
+/// ese ancho el árbol es idéntico al de siempre (incluida la grilla de 380px
+/// que ya existía desde [Breakpoints.tablet]).
 class PedidosHorneadosPage extends StatefulWidget {
   const PedidosHorneadosPage({super.key});
 
@@ -173,13 +181,19 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
 
   @override
   Widget build(BuildContext context) {
+    final escritorio = esEscritorio(context);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Pedidos de Horneados')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _nuevoPedido,
-        icon: const Icon(Icons.add_shopping_cart_rounded),
-        label: const Text('Nuevo pedido'),
-      ),
+      appBar: appBarGestion(context, titulo: 'Pedidos de Horneados'),
+      // En escritorio el "Nuevo pedido" vive en el encabezado de la página,
+      // donde se lee junto al título — el FAB flotante es un patrón táctil.
+      floatingActionButton: escritorio
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _nuevoPedido,
+              icon: const PhosphorIcon(PhosphorIconsBold.shoppingCartSimple),
+              label: const Text('Nuevo pedido'),
+            ),
       body: SafeArea(child: _construirCuerpo()),
     );
   }
@@ -193,7 +207,7 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
     }
     if (_pedidos.isEmpty) {
       return EstadoVacio(
-        icono: Icons.bakery_dining_rounded,
+        icono: PhosphorIconsLight.bread,
         titulo: 'Aún no hay pedidos de Horneados',
         subtitulo: 'Los pedidos que registres van a aparecer acá.',
         onRefrescar: _cargar,
@@ -205,13 +219,14 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
     // tiene pedidos activos) en vez de avisar que no hay nada pendiente.
     if (_pedidos.every((p) => p.pedido.esFinalizado)) {
       return EstadoVacio(
-        icono: Icons.task_alt_rounded,
+        icono: PhosphorIconsLight.checks,
         titulo: 'No hay pedidos pendientes',
         subtitulo: 'Todos los pedidos de Horneados ya se resolvieron.',
         onRefrescar: _cargar,
       );
     }
 
+    final escritorio = esEscritorio(context);
     final activos = _pedidos.where((p) => !p.pedido.esFinalizado).toList();
     final agrupados = agruparPedidosPorFecha(
       activos.map((p) => p.pedido).toList(),
@@ -222,7 +237,7 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
       final lista = pedidosSeccion.cast<Pedido>();
       if (lista.isEmpty) return const SizedBox.shrink();
       final theme = Theme.of(context);
-      final esEscritorio = MediaQuery.sizeOf(context).width >= Breakpoints.tablet;
+      final esGrilla = MediaQuery.sizeOf(context).width >= Breakpoints.tablet;
 
       final tarjetas = lista.asMap().entries.map((entry) {
         final horneado = porId[entry.value.idPedido]!;
@@ -239,13 +254,13 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
       });
 
       return Padding(
-        padding: const EdgeInsets.only(bottom: 20),
+        padding: EdgeInsets.only(bottom: escritorio ? 32 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(icono, color: color, size: 20),
+                PhosphorIcon(icono, color: color, size: 20),
                 const SizedBox(width: 8),
                 Text(titulo, style: theme.textTheme.titleMedium?.copyWith(color: color)),
                 const SizedBox(width: 8),
@@ -267,8 +282,28 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
               padding: const EdgeInsets.only(left: 28),
               child: Text(subtitulo, style: theme.textTheme.bodyMedium),
             ),
-            const SizedBox(height: 10),
-            if (!esEscritorio)
+            SizedBox(height: escritorio ? 14 : 10),
+            if (escritorio)
+              // Grilla elástica: 2 columnas a ~900px, 3 a ~1100px y 4 en
+              // monitores anchos, en vez del Wrap de ancho fijo.
+              LayoutBuilder(
+                builder: (context, restricciones) {
+                  final columnas = columnasGrilla(
+                    restricciones.maxWidth,
+                    maximo: 4,
+                    minimo: 360,
+                  );
+                  final ancho = anchoColumna(restricciones.maxWidth, columnas, 18);
+                  return Wrap(
+                    spacing: 18,
+                    runSpacing: 4,
+                    children: tarjetas
+                        .map((t) => SizedBox(width: ancho, child: t))
+                        .toList(),
+                  );
+                },
+              )
+            else if (!esGrilla)
               Column(children: tarjetas.toList())
             else
               Wrap(
@@ -280,15 +315,68 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
       );
     }
 
+    final secciones = [
+      seccion('Atrasados', 'De ayer o antes — necesitan atención', PhosphorIconsRegular.warning, const Color(0xFFC62828), agrupados[SeccionPedido.atrasados]!),
+      seccion('Hoy', 'Programados para entregarse hoy', PhosphorIconsRegular.calendarDot, AppColors.primary, agrupados[SeccionPedido.hoy]!),
+      seccion('Próximos', 'Mañana en adelante', PhosphorIconsRegular.calendarPlus, const Color(0xFF2563EB), agrupados[SeccionPedido.proximos]!),
+      seccion('Sin fecha programada', 'A coordinar con el cliente', PhosphorIconsRegular.calendarSlash, AppColors.textSecondary, agrupados[SeccionPedido.sinFecha]!),
+    ];
+
+    if (!escritorio) {
+      return RefreshIndicator(
+        onRefresh: _cargar,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+          children: secciones,
+        ),
+      );
+    }
+
+    final pendientes = activos.length;
+
     return RefreshIndicator(
       onRefresh: _cargar,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+        padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
         children: [
-          seccion('Atrasados', 'De ayer o antes — necesitan atención', Icons.warning_amber_rounded, const Color(0xFFC62828), agrupados[SeccionPedido.atrasados]!),
-          seccion('Hoy', 'Programados para entregarse hoy', Icons.today_rounded, AppColors.primary, agrupados[SeccionPedido.hoy]!),
-          seccion('Próximos', 'Mañana en adelante', Icons.upcoming_rounded, const Color(0xFF2563EB), agrupados[SeccionPedido.proximos]!),
-          seccion('Sin fecha programada', 'A coordinar con el cliente', Icons.event_busy_rounded, AppColors.textSecondary, agrupados[SeccionPedido.sinFecha]!),
+          ContenidoCentrado(
+            maxAncho: 1560,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                EncabezadoEscritorio(
+                      icono: PhosphorIconsDuotone.bread,
+                      titulo: 'Pedidos de Horneados',
+                      descripcion:
+                          '$pendientes ${pendientes == 1 ? 'pedido activo' : 'pedidos activos'} '
+                          'por atender — agrupados por fecha de entrega.',
+                      acciones: [
+                        OutlinedButton.icon(
+                          onPressed: _cargar,
+                          icon: const PhosphorIcon(
+                            PhosphorIconsRegular.arrowsClockwise,
+                            size: 18,
+                          ),
+                          label: const Text('Actualizar'),
+                        ),
+                        FilledButton.icon(
+                          onPressed: _nuevoPedido,
+                          icon: const PhosphorIcon(
+                            PhosphorIconsBold.shoppingCartSimple,
+                            size: 18,
+                          ),
+                          label: const Text('Nuevo pedido'),
+                        ),
+                      ],
+                    )
+                    .animate()
+                    .fadeIn(duration: 300.ms)
+                    .moveY(begin: 10, end: 0),
+                const SizedBox(height: 30),
+                ...secciones,
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -305,13 +393,13 @@ class _EstadoInfo {
 _EstadoInfo _infoEstado(Pedido pedido) {
   switch (pedido.estado) {
     case 'CANCELADO':
-      return const _EstadoInfo('Cancelado', Color(0xFF6D4C41), Icons.block_rounded);
+      return const _EstadoInfo('Cancelado', Color(0xFF6D4C41), PhosphorIconsFill.prohibit);
     case 'ENTREGADO':
       return pedido.esDeuda
-          ? const _EstadoInfo('Entregado · Deuda', Color(0xFFC62828), Icons.account_balance_wallet_rounded)
-          : const _EstadoInfo('Entregado · Pagado', Color(0xFF2E7D32), Icons.check_circle_rounded);
+          ? const _EstadoInfo('Entregado · Deuda', Color(0xFFC62828), PhosphorIconsFill.wallet)
+          : const _EstadoInfo('Entregado · Pagado', Color(0xFF2E7D32), PhosphorIconsFill.checkCircle);
     default:
-      return const _EstadoInfo('Pendiente a entrega', Color(0xFF2563EB), Icons.event_available_rounded);
+      return const _EstadoInfo('Pendiente a entrega', Color(0xFF2563EB), PhosphorIconsFill.calendarCheck);
   }
 }
 
@@ -336,6 +424,159 @@ class _PedidoHorneadoCard extends StatelessWidget {
     final nombreComercial = cliente.nombreComercial;
     final estadoInfo = _infoEstado(pedido);
 
+    final contenido = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    colorSeccion.withValues(alpha: 0.20),
+                    colorSeccion.withValues(alpha: 0.08),
+                  ],
+                ),
+              ),
+              child: PhosphorIcon(PhosphorIconsRegular.bread, color: colorSeccion, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    cliente.nombreParaMostrar,
+                    style: theme.textTheme.titleMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (nombreComercial != null) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      nombreComercial,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.secondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text(
+                    '${horneado.carne ?? '—'} · ${horneado.presentacion ?? '—'} · ${pedido.cantidad}',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  if (horneado.aplicaAderezo) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Aderezo ${horneado.tipoAderezo ?? ''} · S/ ${(horneado.precioAderezo ?? 0).toStringAsFixed(2)}',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                    ),
+                  ],
+                  const SizedBox(height: 2),
+                  Text(
+                    'Total S/ ${pedido.total.toStringAsFixed(2)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      PhosphorIcon(
+                        pedido.fechaEntrega != null
+                            ? PhosphorIconsRegular.clock
+                            : PhosphorIconsRegular.calendarSlash,
+                        size: 14,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          pedido.fechaEntrega != null
+                              ? formatearFechaEntrega(pedido.fechaEntrega!)
+                              : 'Sin fecha programada',
+                          style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: estadoInfo.color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PhosphorIcon(estadoInfo.icono, size: 13, color: estadoInfo.color),
+                  const SizedBox(width: 4),
+                  Text(
+                    estadoInfo.texto,
+                    style: TextStyle(color: estadoInfo.color, fontWeight: FontWeight.w700, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        NotaPedido(pedido: pedido),
+        InfoAuditoriaPedido(pedido: pedido),
+        if (onEntregar != null) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onEntregar,
+              icon: const PhosphorIcon(PhosphorIconsRegular.truck, size: 18),
+              label: const Text('Marcar entregado'),
+            ),
+          ),
+        ],
+        if (onCancelar != null) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onCancelar,
+              style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFC62828)),
+              icon: const PhosphorIcon(PhosphorIconsRegular.x, size: 18),
+              label: const Text('Cancelar pedido'),
+            ),
+          ),
+        ],
+      ],
+    );
+
+    // En escritorio la tarjeta usa el hover del kit (se levanta y marca el
+    // borde con el color de la sección) en vez del tilt táctil de Tarjeta3D.
+    if (esEscritorio(context)) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 18),
+        child: TarjetaEscritorio(
+          acento: colorSeccion,
+          radio: 20,
+          padding: const EdgeInsets.all(16),
+          child: contenido,
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Tarjeta3D(
@@ -343,142 +584,7 @@ class _PedidoHorneadoCard extends StatelessWidget {
         child: Container(
           color: AppColors.surface,
           padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [
-                          colorSeccion.withValues(alpha: 0.20),
-                          colorSeccion.withValues(alpha: 0.08),
-                        ],
-                      ),
-                    ),
-                    child: Icon(Icons.bakery_dining_rounded, color: colorSeccion, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          cliente.nombreParaMostrar,
-                          style: theme.textTheme.titleMedium,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (nombreComercial != null) ...[
-                          const SizedBox(height: 1),
-                          Text(
-                            nombreComercial,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.secondary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        const SizedBox(height: 4),
-                        Text(
-                          '${horneado.carne ?? '—'} · ${horneado.presentacion ?? '—'} · ${pedido.cantidad}',
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                        if (horneado.aplicaAderezo) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            'Aderezo ${horneado.tipoAderezo ?? ''} · S/ ${(horneado.precioAderezo ?? 0).toStringAsFixed(2)}',
-                            style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-                          ),
-                        ],
-                        const SizedBox(height: 2),
-                        Text(
-                          'Total S/ ${pedido.total.toStringAsFixed(2)}',
-                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Icon(
-                              pedido.fechaEntrega != null ? Icons.schedule_rounded : Icons.event_busy_rounded,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                pedido.fechaEntrega != null
-                                    ? formatearFechaEntrega(pedido.fechaEntrega!)
-                                    : 'Sin fecha programada',
-                                style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: estadoInfo.color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(estadoInfo.icono, size: 13, color: estadoInfo.color),
-                        const SizedBox(width: 4),
-                        Text(
-                          estadoInfo.texto,
-                          style: TextStyle(color: estadoInfo.color, fontWeight: FontWeight.w700, fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              NotaPedido(pedido: pedido),
-              InfoAuditoriaPedido(pedido: pedido),
-              if (onEntregar != null) ...[
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: onEntregar,
-                    icon: const Icon(Icons.local_shipping_rounded, size: 18),
-                    label: const Text('Marcar entregado'),
-                  ),
-                ),
-              ],
-              if (onCancelar != null) ...[
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: onCancelar,
-                    style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFC62828)),
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    label: const Text('Cancelar pedido'),
-                  ),
-                ),
-              ],
-            ],
-          ),
+          child: contenido,
         ),
       ),
     );

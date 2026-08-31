@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../services/api_client.dart';
 import '../services/clientes_service.dart';
@@ -52,15 +53,15 @@ class _OpcionCanal extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(
+              PhosphorIcon(
                 seleccionado
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_off_rounded,
+                    ? PhosphorIconsFill.radioButton
+                    : PhosphorIconsRegular.circle,
                 color: color,
                 size: 20,
               ),
               const SizedBox(width: 10),
-              Icon(icono, color: color, size: 20),
+              PhosphorIcon(icono, color: color, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(texto, style: TextStyle(color: color)),
@@ -293,7 +294,10 @@ class _CodigoOtpInputState extends State<_CodigoOtpInput>
         const SizedBox(height: 10),
         TextButton.icon(
           onPressed: widget.habilitado ? _pegarDesdePortapapeles : null,
-          icon: const Icon(Icons.content_paste_rounded, size: 18),
+          icon: const PhosphorIcon(
+            PhosphorIconsRegular.clipboardText,
+            size: 18,
+          ),
           label: const Text('Pegar código'),
           style: TextButton.styleFrom(
             visualDensity: VisualDensity.compact,
@@ -627,7 +631,7 @@ class _AutorizacionCambioDialogState extends State<_AutorizacionCambioDialog> {
               const SizedBox(height: 12),
               if (widget.telefonoVerificado)
                 _OpcionCanal(
-                  icono: Icons.sms_rounded,
+                  icono: PhosphorIconsRegular.chatCircleDots,
                   texto: 'Por SMS a mi celular verificado',
                   seleccionado: _canalElegido == 'SMS',
                   onTap: () => setState(() => _canalElegido = 'SMS'),
@@ -636,7 +640,7 @@ class _AutorizacionCambioDialogState extends State<_AutorizacionCambioDialog> {
                 const SizedBox(height: 8),
               if (widget.emailVerificado)
                 _OpcionCanal(
-                  icono: Icons.email_rounded,
+                  icono: PhosphorIconsRegular.envelopeSimple,
                   texto: 'Por correo a mi email verificado',
                   seleccionado: _canalElegido == 'EMAIL',
                   onTap: () => setState(() => _canalElegido = 'EMAIL'),
@@ -908,8 +912,10 @@ class _VerificarCanalDialogState extends State<_VerificarCanalDialog> {
                   labelText: _esSms
                       ? 'Número de celular'
                       : 'Correo electrónico',
-                  prefixIcon: Icon(
-                    _esSms ? Icons.phone_outlined : Icons.email_outlined,
+                  prefixIcon: PhosphorIcon(
+                    _esSms
+                        ? PhosphorIconsRegular.phone
+                        : PhosphorIconsRegular.envelopeSimple,
                   ),
                 ),
               ),

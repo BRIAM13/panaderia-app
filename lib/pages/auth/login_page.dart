@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/usuario_sesion.dart';
 import '../../services/api_client.dart';
@@ -220,11 +221,13 @@ class _LoginPageState extends State<LoginPage> {
             final esEscritorio = constraints.maxWidth >= Breakpoints.tablet;
             final formulario = _construirFormulario(theme, scheme, esEscritorio);
 
-            // En pantallas anchas, el formulario angosto solo (sin nada
-            // más) se veía "perdido" y estirado en medio de tanto espacio.
-            // Se centra en una tarjeta de ancho fijo, sobre un fondo con
-            // los colores de la marca a pantalla completa — no un recorte
-            // en blanco en medio de la ventana.
+            // Grupo B: el login es UNA sola acción con un formulario chico
+            // — no gana nada con "más columnas". En pantallas anchas el
+            // formulario angosto solo (sin nada más) se veía "perdido" y
+            // estirado en medio de tanto espacio, así que se centra en una
+            // tarjeta de ancho fijo, sobre un fondo con los colores de la
+            // marca a pantalla completa — no un recorte en blanco en medio
+            // de la ventana.
             if (!esEscritorio) return formulario;
 
             return Container(
@@ -238,7 +241,7 @@ class _LoginPageState extends State<LoginPage> {
               child: Center(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxWidth: 440,
+                    maxWidth: 460,
                     // Con la altura acotada al espacio real de la ventana,
                     // el formulario (ya compactado para escritorio) entra
                     // completo sin scroll en pantallas normales de laptop
@@ -247,24 +250,41 @@ class _LoginPageState extends State<LoginPage> {
                     // vez de que la página entera tenga que desplazarse.
                     maxHeight: constraints.maxHeight - 24,
                   ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 36,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(28),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 40,
-                          offset: const Offset(0, 20),
-                        ),
-                      ],
-                    ),
-                    child: formulario,
-                  ),
+                  child:
+                      Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 36,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.background,
+                              borderRadius: BorderRadius.circular(28),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.35),
+                                width: 1.4,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.25),
+                                  blurRadius: 40,
+                                  offset: const Offset(0, 20),
+                                ),
+                              ],
+                            ),
+                            child: formulario,
+                          )
+                          .animate()
+                          .fadeIn(duration: 380.ms)
+                          .moveY(
+                            begin: 18,
+                            end: 0,
+                            curve: Curves.easeOutCubic,
+                          )
+                          .scale(
+                            begin: const Offset(0.97, 0.97),
+                            end: const Offset(1, 1),
+                            curve: Curves.easeOutCubic,
+                          ),
                 ),
               ),
             );
@@ -341,16 +361,25 @@ class _LoginPageState extends State<LoginPage> {
                 Text(
                       'Panadería Ronceros',
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.titleLarge,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                        height: 1.1,
+                      ),
                     )
                     .animate()
                     .fadeIn(delay: 80.ms, duration: 300.ms)
                     .moveY(begin: 8, end: 0),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
                       'Inicia sesión para continuar',
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                        color: AppColors.secondary,
+                      ),
                     )
                     .animate()
                     .fadeIn(delay: 120.ms, duration: 300.ms)
@@ -366,8 +395,8 @@ class _LoginPageState extends State<LoginPage> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              Icons.info_outline_rounded,
+                            PhosphorIcon(
+                              PhosphorIconsRegular.info,
                               color: scheme.onPrimaryContainer,
                             ),
                             const SizedBox(width: 10),
@@ -401,7 +430,9 @@ class _LoginPageState extends State<LoginPage> {
                             autofillHints: const [AutofillHints.username],
                             decoration: const InputDecoration(
                               labelText: 'Usuario (DNI o RUC)',
-                              prefixIcon: Icon(Icons.person_outline_rounded),
+                              prefixIcon: PhosphorIcon(
+                                PhosphorIconsRegular.identificationCard,
+                              ),
                             ),
                             validator: (value) =>
                                 (value == null || value.trim().isEmpty)
@@ -420,14 +451,14 @@ class _LoginPageState extends State<LoginPage> {
                             onFieldSubmitted: (_) => _iniciarSesion(),
                             decoration: InputDecoration(
                               labelText: 'Contraseña',
-                              prefixIcon: const Icon(
-                                Icons.lock_outline_rounded,
+                              prefixIcon: const PhosphorIcon(
+                                PhosphorIconsRegular.lockSimple,
                               ),
                               suffixIcon: IconButton(
-                                icon: Icon(
+                                icon: PhosphorIcon(
                                   _passwordVisible
-                                      ? Icons.visibility_off_rounded
-                                      : Icons.visibility_rounded,
+                                      ? PhosphorIconsRegular.eyeSlash
+                                      : PhosphorIconsRegular.eye,
                                 ),
                                 onPressed: () => setState(
                                   () => _passwordVisible = !_passwordVisible,
@@ -472,7 +503,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 16),
                 PremiumButton(
                       label: 'Iniciar sesión',
-                      icono: Icons.login_rounded,
+                      icono: PhosphorIconsRegular.signIn,
                       cargando: _cargando,
                       onPressed: _iniciarSesion,
                     )
@@ -513,8 +544,8 @@ class _LoginPageState extends State<LoginPage> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : Icon(
-                                      Icons.fingerprint_rounded,
+                                  : PhosphorIcon(
+                                      PhosphorIconsRegular.fingerprint,
                                       size: 32,
                                       color: scheme.primary,
                                     ),

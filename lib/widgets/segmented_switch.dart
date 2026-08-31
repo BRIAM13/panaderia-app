@@ -51,20 +51,27 @@ class SegmentedSwitch extends StatelessWidget {
                 children: List.generate(opciones.length, (index) {
                   final seleccionado = index == indiceSeleccionado;
                   return Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => onChanged(index),
-                      child: Center(
-                        child: AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 200),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            color: seleccionado
-                                ? Colors.white
-                                : scheme.onSurface.withValues(alpha: 0.6),
+                    // En web el cursor tiene que decir "esto se hace clic";
+                    // sin esto el selector parece una etiqueta decorativa.
+                    child: MouseRegion(
+                      cursor: seleccionado
+                          ? SystemMouseCursors.basic
+                          : SystemMouseCursors.click,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onChanged(index),
+                        child: Center(
+                          child: AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 200),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: seleccionado
+                                  ? Colors.white
+                                  : scheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                            child: Text(opciones[index]),
                           ),
-                          child: Text(opciones[index]),
                         ),
                       ),
                     ),

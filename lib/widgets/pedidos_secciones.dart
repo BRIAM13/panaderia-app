@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../services/pedidos_service.dart';
 import '../theme/app_theme.dart';
@@ -94,7 +95,7 @@ class ListaPedidosPorSeccion extends StatelessWidget {
         SeccionPedidos(
           titulo: 'Atrasados',
           subtitulo: 'De ayer o antes — necesitan atención',
-          icono: Icons.warning_amber_rounded,
+          icono: PhosphorIconsRegular.warning,
           color: const Color(0xFFC62828),
           pedidos: agrupados[SeccionPedido.atrasados]!,
           mostrarNombreCliente: mostrarNombreCliente,
@@ -104,7 +105,7 @@ class ListaPedidosPorSeccion extends StatelessWidget {
         SeccionPedidos(
           titulo: 'Hoy',
           subtitulo: 'Programados para entregarse hoy',
-          icono: Icons.today_rounded,
+          icono: PhosphorIconsRegular.calendarDots,
           color: AppColors.primary,
           pedidos: agrupados[SeccionPedido.hoy]!,
           mostrarNombreCliente: mostrarNombreCliente,
@@ -114,7 +115,7 @@ class ListaPedidosPorSeccion extends StatelessWidget {
         SeccionPedidos(
           titulo: 'Próximos',
           subtitulo: 'Mañana en adelante',
-          icono: Icons.upcoming_rounded,
+          icono: PhosphorIconsRegular.calendarPlus,
           color: const Color(0xFF2563EB),
           pedidos: agrupados[SeccionPedido.proximos]!,
           mostrarNombreCliente: mostrarNombreCliente,
@@ -124,7 +125,7 @@ class ListaPedidosPorSeccion extends StatelessWidget {
         SeccionPedidos(
           titulo: 'Sin fecha programada',
           subtitulo: 'A coordinar con el cliente',
-          icono: Icons.event_busy_rounded,
+          icono: PhosphorIconsRegular.calendarX,
           color: AppColors.textSecondary,
           pedidos: agrupados[SeccionPedido.sinFecha]!,
           mostrarNombreCliente: mostrarNombreCliente,
@@ -163,18 +164,24 @@ class SeccionPedidos extends StatelessWidget {
     if (pedidos.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
 
+    final anchoVentana = MediaQuery.sizeOf(context).width;
+    final escritorio = anchoVentana >= Breakpoints.escritorio;
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: EdgeInsets.only(bottom: escritorio ? 28 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icono, color: color, size: 20),
+              PhosphorIcon(icono, color: color, size: escritorio ? 22 : 20),
               const SizedBox(width: 8),
               Text(
                 titulo,
-                style: theme.textTheme.titleMedium?.copyWith(color: color),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: color,
+                  fontSize: escritorio ? 18 : null,
+                ),
               ),
               const SizedBox(width: 8),
               Container(
@@ -192,6 +199,18 @@ class SeccionPedidos extends StatelessWidget {
                   ),
                 ),
               ),
+              // En escritorio la fila del título se queda corta y flotando
+              // en medio de una ventana de 1600px: la línea la cierra y hace
+              // que se lea como una separación real entre secciones.
+              if (escritorio) ...[
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Container(
+                    height: 1,
+                    color: color.withValues(alpha: 0.18),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 2),
@@ -199,40 +218,65 @@ class SeccionPedidos extends StatelessWidget {
             padding: const EdgeInsets.only(left: 28),
             child: Text(subtitulo, style: theme.textTheme.bodyMedium),
           ),
-          const SizedBox(height: 10),
-          Builder(
-            builder: (context) {
+          SizedBox(height: escritorio ? 14 : 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
               final tarjetas = pedidos.asMap().entries.map(
-                (entry) => PedidoCard(
-                      pedido: entry.value,
-                      colorSeccion: color,
-                      mostrarNombreCliente: mostrarNombreCliente,
-                      onEntregar: onEntregar == null
-                          ? null
-                          : () => onEntregar!(entry.value),
-                      onCancelar: onCancelar == null
-                          ? null
-                          : () => onCancelar!(entry.value),
-                    )
-                    .animate(delay: (40 * entry.key).ms)
-                    .fadeIn(duration: 250.ms)
-                    .moveY(begin: 8, end: 0)
-                    .flipH(begin: 0.12, end: 0, duration: 320.ms),
+                (entry) =>
+                    PedidoCard(
+                          pedido: entry.value,
+                          colorSeccion: color,
+                          mostrarNombreCliente: mostrarNombreCliente,
+                          onEntregar: onEntregar == null
+                              ? null
+                              : () => onEntregar!(entry.value),
+                          onCancelar: onCancelar == null
+                              ? null
+                              : () => onCancelar!(entry.value),
+                        )
+                        .animate(delay: (40 * entry.key).ms)
+                        .fadeIn(duration: 250.ms)
+                        .moveY(begin: 8, end: 0)
+                        .flipH(begin: 0.12, end: 0, duration: 320.ms),
               );
 
-              // En pantallas anchas, varias tarjetas caben una al lado de
-              // la otra en vez de una debajo de la otra hasta el infinito
-              // — cada una con un ancho fijo tipo tarjeta, no estirada.
-              final esEscritorio =
-                  MediaQuery.sizeOf(context).width >= Breakpoints.tablet;
-              if (!esEscritorio) {
+              if (anchoVentana < Breakpoints.tablet) {
                 return Column(children: tarjetas.toList());
               }
+
+              // Tablet (600–900): se mantiene tal cual estaba — tarjetas de
+              // ancho fijo, una al lado de la otra.
+              if (!escritorio) {
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 0,
+                  children: tarjetas
+                      .map((t) => SizedBox(width: 380, child: t))
+                      .toList(),
+                );
+              }
+
+              // Escritorio: en vez de tarjetas de 380px fijos (que dejaban
+              // una franja muerta a la derecha en un monitor ancho), se
+              // calcula cuántas columnas entran y se reparte el ancho
+              // sobrante entre ellas, para que la grilla quede justificada
+              // de borde a borde.
+              const separacion = 14.0;
+              const anchoObjetivo = 380.0;
+              final columnas =
+                  ((constraints.maxWidth + separacion) /
+                          (anchoObjetivo + separacion))
+                      .floor()
+                      .clamp(1, 4);
+              final anchoTarjeta =
+                  (constraints.maxWidth - separacion * (columnas - 1)) /
+                  columnas;
+
               return Wrap(
-                spacing: 12,
+                spacing: separacion,
                 runSpacing: 0,
                 children: tarjetas
-                    .map((t) => SizedBox(width: 380, child: t))
+                    .map((t) => SizedBox(width: anchoTarjeta, child: t))
                     .toList(),
               );
             },
@@ -256,37 +300,37 @@ _EstadoPedidoInfo _infoEstado(Pedido pedido) {
       return const _EstadoPedidoInfo(
         'Por confirmar',
         Color(0xFFEA8C1B),
-        Icons.hourglass_top_rounded,
+        PhosphorIconsRegular.hourglassHigh,
       );
     case 'RECHAZADO':
       return const _EstadoPedidoInfo(
         'Rechazado',
         Color(0xFFC62828),
-        Icons.cancel_rounded,
+        PhosphorIconsFill.xCircle,
       );
     case 'CANCELADO':
       return const _EstadoPedidoInfo(
         'Cancelado',
         Color(0xFF6D4C41),
-        Icons.block_rounded,
+        PhosphorIconsRegular.prohibit,
       );
     case 'ENTREGADO':
       return pedido.esDeuda
           ? const _EstadoPedidoInfo(
               'Entregado · Deuda',
               Color(0xFFC62828),
-              Icons.account_balance_wallet_rounded,
+              PhosphorIconsRegular.wallet,
             )
           : const _EstadoPedidoInfo(
               'Entregado · Pagado',
               Color(0xFF2E7D32),
-              Icons.check_circle_rounded,
+              PhosphorIconsFill.checkCircle,
             );
     default:
       return const _EstadoPedidoInfo(
         'Pendiente a entrega',
         Color(0xFF2563EB),
-        Icons.event_available_rounded,
+        PhosphorIconsRegular.calendarCheck,
       );
   }
 }
@@ -358,10 +402,10 @@ class PedidoCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    child: Icon(
+                    child: PhosphorIcon(
                       pedido.tipoPedido == 'PAQUETES'
-                          ? Icons.inventory_2_rounded
-                          : Icons.local_dining_rounded,
+                          ? PhosphorIconsRegular.package
+                          : PhosphorIconsRegular.forkKnife,
                       color: colorSeccion,
                       size: 20,
                     ),
@@ -399,10 +443,10 @@ class PedidoCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(
+                            PhosphorIcon(
                               pedido.fechaEntrega != null
-                                  ? Icons.schedule_rounded
-                                  : Icons.event_busy_rounded,
+                                  ? PhosphorIconsRegular.clock
+                                  : PhosphorIconsRegular.calendarX,
                               size: 14,
                               color: AppColors.textSecondary,
                             ),
@@ -443,7 +487,7 @@ class PedidoCard extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
+                        PhosphorIcon(
                           estadoInfo.icono,
                           size: 13,
                           color: estadoInfo.color,
@@ -490,29 +534,65 @@ class PedidoCard extends StatelessWidget {
                   ],
                 ),
               ],
-              if (mostrarAccionEntregar) ...[
+              // Entregar y Cancelar: apilados a lo ancho en celular (dedo
+              // grande, pantalla angosta) y en una sola fila en escritorio
+              // — ahí el problema no es el ancho sino el alto, y dos botones
+              // full-width uno debajo del otro estiran cada tarjeta sin
+              // necesidad, dejando menos pedidos a la vista de un golpe.
+              if (mostrarAccionEntregar || mostrarAccionCancelar) ...[
                 const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: onEntregar,
-                    icon: const Icon(Icons.local_shipping_rounded, size: 18),
-                    label: const Text('Marcar entregado'),
-                  ),
-                ),
-              ],
-              if (mostrarAccionCancelar) ...[
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: onCancelar,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFC62828),
-                    ),
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    label: const Text('Cancelar pedido'),
-                  ),
+                Builder(
+                  builder: (context) {
+                    final botonEntregar = OutlinedButton.icon(
+                      onPressed: onEntregar,
+                      icon: const PhosphorIcon(
+                        PhosphorIconsRegular.truck,
+                        size: 18,
+                      ),
+                      label: const Text('Marcar entregado'),
+                    );
+                    final botonCancelar = OutlinedButton.icon(
+                      onPressed: onCancelar,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFC62828),
+                      ),
+                      icon: const PhosphorIcon(PhosphorIconsBold.x, size: 18),
+                      label: const Text('Cancelar pedido'),
+                    );
+
+                    final enEscritorio =
+                        MediaQuery.sizeOf(context).width >=
+                        Breakpoints.escritorio;
+
+                    if (enEscritorio &&
+                        mostrarAccionEntregar &&
+                        mostrarAccionCancelar) {
+                      return Row(
+                        children: [
+                          Expanded(child: botonEntregar),
+                          const SizedBox(width: 10),
+                          Expanded(child: botonCancelar),
+                        ],
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        if (mostrarAccionEntregar)
+                          SizedBox(
+                            width: double.infinity,
+                            child: botonEntregar,
+                          ),
+                        if (mostrarAccionEntregar && mostrarAccionCancelar)
+                          const SizedBox(height: 10),
+                        if (mostrarAccionCancelar)
+                          SizedBox(
+                            width: double.infinity,
+                            child: botonCancelar,
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ],
@@ -573,8 +653,8 @@ class NotaPedido extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
-              Icons.sticky_note_2_outlined,
+            const PhosphorIcon(
+              PhosphorIconsRegular.note,
               size: 15,
               color: AppColors.secondary,
             ),
@@ -609,10 +689,8 @@ class InfoAuditoriaPedido extends StatelessWidget {
       if (pedido.registradoPorRol != null)
         'Registrado por: ${_descripcionRegistro(pedido)}',
       if (pedido.aprobadoPor != null) 'Confirmado por: ${pedido.aprobadoPor}',
-      if (pedido.canceladoPor != null)
-        'Cancelado por: ${pedido.canceladoPor}',
-      if (pedido.entregadoPor != null)
-        'Entregado por: ${pedido.entregadoPor}',
+      if (pedido.canceladoPor != null) 'Cancelado por: ${pedido.canceladoPor}',
+      if (pedido.entregadoPor != null) 'Entregado por: ${pedido.entregadoPor}',
     ];
     if (lineas.isEmpty) return const SizedBox.shrink();
 

@@ -35,6 +35,11 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # Set de íconos profesional (reemplaza a Icons.* de Material en toda la
+  # app): 6 variantes de grosor por ícono (thin/light/regular/bold/fill/
+  # duotone), usadas para diferenciar estado normal vs. activo/hover.
+  phosphor_flutter: ^2.1.0
+
   # Animaciones fluidas y modernas para transiciones y micro-interacciones.
   flutter_animate: ^4.5.2
 

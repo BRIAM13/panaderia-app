@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 /// BottomSheet que ofrece activar el inicio de sesión biométrico.
 /// Devuelve `true` si el usuario acepta, `false`/`null` si declina o lo cierra.
@@ -51,8 +52,8 @@ class _BiometricOfferSheetContent extends StatelessWidget {
                       end: Alignment.bottomRight,
                     ),
                   ),
-                  child: const Icon(
-                    Icons.fingerprint_rounded,
+                  child: const PhosphorIcon(
+                    PhosphorIconsRegular.fingerprint,
                     color: Colors.white,
                     size: 40,
                   ),

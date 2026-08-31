@@ -9,6 +9,7 @@ import '../../services/pedidos_service.dart';
 import '../../services/solicitudes_pago_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/fecha_pedido_utils.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
@@ -168,7 +169,11 @@ class _DeudasPageState extends State<DeudasPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Deudas')),
+      appBar: appBarGestion(
+        context,
+        titulo: 'Deudas',
+        subtitulo: widget.tienda.nombre,
+      ),
       body: SafeArea(child: _construirCuerpo()),
     );
   }
@@ -192,6 +197,8 @@ class _DeudasPageState extends State<DeudasPage> {
     }
 
     final grupos = _agruparPorCliente(_deudas);
+
+    if (esEscritorio(context)) return _cuerpoEscritorio(grupos);
 
     return RefreshIndicator(
       onRefresh: _cargar,
@@ -253,6 +260,108 @@ class _DeudasPageState extends State<DeudasPage> {
     );
   }
 
+  // ---------------------------------------------------------------------
+  // ESCRITORIO
+  // ---------------------------------------------------------------------
+
+  /// Dos columnas: a la izquierda la COLA DE TRABAJO (pagos que el cliente
+  /// reportó y hay que confirmar contra Yape/Plin), a la derecha la deuda
+  /// abierta por cliente. En celular la cola queda encima de la lista y, con
+  /// varias deudas, hay que desplazarse hacia arriba cada vez que se quiere
+  /// volver a ella; acá las dos están a la vista al mismo tiempo.
+  Widget _cuerpoEscritorio(List<_GrupoDeuda> grupos) {
+    final deudaTotal = grupos.fold<double>(0, (acc, g) => acc + g.total);
+
+    final panelSolicitudes = PanelEscritorio(
+      icono: Icons.qr_code_2_rounded,
+      titulo: 'Pagos reportados',
+      subtitulo: 'Revisa y confirma según tu Yape/Plin/cuenta.',
+      child: Column(
+        children: [
+          for (var i = 0; i < _solicitudes.length; i++)
+            _TarjetaSolicitudPago(
+                  solicitud: _solicitudes[i],
+                  plana: true,
+                  onConfirmar: () => _confirmarSolicitud(_solicitudes[i]),
+                  onRechazar: () => _rechazarSolicitud(_solicitudes[i]),
+                )
+                .animate(delay: (50 * i).ms)
+                .fadeIn(duration: 280.ms)
+                .moveY(begin: 10, end: 0),
+        ],
+      ),
+    );
+
+    final panelDeudas = PanelEscritorio(
+      icono: Icons.account_balance_wallet_rounded,
+      titulo: 'Deuda abierta por cliente',
+      subtitulo: grupos.isEmpty
+          ? 'Ningún cliente debe nada ahora mismo.'
+          : 'Ordenados de mayor a menor.',
+      accion: grupos.isEmpty
+          ? null
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC62828).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'S/ ${deudaTotal.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: Color(0xFFC62828),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+      child: grupos.isEmpty
+          ? const SizedBox(
+              height: 200,
+              child: EstadoVacio(
+                icono: Icons.check_circle_outline_rounded,
+                titulo: 'Sin deudas abiertas',
+              ),
+            )
+          : Column(
+              children: [
+                for (var i = 0; i < grupos.length; i++)
+                  _GrupoDeudaCliente(
+                        grupo: grupos[i],
+                        plana: true,
+                        onMarcarPagada: _marcarPagada,
+                      )
+                      .animate(delay: (50 * i).ms)
+                      .fadeIn(duration: 280.ms)
+                      .moveY(begin: 10, end: 0),
+              ],
+            ),
+    );
+
+    return RefreshIndicator(
+      onRefresh: _cargar,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(32, 24, 32, 56),
+        children: [
+          ContenidoCentrado(
+            child: _solicitudes.isEmpty
+                // Sin cola pendiente no tiene sentido reservarle media
+                // pantalla: la lista de deudas se queda con todo el ancho.
+                ? panelDeudas
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 2, child: panelSolicitudes),
+                      const SizedBox(width: espacioEscritorio),
+                      Expanded(flex: 3, child: panelDeudas),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<_GrupoDeuda> _agruparPorCliente(List<Pedido> deudas) {
     final mapa = <int, List<Pedido>>{};
     for (final pedido in deudas) {
@@ -280,11 +389,16 @@ class _TarjetaSolicitudPago extends StatelessWidget {
     required this.solicitud,
     required this.onConfirmar,
     required this.onRechazar,
+    this.plana = false,
   });
 
   final SolicitudPagoPendiente solicitud;
   final VoidCallback onConfirmar;
   final VoidCallback onRechazar;
+
+  /// Dentro de un [PanelEscritorio]: borde fino en vez de tarjeta con sombra
+  /// (una tarjeta con sombra dentro de otra tarjeta se ve sucio).
+  final bool plana;
 
   @override
   Widget build(BuildContext context) {
@@ -292,10 +406,11 @@ class _TarjetaSolicitudPago extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Tarjeta3D(
-        borderRadius: 18,
+      child: _Marco(
+        plana: plana,
+        radio: 18,
         child: Container(
-          color: AppColors.surface,
+          color: plana ? null : AppColors.surface,
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,11 +478,41 @@ class _TarjetaSolicitudPago extends StatelessWidget {
   }
 }
 
+/// Marco de una tarjeta de esta pantalla: [Tarjeta3D] con sombra en celular,
+/// contenedor con borde fino cuando ya vive dentro de un panel de
+/// escritorio.
+class _Marco extends StatelessWidget {
+  const _Marco({required this.child, required this.plana, this.radio = 20});
+
+  final Widget child;
+  final bool plana;
+  final double radio;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!plana) return Tarjeta3D(borderRadius: radio, child: child);
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(radio),
+        border: Border.all(color: AppColors.surfaceMuted, width: 1.2),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
+  }
+}
+
 class _GrupoDeudaCliente extends StatelessWidget {
-  const _GrupoDeudaCliente({required this.grupo, required this.onMarcarPagada});
+  const _GrupoDeudaCliente({
+    required this.grupo,
+    required this.onMarcarPagada,
+    this.plana = false,
+  });
 
   final _GrupoDeuda grupo;
   final ValueChanged<Pedido> onMarcarPagada;
+  final bool plana;
 
   @override
   Widget build(BuildContext context) {
@@ -376,9 +521,10 @@ class _GrupoDeudaCliente extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: Tarjeta3D(
+      child: _Marco(
+        plana: plana,
         child: Container(
-          color: AppColors.surface,
+          color: plana ? null : AppColors.surface,
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

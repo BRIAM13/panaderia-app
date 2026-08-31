@@ -7,6 +7,7 @@ import '../../services/api_client.dart';
 import '../../services/clientes_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/segmento_utils.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
@@ -16,6 +17,11 @@ import 'cliente_form_page.dart';
 /// Perfil de cliente del CRM: historial agregado, segmento automático,
 /// puntos de fidelidad (con canje) y notas internas del personal — todo lo
 /// que el módulo de Clientes ya guardaba pero nunca mostraba junto.
+///
+/// Es una cáscara delgada (Scaffold + AppBar) sobre [ClientePerfilVista],
+/// que es donde vive todo el contenido y la carga de datos. Esa separación
+/// existe porque en escritorio el mismo perfil se muestra EMBEBIDO en el
+/// panel derecho de la lista de Clientes, sin navegar a otra ruta.
 class ClientePerfilPage extends StatefulWidget {
   const ClientePerfilPage({super.key, required Cliente this.cliente})
     : _idCliente = null;
@@ -38,6 +44,63 @@ class ClientePerfilPage extends StatefulWidget {
 }
 
 class _ClientePerfilPageState extends State<ClientePerfilPage> {
+  /// El botón "Editar" vive en el AppBar (fuera de la vista), así que
+  /// necesita una llave para pedirle a la vista que abra el formulario.
+  final _vistaKey = GlobalKey<ClientePerfilVistaState>();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: appBarGestion(
+        context,
+        titulo: 'Perfil del cliente',
+        subtitulo: 'Historial, segmento, puntos y notas internas',
+        acciones: [
+          IconButton(
+            icon: const Icon(Icons.edit_rounded),
+            tooltip: 'Editar cliente',
+            onPressed: () => _vistaKey.currentState?.editar(),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: ClientePerfilVista(
+          key: _vistaKey,
+          idCliente: widget.idCliente,
+          clienteInicial: widget.cliente,
+        ),
+      ),
+    );
+  }
+}
+
+/// El contenido del perfil, sin barra ni Scaffold — reutilizable tal cual
+/// como panel de detalle en el maestro-detalle de escritorio.
+class ClientePerfilVista extends StatefulWidget {
+  const ClientePerfilVista({
+    super.key,
+    required this.idCliente,
+    this.clienteInicial,
+    this.embebido = false,
+    this.onCambio,
+  });
+
+  final int idCliente;
+  final Cliente? clienteInicial;
+
+  /// true cuando la vista vive dentro del panel derecho de Clientes: como
+  /// ahí no hay AppBar, se dibuja su propia barra de acciones arriba.
+  final bool embebido;
+
+  /// Aviso al maestro de que algo cambió (se editó el cliente, se canjearon
+  /// puntos) para que refresque su lista.
+  final VoidCallback? onCambio;
+
+  @override
+  State<ClientePerfilVista> createState() => ClientePerfilVistaState();
+}
+
+class ClientePerfilVistaState extends State<ClientePerfilVista> {
   final _clientesService = ClientesService();
   final _notaController = TextEditingController();
 
@@ -83,18 +146,24 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
     }
   }
 
-  /// La ficha a editar sale del perfil ya cargado (no de `widget.cliente`),
-  /// que es la versión recién traída del servidor y existe también cuando se
-  /// entró solo con el id.
-  Future<void> _editar() async {
-    final cliente = _perfil?.cliente ?? widget.cliente;
+  /// La ficha a editar sale del perfil ya cargado (no de
+  /// `widget.clienteInicial`), que es la versión recién traída del servidor y
+  /// existe también cuando se entró solo con el id.
+  ///
+  /// Público: lo dispara el botón del AppBar de [ClientePerfilPage], que vive
+  /// fuera de este widget.
+  Future<void> editar() async {
+    final cliente = _perfil?.cliente ?? widget.clienteInicial;
     if (cliente == null) return;
 
     final guardado = await pushSlideUpFade<bool>(
       context,
       (_) => ClienteFormPage(clienteExistente: cliente),
     );
-    if (guardado == true) _cargar();
+    if (guardado == true) {
+      await _cargar();
+      widget.onCambio?.call();
+    }
   }
 
   Future<void> _agregarNota() async {
@@ -137,7 +206,8 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Se canjearon $resultado puntos.')),
       );
-      _cargar();
+      await _cargar();
+      widget.onCambio?.call();
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -147,21 +217,7 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Perfil del cliente'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_rounded),
-            tooltip: 'Editar cliente',
-            onPressed: _editar,
-          ),
-        ],
-      ),
-      body: SafeArea(child: _construirCuerpo()),
-    );
-  }
+  Widget build(BuildContext context) => _construirCuerpo();
 
   Widget _construirCuerpo() {
     if (_cargando) {
@@ -172,17 +228,30 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
     }
 
     final perfil = _perfil!;
+    // Embebido en el panel de detalle hay más ancho: el historial pasa a una
+    // sola fila de 4 métricas (en vez de 2x2) y el bloque respira más.
+    final embebido = widget.embebido;
+
     return RefreshIndicator(
       onRefresh: _cargar,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        padding: embebido
+            ? const EdgeInsets.fromLTRB(24, 20, 24, 40)
+            : const EdgeInsets.fromLTRB(20, 16, 20, 40),
         children: [
+          if (embebido) ...[
+            _BarraAccionesPerfil(
+              onEditar: editar,
+              onRecargar: _cargar,
+            ).animate().fadeIn(duration: 200.ms),
+            const SizedBox(height: 16),
+          ],
           _EncabezadoCliente(perfil: perfil)
               .animate()
               .fadeIn(duration: 250.ms)
               .moveY(begin: 8, end: 0),
           const SizedBox(height: 16),
-          _TarjetaHistorial(historial: perfil.historial)
+          _TarjetaHistorial(historial: perfil.historial, enFila: embebido)
               .animate(delay: 60.ms)
               .fadeIn(duration: 250.ms)
               .moveY(begin: 8, end: 0),
@@ -206,6 +275,45 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
               .moveY(begin: 8, end: 0),
         ],
       ),
+    );
+  }
+}
+
+/// Barra de acciones del perfil cuando se muestra embebido (sin AppBar que
+/// las aloje).
+class _BarraAccionesPerfil extends StatelessWidget {
+  const _BarraAccionesPerfil({required this.onEditar, required this.onRecargar});
+
+  final VoidCallback onEditar;
+  final VoidCallback onRecargar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        TextButton.icon(
+          onPressed: onRecargar,
+          icon: const Icon(Icons.refresh_rounded, size: 18),
+          label: const Text('Actualizar'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.icon(
+          onPressed: onEditar,
+          icon: const Icon(Icons.edit_rounded, size: 18),
+          label: const Text('Editar cliente'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -336,9 +444,13 @@ class _FilaDato extends StatelessWidget {
 }
 
 class _TarjetaHistorial extends StatelessWidget {
-  const _TarjetaHistorial({required this.historial});
+  const _TarjetaHistorial({required this.historial, this.enFila = false});
 
   final HistorialCliente historial;
+
+  /// true en el panel de detalle de escritorio: las 4 métricas van en una
+  /// sola fila en vez de la grilla 2x2 pensada para un celular angosto.
+  final bool enFila;
 
   String get _ultimaCompraTexto {
     final dias = historial.diasDesdeUltimaCompra;
@@ -351,6 +463,31 @@ class _TarjetaHistorial extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    final metricas = <Widget>[
+      _EstadisticaChica(
+        etiqueta: 'Gastado',
+        valor: 'S/ ${historial.totalGastado.toStringAsFixed(2)}',
+        icono: Icons.payments_outlined,
+      ),
+      _EstadisticaChica(
+        etiqueta: 'Entregados',
+        valor: '${historial.pedidosEntregados}',
+        icono: Icons.local_shipping_outlined,
+      ),
+      _EstadisticaChica(
+        etiqueta: 'Deuda pendiente',
+        valor: 'S/ ${historial.deudaPendiente.toStringAsFixed(2)}',
+        icono: Icons.warning_amber_outlined,
+        destacar: historial.deudaPendiente > 0,
+      ),
+      _EstadisticaChica(
+        etiqueta: 'Última compra',
+        valor: _ultimaCompraTexto,
+        icono: Icons.event_outlined,
+      ),
+    ];
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -369,46 +506,33 @@ class _TarjetaHistorial extends StatelessWidget {
         children: [
           Text('Historial de compras', style: theme.textTheme.titleMedium),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _EstadisticaChica(
-                  etiqueta: 'Gastado',
-                  valor: 'S/ ${historial.totalGastado.toStringAsFixed(2)}',
-                  icono: Icons.payments_outlined,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _EstadisticaChica(
-                  etiqueta: 'Entregados',
-                  valor: '${historial.pedidosEntregados}',
-                  icono: Icons.local_shipping_outlined,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _EstadisticaChica(
-                  etiqueta: 'Deuda pendiente',
-                  valor: 'S/ ${historial.deudaPendiente.toStringAsFixed(2)}',
-                  icono: Icons.warning_amber_outlined,
-                  destacar: historial.deudaPendiente > 0,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _EstadisticaChica(
-                  etiqueta: 'Última compra',
-                  valor: _ultimaCompraTexto,
-                  icono: Icons.event_outlined,
-                ),
-              ),
-            ],
-          ),
+          if (enFila)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < metricas.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 12),
+                  Expanded(child: metricas[i]),
+                ],
+              ],
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(child: metricas[0]),
+                const SizedBox(width: 12),
+                Expanded(child: metricas[1]),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: metricas[2]),
+                const SizedBox(width: 12),
+                Expanded(child: metricas[3]),
+              ],
+            ),
+          ],
           if (historial.tiendas.isNotEmpty) ...[
             const SizedBox(height: 14),
             Wrap(

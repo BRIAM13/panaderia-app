@@ -42,6 +42,11 @@ class _Tarjeta3DState extends State<Tarjeta3D>
   late final double _signoX = (hashCode.isEven) ? 1 : -1;
   late final double _signoY = (hashCode.isOdd) ? 1 : -1;
 
+  // El tilt táctil no existe en escritorio (no hay "presionar y soltar"
+  // con el mouse igual que con el dedo): sin hover, una grilla de tarjetas
+  // clicables en web se ve completamente inerte hasta que ya hiciste clic.
+  bool _hover = false;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -54,41 +59,58 @@ class _Tarjeta3DState extends State<Tarjeta3D>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      onTapDown: widget.onTap == null ? null : _onTapDown,
-      onTapUp: widget.onTap == null ? null : _onTapUp,
-      onTapCancel: widget.onTap == null ? null : _onTapCancel,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final t = Curves.easeOut.transform(_controller.value);
-          final matriz = Matrix4.identity()
-            ..setEntry(3, 2, widget.profundidad)
-            ..rotateX(0.05 * t * _signoY)
-            ..rotateY(0.05 * t * _signoX)
-            ..scaleByDouble(1 - (0.02 * t), 1 - (0.02 * t), 1, 1);
-          return Transform(
-            alignment: Alignment.center,
-            transform: matriz,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(widget.borderRadius),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.16 + (0.10 * t)),
-                    blurRadius: 18 - (10 * t),
-                    offset: Offset(0, 8 - (6 * t)),
-                  ),
-                ],
+    final clicable = widget.onTap != null;
+
+    return MouseRegion(
+      cursor: clicable ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: (_) {
+        if (clicable) setState(() => _hover = true);
+      },
+      onExit: (_) {
+        if (clicable) setState(() => _hover = false);
+      },
+      child: GestureDetector(
+        onTap: widget.onTap,
+        onTapDown: widget.onTap == null ? null : _onTapDown,
+        onTapUp: widget.onTap == null ? null : _onTapUp,
+        onTapCancel: widget.onTap == null ? null : _onTapCancel,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            final t = Curves.easeOut.transform(_controller.value);
+            // El hover levanta la tarjeta; presionarla la vuelve a hundir,
+            // así que el desplazamiento se apaga a medida que entra el tilt.
+            final alza = _hover ? -3.0 * (1 - t) : 0.0;
+            final matriz = Matrix4.identity()
+              ..setEntry(3, 2, widget.profundidad)
+              ..translateByDouble(0, alza, 0, 1)
+              ..rotateX(0.05 * t * _signoY)
+              ..rotateY(0.05 * t * _signoX)
+              ..scaleByDouble(1 - (0.02 * t), 1 - (0.02 * t), 1, 1);
+            return Transform(
+              alignment: Alignment.center,
+              transform: matriz,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(widget.borderRadius),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                        alpha: (_hover ? 0.22 : 0.16) + (0.10 * t),
+                      ),
+                      blurRadius: (_hover ? 26 : 18) - (10 * t),
+                      offset: Offset(0, (_hover ? 12 : 8) - (6 * t)),
+                    ),
+                  ],
+                ),
+                child: child,
               ),
-              child: child,
-            ),
-          );
-        },
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(widget.borderRadius),
-          child: widget.child,
+            );
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+            child: widget.child,
+          ),
         ),
       ),
     );

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -17,6 +18,7 @@ import '../../services/solicitudes_pago_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
 import '../../widgets/ad_banner.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
@@ -157,10 +159,10 @@ class _MisDeudasPageState extends State<MisDeudasPage> {
             ),
             ...medios.map(
               (m) => ListTile(
-                leading: Icon(
+                leading: PhosphorIcon(
                   m.tipo == 'TRANSFERENCIA'
-                      ? Icons.account_balance_rounded
-                      : Icons.phone_android_rounded,
+                      ? PhosphorIconsRegular.bank
+                      : PhosphorIconsRegular.deviceMobile,
                 ),
                 title: Text(m.etiquetaTipo),
                 subtitle: Text('${m.titular} · ${m.numeroDestino}'),
@@ -193,26 +195,65 @@ class _MisDeudasPageState extends State<MisDeudasPage> {
 
   @override
   Widget build(BuildContext context) {
+    final escritorio = esEscritorio(context);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Mis deudas')),
-      body: SafeArea(child: _construirCuerpo()),
+      appBar: escritorio
+          ? appBarGestion(
+              context,
+              titulo: 'Mis deudas',
+              subtitulo: 'Pedidos entregados que faltan pagar',
+            )
+          : AppBar(title: const Text('Mis deudas')),
+      body: SafeArea(child: _construirCuerpo(escritorio)),
       bottomNavigationBar: _seleccionados.isNotEmpty
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: FilledButton(
-                  onPressed: _pagarSeleccionadas,
-                  child: Text(
-                    'Pagar S/ ${_totalSeleccionado.toStringAsFixed(2)}',
-                  ),
-                ),
+                // En escritorio la barra de pago no se estira de borde a
+                // borde de un monitor: se centra al mismo ancho útil que
+                // las tarjetas, con el detalle de qué se está pagando.
+                child: escritorio
+                    ? ContenidoCentrado(
+                        anchoMaximo: 1100,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text(
+                              '${_seleccionados.length} '
+                              '${_seleccionados.length == 1 ? "deuda seleccionada" : "deudas seleccionadas"}',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(width: 16),
+                            SizedBox(
+                              width: 280,
+                              child: FilledButton.icon(
+                                onPressed: _pagarSeleccionadas,
+                                icon: const PhosphorIcon(
+                                  PhosphorIconsRegular.qrCode,
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  'Pagar S/ ${_totalSeleccionado.toStringAsFixed(2)}',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : FilledButton(
+                        onPressed: _pagarSeleccionadas,
+                        child: Text(
+                          'Pagar S/ ${_totalSeleccionado.toStringAsFixed(2)}',
+                        ),
+                      ),
               ),
             )
           : (widget.mostrarAnuncio ? const AdBanner() : null),
     );
   }
 
-  Widget _construirCuerpo() {
+  Widget _construirCuerpo(bool escritorio) {
     if (_cargando) return const Center(child: AppLoadingIndicator());
 
     if (_error != null) {
@@ -221,7 +262,7 @@ class _MisDeudasPageState extends State<MisDeudasPage> {
 
     if (_deudas.isEmpty) {
       return EstadoVacio(
-        icono: Icons.check_circle_outline_rounded,
+        icono: PhosphorIconsRegular.checkCircle,
         titulo: 'No tienes deudas pendientes',
         onRefrescar: _cargar,
       );
@@ -240,6 +281,77 @@ class _MisDeudasPageState extends State<MisDeudasPage> {
           .fadeIn(duration: 300.ms)
           .moveY(begin: 10, end: 0);
     });
+
+    // Escritorio (>= Breakpoints.escritorio): además del Wrap que ya había
+    // desde tablet, el contenido se centra con techo de ancho y las
+    // tarjetas se reparten en columnas de ancho igual (no de 380 px fijos,
+    // que dejaban un hueco enorme a la derecha en un monitor ancho).
+    if (escritorio) {
+      return RefreshIndicator(
+        onRefresh: _cargar,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(32, 24, 32, 100),
+          children: [
+            ContenidoCentrado(
+              anchoMaximo: 1100,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  EncabezadoEscritorio(
+                    anteTitulo: 'MI CUENTA',
+                    titulo: 'Mis deudas',
+                    subtitulo:
+                        'Selecciona una o varias deudas de la MISMA tienda '
+                        'para generar un código de pago.',
+                    acciones: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${_deudas.length} '
+                          '${_deudas.length == 1 ? "pendiente" : "pendientes"}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.4,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: espacioEscritorio),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Dos columnas a partir de 900 px de ventana; tres
+                      // cuando el ancho útil ya da para tarjetas cómodas.
+                      final columnas = constraints.maxWidth >= 1000 ? 3 : 2;
+                      const separacion = 16.0;
+                      final ancho =
+                          (constraints.maxWidth -
+                              separacion * (columnas - 1)) /
+                          columnas;
+                      return Wrap(
+                        spacing: separacion,
+                        children: tarjetas
+                            .map((t) => SizedBox(width: ancho, child: t))
+                            .toList(),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _cargar,
@@ -313,8 +425,8 @@ class _TarjetaDeuda extends StatelessWidget {
               else
                 const Padding(
                   padding: EdgeInsets.only(right: 8),
-                  child: Icon(
-                    Icons.hourglass_top_rounded,
+                  child: PhosphorIcon(
+                    PhosphorIconsRegular.hourglassHigh,
                     color: Color(0xFFEA8C1B),
                   ),
                 ),
@@ -479,17 +591,32 @@ class _QrPagoPageState extends State<_QrPagoPage> {
     final solicitud = widget.solicitud;
     final medioPago = solicitud.medioPago;
 
+    final escritorio = esEscritorio(context);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Pagar deuda')),
+      appBar: escritorio
+          ? appBarGestion(
+              context,
+              titulo: 'Pagar deuda',
+              subtitulo: 'Código de un solo uso · ${medioPago.etiquetaTipo}',
+            )
+          : AppBar(title: const Text('Pagar deuda')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
+          padding: escritorio
+              ? const EdgeInsets.fromLTRB(24, 28, 24, 48)
+              : const EdgeInsets.all(20),
+          // El QR y sus datos son una sola secuencia vertical: en un
+          // monitor ancho no gana nada estirándose, así que se centra con
+          // un techo de ancho de tarjeta (520 px).
+          child: ContenidoCentrado(
+            anchoMaximo: escritorio ? 520 : double.infinity,
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_reportado) ...[
-                const Icon(
-                  Icons.check_circle_rounded,
+                const PhosphorIcon(
+                  PhosphorIconsFill.checkCircle,
                   color: Color(0xFF2E7D32),
                   size: 64,
                 ),
@@ -638,7 +765,9 @@ class _QrPagoPageState extends State<_QrPagoPage> {
                 if (!_fueAPagar)
                   FilledButton.icon(
                     onPressed: _irAPagar,
-                    icon: const Icon(Icons.open_in_new_rounded),
+                    icon: const PhosphorIcon(
+                      PhosphorIconsRegular.arrowSquareOut,
+                    ),
                     label: const Text('Ir a pagar'),
                   )
                 else ...[
@@ -660,6 +789,7 @@ class _QrPagoPageState extends State<_QrPagoPage> {
                 ],
               ],
             ],
+            ),
           ),
         ),
       ),

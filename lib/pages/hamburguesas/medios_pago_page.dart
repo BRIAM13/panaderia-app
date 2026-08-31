@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/medio_pago_model.dart';
 import '../../models/tienda_model.dart';
@@ -11,9 +12,12 @@ import '../../services/medios_pago_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/text_formatters.dart';
+import 'escritorio_hamburguesas.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/premium_button.dart';
+import '../../widgets/selector_desplegable.dart';
 import '../../widgets/tarjeta_3d.dart';
 
 const _tiposMedioPago = ['YAPE', 'PLIN', 'TRANSFERENCIA', 'OTRO'];
@@ -114,13 +118,37 @@ class _MediosPagoPageState extends State<MediosPagoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final escritorio = esEscritorio(context);
+    final activos = _medios.where((m) => m.estado).length;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Métodos de pago')),
-      floatingActionButton: _tiendaSeleccionada == null
+      // En escritorio "Agregar método" sube al encabezado: un FAB en la
+      // esquina de un monitor ancho queda a media pantalla de distancia de
+      // la lista que está mirando el usuario.
+      appBar: appBarGestion(
+        context,
+        titulo: 'Métodos de pago',
+        subtitulo: _medios.isEmpty
+            ? 'Yape, Plin o transferencia para cobrar deudas'
+            : '${_medios.length} configurado(s) · $activos activo(s)',
+        acciones: [
+          if (escritorio && _tiendaSeleccionada != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: PremiumButton(
+                label: 'Agregar método',
+                icono: PhosphorIconsBold.plus,
+                expandido: false,
+                onPressed: () => _abrirFormulario(),
+              ),
+            ),
+        ],
+      ),
+      floatingActionButton: escritorio || _tiendaSeleccionada == null
           ? null
           : FloatingActionButton.extended(
               onPressed: () => _abrirFormulario(),
-              icon: const Icon(Icons.add_rounded),
+              icon: const PhosphorIcon(PhosphorIconsBold.plus),
               label: const Text('Agregar método'),
             ),
       body: SafeArea(child: _construirCuerpo()),
@@ -136,65 +164,102 @@ class _MediosPagoPageState extends State<MediosPagoPage> {
     }
     if (_tiendas.isEmpty) {
       return EstadoVacio(
-        icono: Icons.storefront_outlined,
+        icono: PhosphorIconsDuotone.storefront,
         titulo: 'No tienes tiendas asignadas',
       );
     }
 
+    final escritorio = esEscritorio(context);
+
+    final tarjetas = _medios.asMap().entries.map(
+      (entry) =>
+          _TarjetaMedioPago(
+                medio: entry.value,
+                onEditar: () => _abrirFormulario(medioExistente: entry.value),
+                onCambiarEstado: (activo) =>
+                    _cambiarEstado(entry.value, activo),
+              )
+              .animate(delay: (60 * entry.key).ms)
+              .fadeIn(duration: 300.ms)
+              .moveY(begin: 10, end: 0)
+              .flipH(begin: 0.12, end: 0, duration: 320.ms),
+    );
+
     return RefreshIndicator(
       onRefresh: _cargarMedios,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
-        children: [
-          if (_tiendas.length > 1) ...[
-            DropdownButtonFormField<Tienda>(
-              initialValue: _tiendaSeleccionada,
-              items: _tiendas
-                  .map((t) => DropdownMenuItem(value: t, child: Text(t.nombre)))
-                  .toList(),
-              onChanged: (t) {
-                setState(() => _tiendaSeleccionada = t);
-                _cargarMedios();
-              },
-              decoration: const InputDecoration(
-                labelText: 'Tienda',
-                prefixIcon: Icon(Icons.storefront_rounded),
+      child: ContenidoCentrado(
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            escritorio ? 28 : 20,
+            escritorio ? 20 : 12,
+            escritorio ? 28 : 20,
+            escritorio ? 40 : 100,
+          ),
+          children: [
+            if (_tiendas.length > 1) ...[
+              // El selector de tienda es un combo de una palabra: estirado
+              // a todo el ancho de un monitor se ve absurdo.
+              SizedBox(
+                width: escritorio ? 340 : double.infinity,
+                child: SelectorDesplegable<Tienda>(
+                  valor: _tiendaSeleccionada,
+                  opciones: _tiendas,
+                  etiqueta: (t) => t.nombre,
+                  label: 'Tienda',
+                  icono: PhosphorIconsRegular.storefront,
+                  onChanged: (t) {
+                    setState(() => _tiendaSeleccionada = t);
+                    _cargarMedios();
+                  },
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ],
+            if (_cargando)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Center(child: AppLoadingIndicator()),
+              )
+            else if (_medios.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: EstadoVacio(
+                  icono: PhosphorIconsDuotone.wallet,
+                  titulo: 'Aún no configuraste ningún método de pago',
+                  subtitulo:
+                      'Agrega Yape, Plin, transferencia u otro para que tus '
+                      'clientes puedan pagar sus deudas.',
+                ),
+              )
+            else if (!escritorio)
+              ...tarjetas
+            else
+              // Escritorio: los métodos de pago son pocos y de alto
+              // parejo — en grilla se ven todos de un vistazo, en vez de
+              // una sola columna de tarjetas anchísimas.
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  const separacion = 16.0;
+                  const anchoObjetivo = 420.0;
+                  final columnas =
+                      ((constraints.maxWidth + separacion) /
+                              (anchoObjetivo + separacion))
+                          .floor()
+                          .clamp(1, 3);
+                  final ancho =
+                      (constraints.maxWidth - separacion * (columnas - 1)) /
+                      columnas;
+                  return Wrap(
+                    spacing: separacion,
+                    runSpacing: 0,
+                    children: tarjetas
+                        .map((t) => SizedBox(width: ancho, child: t))
+                        .toList(),
+                  );
+                },
+              ),
           ],
-          if (_cargando)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(child: AppLoadingIndicator()),
-            )
-          else if (_medios.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: EstadoVacio(
-                icono: Icons.account_balance_wallet_outlined,
-                titulo: 'Aún no configuraste ningún método de pago',
-                subtitulo:
-                    'Agrega Yape, Plin, transferencia u otro para que tus '
-                    'clientes puedan pagar sus deudas.',
-              ),
-            )
-          else
-            ..._medios.asMap().entries.map(
-              (entry) =>
-                  _TarjetaMedioPago(
-                        medio: entry.value,
-                        onEditar: () =>
-                            _abrirFormulario(medioExistente: entry.value),
-                        onCambiarEstado: (activo) =>
-                            _cambiarEstado(entry.value, activo),
-                      )
-                      .animate(delay: (60 * entry.key).ms)
-                      .fadeIn(duration: 300.ms)
-                      .moveY(begin: 10, end: 0)
-                      .flipH(begin: 0.12, end: 0, duration: 320.ms),
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -215,11 +280,11 @@ class _TarjetaMedioPago extends StatelessWidget {
     switch (medio.tipo) {
       case 'YAPE':
       case 'PLIN':
-        return Icons.phone_android_rounded;
+        return PhosphorIconsRegular.deviceMobile;
       case 'TRANSFERENCIA':
-        return Icons.account_balance_rounded;
+        return PhosphorIconsRegular.bank;
       default:
-        return Icons.payments_rounded;
+        return PhosphorIconsRegular.money;
     }
   }
 
@@ -236,7 +301,7 @@ class _TarjetaMedioPago extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(_icono, color: AppColors.primary),
+              PhosphorIcon(_icono, color: AppColors.primary),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -262,10 +327,10 @@ class _TarjetaMedioPago extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
+                        PhosphorIcon(
                           medio.imagenQrBase64 != null
-                              ? Icons.qr_code_2_rounded
-                              : Icons.qr_code_2_outlined,
+                              ? PhosphorIconsRegular.qrCode
+                              : PhosphorIconsRegular.qrCode,
                           size: 14,
                           color: medio.imagenQrBase64 != null
                               ? const Color(0xFF2E7D32)
@@ -291,7 +356,10 @@ class _TarjetaMedioPago extends StatelessWidget {
               ),
               IconButton(
                 onPressed: onEditar,
-                icon: const Icon(Icons.edit_rounded, size: 20),
+                icon: const PhosphorIcon(
+                  PhosphorIconsRegular.pencilSimple,
+                  size: 20,
+                ),
               ),
               Switch(value: medio.estado, onChanged: onCambiarEstado),
             ],
@@ -380,12 +448,12 @@ class _FormularioMedioPagoState extends State<_FormularioMedioPago> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
+              leading: const PhosphorIcon(PhosphorIconsRegular.images),
               title: const Text('Elegir de la galería'),
               onTap: () => Navigator.of(context).pop(ImageSource.gallery),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
+              leading: const PhosphorIcon(PhosphorIconsRegular.camera),
               title: const Text('Tomar una foto'),
               onTap: () => Navigator.of(context).pop(ImageSource.camera),
             ),
@@ -465,152 +533,156 @@ class _FormularioMedioPagoState extends State<_FormularioMedioPago> {
 
   @override
   Widget build(BuildContext context) {
+    // El AlertDialog de Material topa el contenido en 280px de ancho: en
+    // escritorio este formulario (tipo, titular, número, CCI, banco, QR)
+    // quedaba en una columna angostísima en medio de la pantalla.
+    final anchoDialogo = esEscritorio(context) ? 520.0 : null;
+
     return AlertDialog(
       title: Text(
         _esEdicion ? 'Editar método de pago' : 'Nuevo método de pago',
       ),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!_esEdicion) ...[
-                DropdownButtonFormField<String>(
-                  initialValue: _tipo,
-                  items: _tiposMedioPago
-                      .map(
-                        (t) => DropdownMenuItem(
-                          value: t,
-                          child: Text(_etiquetaTipo(t)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() => _tipo = v!),
-                  decoration: const InputDecoration(labelText: 'Tipo'),
-                ),
-                const SizedBox(height: 12),
-              ],
-              TextFormField(
-                controller: _titularController,
-                textCapitalization: TextCapitalization.characters,
-                inputFormatters: const [UpperCaseTextFormatter()],
-                decoration: const InputDecoration(labelText: 'Titular'),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _numeroController,
-                decoration: InputDecoration(labelText: _labelNumero),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-              ),
-              if (_tipo == 'TRANSFERENCIA') ...[
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _cciController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'CCI (20 dígitos)',
+      content: SizedBox(
+        width: anchoDialogo,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!_esEdicion) ...[
+                  SelectorDesplegable<String>(
+                    valor: _tipo,
+                    opciones: _tiposMedioPago,
+                    etiqueta: _etiquetaTipo,
+                    label: 'Tipo',
+                    onChanged: (v) => setState(() => _tipo = v!),
                   ),
-                  validator: (v) =>
-                      (v == null || !RegExp(r'^\d{20}$').hasMatch(v.trim()))
-                      ? 'Debe tener 20 dígitos'
-                      : null,
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+                ],
                 TextFormField(
-                  controller: _bancoController,
+                  controller: _titularController,
                   textCapitalization: TextCapitalization.characters,
                   inputFormatters: const [UpperCaseTextFormatter()],
-                  decoration: const InputDecoration(
-                    labelText: 'Banco (opcional)',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Titular'),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Requerido' : null,
                 ),
-              ],
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _notasController,
-                decoration: const InputDecoration(
-                  labelText: 'Notas para el cliente (opcional)',
-                ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'QR real de Yape/Plin (opcional, pero recomendado)',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Descárgalo desde la propia app (Mi QR → Descargar) y '
-                'súbelo aquí — es el único que Yape/Plin reconocen al '
-                'escanear. Sin esto, el cliente solo ve un QR informativo.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              InkWell(
-                onTap: _elegirOrigenImagen,
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  height: _imagenQrBase64 != null ? 160 : 90,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: AppColors.secondary.withValues(alpha: 0.35),
-                    ),
-                    color: AppColors.surfaceMuted,
-                  ),
-                  alignment: Alignment.center,
-                  child: _imagenQrBase64 != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(13),
-                          child: Image.memory(
-                            base64Decode(_imagenQrBase64!),
-                            height: 160,
-                            fit: BoxFit.contain,
-                          ),
-                        )
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.add_a_photo_outlined,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Subir imagen del QR',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ],
-                        ),
-                ),
-              ),
-              if (_imagenQrBase64 != null)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () => setState(() => _imagenQrBase64 = null),
-                    icon: const Icon(Icons.close_rounded, size: 16),
-                    label: const Text('Quitar imagen'),
-                  ),
-                ),
-              if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                TextFormField(
+                  controller: _numeroController,
+                  decoration: InputDecoration(labelText: _labelNumero),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Requerido' : null,
                 ),
+                if (_tipo == 'TRANSFERENCIA') ...[
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _cciController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'CCI (20 dígitos)',
+                    ),
+                    validator: (v) =>
+                        (v == null || !RegExp(r'^\d{20}$').hasMatch(v.trim()))
+                        ? 'Debe tener 20 dígitos'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _bancoController,
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: const [UpperCaseTextFormatter()],
+                    decoration: const InputDecoration(
+                      labelText: 'Banco (opcional)',
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _notasController,
+                  decoration: const InputDecoration(
+                    labelText: 'Notas para el cliente (opcional)',
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'QR real de Yape/Plin (opcional, pero recomendado)',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Descárgalo desde la propia app (Mi QR → Descargar) y '
+                  'súbelo aquí — es el único que Yape/Plin reconocen al '
+                  'escanear. Sin esto, el cliente solo ve un QR informativo.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                InkWell(
+                  onTap: _elegirOrigenImagen,
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    height: _imagenQrBase64 != null ? 160 : 90,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppColors.secondary.withValues(alpha: 0.35),
+                      ),
+                      color: AppColors.surfaceMuted,
+                    ),
+                    alignment: Alignment.center,
+                    child: _imagenQrBase64 != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(13),
+                            child: Image.memory(
+                              base64Decode(_imagenQrBase64!),
+                              height: 160,
+                              fit: BoxFit.contain,
+                            ),
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              PhosphorIcon(
+                                PhosphorIconsRegular.cameraPlus,
+                                color: AppColors.primary,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Subir imagen del QR',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+                if (_imagenQrBase64 != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => setState(() => _imagenQrBase64 = null),
+                      icon: const PhosphorIcon(PhosphorIconsBold.x, size: 16),
+                      label: const Text('Quitar imagen'),
+                    ),
+                  ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/cliente_model.dart';
 import '../../services/api_client.dart';
 import '../../services/clientes_service.dart';
 import '../../services/horneados_service.dart';
 import '../../services/notificaciones_service.dart';
+import '../../theme/app_theme.dart';
 import '../../utils/text_formatters.dart';
 import '../../utils/texto_utils.dart';
 import '../../widgets/campo_con_sugerencias.dart';
@@ -15,12 +17,20 @@ import '../../widgets/estado_error.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/premium_button.dart';
 import '../../widgets/segmented_switch.dart';
+import 'escritorio_horneados.dart';
 
 const _tiposAderezo = ['CRIOLLO', 'ORIENTAL'];
 
 /// Registro de un nuevo pedido de Horneados: carne y presentación con
 /// autocompletado "que aprende" (ver [CampoConSugerencias]), aderezo
 /// opcional de un solo tipo y total calculado automáticamente.
+///
+/// En escritorio (>= [anchoEscritorio]) el formulario deja de ser una sola
+/// columna larga: los datos quedan a la izquierda en dos paneles (cliente y
+/// detalle del horneado) y el resumen con el total + el botón de registro se
+/// van a una columna lateral fija a la derecha, siempre visible. Los campos
+/// son exactamente los mismos widgets en ambos layouts; por debajo del
+/// umbral el árbol es idéntico al de siempre.
 class NuevoPedidoHorneadosPage extends StatefulWidget {
   const NuevoPedidoHorneadosPage({super.key});
 
@@ -166,8 +176,8 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
     return showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(
-          Icons.check_circle_rounded,
+        icon: const PhosphorIcon(
+          PhosphorIconsFill.checkCircle,
           color: Color(0xFF2E7D32),
           size: 36,
         ),
@@ -178,38 +188,38 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _FilaResumen(
-                icono: Icons.person_rounded,
+                icono: PhosphorIconsRegular.user,
                 texto: cliente.nombreParaMostrar,
                 destacado: true,
               ),
               if (nombreComercial != null) ...[
                 const SizedBox(height: 4),
                 _FilaResumen(
-                  icono: Icons.storefront_rounded,
+                  icono: PhosphorIconsRegular.storefront,
                   texto: nombreComercial,
                   color: scheme.secondary,
                 ),
               ],
               const SizedBox(height: 10),
               _FilaResumen(
-                icono: Icons.set_meal_rounded,
+                icono: PhosphorIconsRegular.bowlFood,
                 texto: '${resultado.carne} · ${resultado.presentacion}',
               ),
               const SizedBox(height: 4),
               _FilaResumen(
-                icono: Icons.numbers_rounded,
+                icono: PhosphorIconsRegular.hash,
                 texto: 'Cantidad: ${resultado.cantidad}',
               ),
               if (resultado.aplicaAderezo) ...[
                 const SizedBox(height: 4),
                 _FilaResumen(
-                  icono: Icons.local_dining_rounded,
+                  icono: PhosphorIconsRegular.drop,
                   texto: 'Aderezo: ${resultado.tipoAderezo}',
                 ),
               ],
               const SizedBox(height: 4),
               _FilaResumen(
-                icono: Icons.history_rounded,
+                icono: PhosphorIconsRegular.clockCounterClockwise,
                 texto:
                     'Registrado el ${formatoFechaHoraCreacion.format(resultado.fechaCreacion)}',
               ),
@@ -247,213 +257,372 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
     );
   }
 
+  // ------------------------------------------------- piezas del formulario
+  // Se comparten tal cual entre el layout móvil y el de escritorio: lo único
+  // que cambia entre los dos es cómo se acomodan, no qué widget es cada campo.
+
+  Widget _selectorCliente() => _SelectorClienteHorneados(
+    clientes: _clientes,
+    seleccionado: _clienteSeleccionado,
+    onSeleccionado: (c) => setState(() => _clienteSeleccionado = c),
+  );
+
+  Widget _campoCarne() => CampoConSugerencias(
+    controller: _carneController,
+    label: 'Ej. POLLO, PAVO, CHANCHO',
+    icono: PhosphorIconsRegular.bowlFood,
+    buscarSugerencias: (prefijo) =>
+        _horneadosService.sugerencias('CARNE', q: prefijo),
+  );
+
+  Widget _campoPresentacion() => CampoConSugerencias(
+    controller: _presentacionController,
+    label: 'Ej. POR UNIDADES, POR PRESAS',
+    icono: PhosphorIconsRegular.forkKnife,
+    buscarSugerencias: (prefijo) =>
+        _horneadosService.sugerencias('PRESENTACION', q: prefijo),
+  );
+
+  Widget _campoCantidad() => TextFormField(
+    controller: _cantidadController,
+    keyboardType: TextInputType.number,
+    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+    decoration: const InputDecoration(
+      labelText: 'Cantidad',
+      prefixIcon: PhosphorIcon(PhosphorIconsRegular.hash),
+    ),
+    validator: (v) {
+      final n = int.tryParse(v ?? '');
+      if (n == null || n <= 0) {
+        return 'Ingresa una cantidad válida';
+      }
+      return null;
+    },
+  );
+
+  Widget _interruptorAderezo(ColorScheme scheme) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    decoration: BoxDecoration(
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text('¿Aplica aderezo?'),
+      value: _aplicaAderezo,
+      onChanged: _cambiarAplicaAderezo,
+    ),
+  );
+
+  Widget _selectorTipoAderezo() => SegmentedSwitch(
+    opciones: const ['Criollo', 'Oriental'],
+    indiceSeleccionado: _tipoAderezoIndex,
+    onChanged: (i) => setState(() => _tipoAderezoIndex = i),
+  );
+
+  Widget _campoPrecioHorneado() => TextFormField(
+    controller: _precioHorneadoController,
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    inputFormatters: const [DecimalTextInputFormatter()],
+    decoration: const InputDecoration(
+      labelText: 'Precio del horneado (S/)',
+      prefixIcon: PhosphorIcon(PhosphorIconsRegular.tag),
+    ),
+    validator: (v) {
+      final n = double.tryParse((v ?? '').replaceAll(',', '.'));
+      if (n == null || n <= 0) {
+        return 'Ingresa un precio válido';
+      }
+      return null;
+    },
+  );
+
+  Widget _campoPrecioAderezo() => TextFormField(
+    controller: _precioAderezoController,
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    inputFormatters: const [DecimalTextInputFormatter()],
+    decoration: const InputDecoration(
+      labelText: 'Precio del aderezo (S/)',
+      prefixIcon: PhosphorIcon(PhosphorIconsRegular.drop),
+    ),
+    validator: (v) {
+      final n = double.tryParse((v ?? '').replaceAll(',', '.'));
+      if (n == null || n <= 0) {
+        return 'Ingresa un precio válido';
+      }
+      return null;
+    },
+  );
+
+  Widget _cajaTotal(ThemeData theme, ColorScheme scheme) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: scheme.secondaryContainer,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text('Total', style: theme.textTheme.titleMedium),
+        Text(
+              'S/ ${_total.toStringAsFixed(2)}',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            )
+            .animate(target: 1)
+            .scaleXY(
+              begin: 0.9,
+              end: 1,
+              duration: 200.ms,
+              curve: Curves.easeOut,
+            ),
+      ],
+    ),
+  );
+
+  Widget _botonRegistrar() => PremiumButton(
+    label: 'Registrar pedido',
+    icono: PhosphorIconsBold.shoppingCartSimple,
+    cargando: _enviando,
+    onPressed: _registrarPedido,
+  );
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Nuevo pedido de Horneados')),
+      appBar: appBarGestion(context, titulo: 'Nuevo pedido de Horneados'),
       body: SafeArea(
         child: _cargandoDatos
             ? const Center(child: AppLoadingIndicator())
             : _errorCarga != null
             ? EstadoError(mensaje: _errorCarga!, onReintentar: _cargarDatos)
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('Cliente', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      _SelectorClienteHorneados(
-                        clientes: _clientes,
-                        seleccionado: _clienteSeleccionado,
-                        onSeleccionado: (c) =>
-                            setState(() => _clienteSeleccionado = c),
-                      ),
-                      const SizedBox(height: 24),
-                      Text('Carne', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      CampoConSugerencias(
-                        controller: _carneController,
-                        label: 'Ej. POLLO, PAVO, CHANCHO',
-                        icono: Icons.set_meal_rounded,
-                        buscarSugerencias: (prefijo) =>
-                            _horneadosService.sugerencias(
-                              'CARNE',
-                              q: prefijo,
-                            ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text('Presentación', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      CampoConSugerencias(
-                        controller: _presentacionController,
-                        label: 'Ej. POR UNIDADES, POR PRESAS',
-                        icono: Icons.restaurant_menu_rounded,
-                        buscarSugerencias: (prefijo) =>
-                            _horneadosService.sugerencias(
-                              'PRESENTACION',
-                              q: prefijo,
-                            ),
-                      ),
-                      const SizedBox(height: 20),
-                      TextFormField(
-                        controller: _cantidadController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: const InputDecoration(
-                          labelText: 'Cantidad',
-                          prefixIcon: Icon(Icons.numbers_rounded),
-                        ),
-                        validator: (v) {
-                          final n = int.tryParse(v ?? '');
-                          if (n == null || n <= 0) {
-                            return 'Ingresa una cantidad válida';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHighest.withValues(
-                            alpha: 0.4,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('¿Aplica aderezo?'),
-                          value: _aplicaAderezo,
-                          onChanged: _cambiarAplicaAderezo,
-                        ),
-                      ),
-                      if (_aplicaAderezo) ...[
-                        const SizedBox(height: 16),
-                        SegmentedSwitch(
-                          opciones: const ['Criollo', 'Oriental'],
-                          indiceSeleccionado: _tipoAderezoIndex,
-                          onChanged: (i) =>
-                              setState(() => _tipoAderezoIndex = i),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: _precioHorneadoController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              inputFormatters: const [
-                                DecimalTextInputFormatter(),
-                              ],
-                              decoration: const InputDecoration(
-                                labelText: 'Precio del horneado (S/)',
-                                prefixIcon: Icon(Icons.sell_outlined),
-                              ),
-                              validator: (v) {
-                                final n = double.tryParse(
-                                  (v ?? '').replaceAll(',', '.'),
-                                );
-                                if (n == null || n <= 0) {
-                                  return 'Ingresa un precio válido';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          if (_aplicaAderezo) ...[
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                controller: _precioAderezoController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
-                                inputFormatters: const [
-                                  DecimalTextInputFormatter(),
-                                ],
-                                decoration: const InputDecoration(
-                                  labelText: 'Precio del aderezo (S/)',
-                                  prefixIcon: Icon(
-                                    Icons.local_dining_outlined,
-                                  ),
-                                ),
-                                validator: (v) {
-                                  final n = double.tryParse(
-                                    (v ?? '').replaceAll(',', '.'),
-                                  );
-                                  if (n == null || n <= 0) {
-                                    return 'Ingresa un precio válido';
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: scheme.secondaryContainer,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Total', style: theme.textTheme.titleMedium),
-                            Text(
-                                  'S/ ${_total.toStringAsFixed(2)}',
-                                  style: theme.textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                )
-                                .animate(target: 1)
-                                .scaleXY(
-                                  begin: 0.9,
-                                  end: 1,
-                                  duration: 200.ms,
-                                  curve: Curves.easeOut,
-                                ),
-                          ],
-                        ),
-                      ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          _error!,
-                          style: TextStyle(
-                            color: scheme.error,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      PremiumButton(
-                        label: 'Registrar pedido',
-                        icono: Icons.add_shopping_cart_rounded,
-                        cargando: _enviando,
-                        onPressed: _registrarPedido,
-                      ),
-                    ],
-                  ),
+            : esEscritorio(context)
+            ? _construirEscritorio(context)
+            : _construirMovil(context),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------- móvil
+
+  Widget _construirMovil(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Cliente', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            _selectorCliente(),
+            const SizedBox(height: 24),
+            Text('Carne', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            _campoCarne(),
+            const SizedBox(height: 20),
+            Text('Presentación', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            _campoPresentacion(),
+            const SizedBox(height: 20),
+            _campoCantidad(),
+            const SizedBox(height: 20),
+            _interruptorAderezo(scheme),
+            if (_aplicaAderezo) ...[
+              const SizedBox(height: 16),
+              _selectorTipoAderezo(),
+            ],
+            const SizedBox(height: 20),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _campoPrecioHorneado()),
+                if (_aplicaAderezo) ...[
+                  const SizedBox(width: 12),
+                  Expanded(child: _campoPrecioAderezo()),
+                ],
+              ],
+            ),
+            const SizedBox(height: 24),
+            _cajaTotal(theme, scheme),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: TextStyle(
+                  color: scheme.error,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
+            ],
+            const SizedBox(height: 20),
+            _botonRegistrar(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------- escritorio
+
+  Widget _construirEscritorio(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final cliente = _clienteSeleccionado;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
+      child: ContenidoCentrado(
+        maxAncho: 1280,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const EncabezadoEscritorio(
+                    icono: PhosphorIconsDuotone.shoppingCartSimple,
+                    titulo: 'Nuevo pedido de Horneados',
+                    descripcion:
+                        'Elige el cliente, describe el horneado y el total se '
+                        'calcula solo mientras escribes.',
+                  )
+                  .animate()
+                  .fadeIn(duration: 300.ms)
+                  .moveY(begin: 10, end: 0),
+              const SizedBox(height: 28),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        PanelEscritorio(
+                              icono: PhosphorIconsRegular.user,
+                              titulo: 'Cliente',
+                              descripcion:
+                                  'Busca por nombre, razón social, RUC o DNI.',
+                              hijos: [_selectorCliente()],
+                            )
+                            .animate(delay: 60.ms)
+                            .fadeIn(duration: 280.ms)
+                            .moveY(begin: 10, end: 0),
+                        const SizedBox(height: 20),
+                        PanelEscritorio(
+                              icono: PhosphorIconsRegular.bowlFood,
+                              titulo: 'Detalle del horneado',
+                              descripcion:
+                                  'Carne y presentación aprenden de lo que ya '
+                                  'registraste antes.',
+                              separacion: 18,
+                              hijos: [
+                                Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(child: _campoCarne()),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: _campoPresentacion()),
+                                  ],
+                                ),
+                                Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(child: _campoCantidad()),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: _campoPrecioHorneado()),
+                                  ],
+                                ),
+                              ],
+                            )
+                            .animate(delay: 110.ms)
+                            .fadeIn(duration: 280.ms)
+                            .moveY(begin: 10, end: 0),
+                        const SizedBox(height: 20),
+                        PanelEscritorio(
+                              icono: PhosphorIconsRegular.drop,
+                              titulo: 'Aderezo',
+                              descripcion:
+                                  'Opcional — si lo activas, su precio se suma '
+                                  'al precio por unidad.',
+                              separacion: 16,
+                              hijos: [
+                                _interruptorAderezo(scheme),
+                                if (_aplicaAderezo) ...[
+                                  _selectorTipoAderezo(),
+                                  _campoPrecioAderezo(),
+                                ],
+                              ],
+                            )
+                            .animate(delay: 160.ms)
+                            .fadeIn(duration: 280.ms)
+                            .moveY(begin: 10, end: 0),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  Expanded(
+                    flex: 2,
+                    child:
+                        PanelEscritorio(
+                              icono: PhosphorIconsRegular.receipt,
+                              titulo: 'Resumen',
+                              separacion: 14,
+                              hijos: [
+                                _FilaResumen(
+                                  icono: PhosphorIconsRegular.user,
+                                  texto:
+                                      cliente?.nombreParaMostrar ??
+                                      'Sin cliente seleccionado',
+                                  destacado: cliente != null,
+                                  color: cliente == null
+                                      ? AppColors.textSecondary
+                                      : null,
+                                ),
+                                _FilaResumen(
+                                  icono: PhosphorIconsRegular.hash,
+                                  texto: _cantidad > 0
+                                      ? 'Cantidad: $_cantidad'
+                                      : 'Cantidad pendiente',
+                                ),
+                                _FilaResumen(
+                                  icono: PhosphorIconsRegular.tag,
+                                  texto:
+                                      'Precio por unidad: S/ ${_precioUnitario.toStringAsFixed(2)}',
+                                ),
+                                if (_aplicaAderezo)
+                                  _FilaResumen(
+                                    icono: PhosphorIconsRegular.drop,
+                                    texto:
+                                        'Aderezo ${_tiposAderezo[_tipoAderezoIndex]} · S/ ${_precioAderezo.toStringAsFixed(2)}',
+                                  ),
+                                _cajaTotal(theme, scheme),
+                                if (_error != null)
+                                  Text(
+                                    _error!,
+                                    style: TextStyle(
+                                      color: scheme.error,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                _botonRegistrar(),
+                              ],
+                            )
+                            .animate(delay: 200.ms)
+                            .fadeIn(duration: 280.ms)
+                            .moveY(begin: 10, end: 0),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -494,7 +663,7 @@ class _SelectorClienteHorneados extends StatelessWidget {
           focusNode: focusNode,
           decoration: const InputDecoration(
             labelText: 'Buscar cliente por nombre, RUC o DNI',
-            prefixIcon: Icon(Icons.person_search_rounded),
+            prefixIcon: PhosphorIcon(PhosphorIconsRegular.magnifyingGlass),
           ),
         );
       },
@@ -553,7 +722,7 @@ class _FilaResumen extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icono, size: 18, color: color ?? theme.colorScheme.primary),
+        PhosphorIcon(icono, size: 18, color: color ?? theme.colorScheme.primary),
         const SizedBox(width: 8),
         Expanded(
           child: Text(

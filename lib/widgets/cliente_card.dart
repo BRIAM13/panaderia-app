@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../models/cliente_model.dart';
 import '../theme/app_theme.dart';
@@ -43,24 +44,24 @@ class ClienteCard extends StatelessWidget {
   IconData get _iconoCalidad {
     switch (cliente.calidadDato) {
       case CalidadDato.reniec:
-        return Icons.verified_rounded;
+        return PhosphorIconsFill.sealCheck;
       case CalidadDato.manual:
-        return Icons.edit_note_rounded;
+        return PhosphorIconsRegular.notePencil;
       case CalidadDato.sinDni:
-        return Icons.help_outline_rounded;
+        return PhosphorIconsRegular.question;
     }
   }
 
   IconData get _iconoTipo {
     switch (cliente.tipoDocumento) {
       case TipoClienteDocumento.dni:
-        return Icons.person_rounded;
+        return PhosphorIconsRegular.user;
       case TipoClienteDocumento.rucPersonaNatural:
-        return Icons.storefront_rounded;
+        return PhosphorIconsRegular.storefront;
       case TipoClienteDocumento.rucPersonaJuridica:
-        return Icons.apartment_rounded;
+        return PhosphorIconsRegular.buildings;
       case TipoClienteDocumento.sinDocumento:
-        return Icons.person_outline_rounded;
+        return PhosphorIconsRegular.user;
     }
   }
 
@@ -127,7 +128,7 @@ class ClienteCard extends StatelessWidget {
                         width: 1.4,
                       ),
                     ),
-                    child: Icon(_iconoTipo, color: color, size: 22),
+                    child: PhosphorIcon(_iconoTipo, color: color, size: 22),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -167,7 +168,7 @@ class ClienteCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Chip(
-                    avatar: Icon(_iconoCalidad, size: 15, color: color),
+                    avatar: PhosphorIcon(_iconoCalidad, size: 15, color: color),
                     label: Text(_etiquetaCalidad),
                     labelStyle: TextStyle(
                       color: color,

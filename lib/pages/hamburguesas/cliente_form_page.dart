@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/cliente_model.dart';
 import '../../services/api_client.dart';
@@ -10,6 +11,7 @@ import '../../services/clientes_service.dart';
 import '../../services/external_lookup_service.dart';
 import '../../services/geolocation_service.dart';
 import '../../utils/text_formatters.dart';
+import 'escritorio_hamburguesas.dart';
 import '../../widgets/premium_button.dart';
 import '../../widgets/segmented_switch.dart';
 
@@ -266,8 +268,8 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
     return showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: Icon(
-          Icons.person_search_rounded,
+        icon: PhosphorIcon(
+          PhosphorIconsRegular.userFocus,
           color: scheme.primary,
           size: 32,
         ),
@@ -431,7 +433,11 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
     return showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: Icon(Icons.search_off_rounded, color: scheme.error, size: 32),
+        icon: PhosphorIcon(
+          PhosphorIconsRegular.magnifyingGlassMinus,
+          color: scheme.error,
+          size: 32,
+        ),
         title: const Text('Documento no encontrado'),
         content: const Text(
           'El DNI/RUC ingresado no se encuentra registrado o es inválido. '
@@ -547,102 +553,113 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
     final mostrarNombres = _editando || !esRuc || _camposExpandidos;
     final mostrarBotonExpandir = !_editando && !esRuc && !_camposExpandidos;
 
+    final escritorio = esEscritorio(context);
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_editando ? 'Editar cliente' : 'Nuevo cliente'),
+      appBar: appBarGestion(
+        context,
+        titulo: _editando ? 'Editar cliente' : 'Nuevo cliente',
+        subtitulo: _editando
+            ? 'Actualiza los datos del cliente'
+            : 'Verifica el documento contra RENIEC/SUNAT y completa los datos',
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_permiteReverificar)
-                  _SeccionBusquedaDocumento(
-                    editando: _editando,
-                    esRuc: esRuc,
-                    tipoDocumento: _tipoDocumento,
-                    documentoController: _documentoController,
-                    buscando: _buscando,
-                    documentoVerificado: _documentoVerificado,
-                    documentoYaRegistrado: _documentoYaRegistrado,
-                    verificandoDocumento: _verificandoDocumento,
-                    origenValidacion: _origenValidacion,
-                    camposExpandidos: _camposExpandidos,
-                    documentoVerificadoApiReal: _documentoVerificadoApiReal,
-                    estadoRuc: _estadoRuc,
-                    condicionRuc: _condicionRuc,
-                    tipoContribuyenteRuc: _tipoContribuyenteRuc,
-                    onCambiarTipoDocumento: _cambiarTipoDocumento,
-                    onBuscar: _buscarDocumento,
-                  ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w600,
+          padding: EdgeInsets.all(escritorio ? 32 : 20),
+          // En escritorio el formulario se topa a ancho de panel y se
+          // centra: la ficha de un cliente es una columna de campos
+          // cortos, no una hoja de cálculo de 1600px de ancho.
+          child: FormularioEscritorio(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_permiteReverificar)
+                    _SeccionBusquedaDocumento(
+                      editando: _editando,
+                      esRuc: esRuc,
+                      tipoDocumento: _tipoDocumento,
+                      documentoController: _documentoController,
+                      buscando: _buscando,
+                      documentoVerificado: _documentoVerificado,
+                      documentoYaRegistrado: _documentoYaRegistrado,
+                      verificandoDocumento: _verificandoDocumento,
+                      origenValidacion: _origenValidacion,
+                      camposExpandidos: _camposExpandidos,
+                      documentoVerificadoApiReal: _documentoVerificadoApiReal,
+                      estadoRuc: _estadoRuc,
+                      condicionRuc: _condicionRuc,
+                      tipoContribuyenteRuc: _tipoContribuyenteRuc,
+                      onCambiarTipoDocumento: _cambiarTipoDocumento,
+                      onBuscar: _buscarDocumento,
                     ),
-                  ),
-                ],
-                if (mostrarNombres) ...[
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _nombresController,
-                    readOnly: _soloLectura,
-                    textCapitalization: TextCapitalization.characters,
-                    inputFormatters: const [UpperCaseTextFormatter()],
-                    decoration: InputDecoration(
-                      labelText: esRuc ? 'Razón social' : 'Nombres',
-                      prefixIcon: Icon(
-                        esRuc
-                            ? Icons.storefront_outlined
-                            : Icons.person_outline_rounded,
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Ingresa ${esRuc ? 'la razón social' : 'los nombres'}'
-                        : null,
+                  ],
+                  if (mostrarNombres) ...[
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _nombresController,
+                      readOnly: _soloLectura,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: const [UpperCaseTextFormatter()],
+                      decoration: InputDecoration(
+                        labelText: esRuc ? 'Razón social' : 'Nombres',
+                        prefixIcon: PhosphorIcon(
+                          esRuc
+                              ? PhosphorIconsRegular.storefront
+                              : PhosphorIconsRegular.user,
+                        ),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Ingresa ${esRuc ? 'la razón social' : 'los nombres'}'
+                          : null,
+                    ),
+                  ],
+                  if (mostrarBotonExpandir)
+                    _BotonExpandirCampos(onTap: _expandirCampos),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    alignment: Alignment.topCenter,
+                    child: !_camposExpandidos
+                        ? const SizedBox(width: double.infinity)
+                        : _CamposSecundariosCliente(
+                            esRuc: esRuc,
+                            soloLectura: _soloLectura,
+                            obteniendoUbicacion: _obteniendoUbicacion,
+                            nombreComercialBloqueado: _nombreComercialBloqueado,
+                            apellidoPaternoController:
+                                _apellidoPaternoController,
+                            apellidoMaternoController:
+                                _apellidoMaternoController,
+                            telefonoController: _telefonoController,
+                            emailController: _emailController,
+                            domicilioFiscalController:
+                                _domicilioFiscalController,
+                            direccionController: _direccionController,
+                            descripcionNegocioController:
+                                _descripcionNegocioController,
+                            onAutocompletarGps: _autocompletarConGps,
+                          ),
+                  ),
+                  const SizedBox(height: 24),
+                  PremiumButton(
+                    label: _editando ? 'Guardar cambios' : 'Registrar cliente',
+                    icono: PhosphorIconsBold.check,
+                    cargando: _guardando,
+                    onPressed: _puedeGuardar ? _guardar : null,
                   ),
                 ],
-                if (mostrarBotonExpandir)
-                  _BotonExpandirCampos(onTap: _expandirCampos),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  alignment: Alignment.topCenter,
-                  child: !_camposExpandidos
-                      ? const SizedBox(width: double.infinity)
-                      : _CamposSecundariosCliente(
-                          esRuc: esRuc,
-                          soloLectura: _soloLectura,
-                          obteniendoUbicacion: _obteniendoUbicacion,
-                          nombreComercialBloqueado: _nombreComercialBloqueado,
-                          apellidoPaternoController:
-                              _apellidoPaternoController,
-                          apellidoMaternoController:
-                              _apellidoMaternoController,
-                          telefonoController: _telefonoController,
-                          emailController: _emailController,
-                          domicilioFiscalController:
-                              _domicilioFiscalController,
-                          direccionController: _direccionController,
-                          descripcionNegocioController:
-                              _descripcionNegocioController,
-                          onAutocompletarGps: _autocompletarConGps,
-                        ),
-                ),
-                const SizedBox(height: 24),
-                PremiumButton(
-                  label: _editando ? 'Guardar cambios' : 'Registrar cliente',
-                  icono: Icons.check_rounded,
-                  cargando: _guardando,
-                  onPressed: _puedeGuardar ? _guardar : null,
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -747,9 +764,7 @@ class _SeccionBusquedaDocumento extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: FilledButton.icon(
-                onPressed: (buscando || !documentoVerificado)
-                    ? null
-                    : onBuscar,
+                onPressed: (buscando || !documentoVerificado) ? null : onBuscar,
                 icon: buscando
                     ? const SizedBox(
                         width: 16,
@@ -759,7 +774,10 @@ class _SeccionBusquedaDocumento extends StatelessWidget {
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(Icons.search_rounded, size: 18),
+                    : const PhosphorIcon(
+                        PhosphorIconsRegular.magnifyingGlass,
+                        size: 18,
+                      ),
                 label: const Text('Buscar'),
               ),
             ),
@@ -790,7 +808,11 @@ class _SeccionBusquedaDocumento extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.person_search_rounded, size: 16, color: scheme.error),
+              PhosphorIcon(
+                PhosphorIconsRegular.userFocus,
+                size: 16,
+                color: scheme.error,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -807,10 +829,10 @@ class _SeccionBusquedaDocumento extends StatelessWidget {
         if (origenValidacion == 'RENIEC' && camposExpandidos) ...[
           const SizedBox(height: 8),
           Chip(
-            avatar: Icon(
+            avatar: PhosphorIcon(
               documentoVerificadoApiReal
-                  ? Icons.verified_rounded
-                  : Icons.wifi_off_rounded,
+                  ? PhosphorIconsFill.sealCheck
+                  : PhosphorIconsRegular.wifiSlash,
               size: 16,
               color: Colors.white,
             ),
@@ -895,8 +917,8 @@ class _BotonExpandirCampos extends StatelessWidget {
                       onTap: onTap,
                       child: Padding(
                         padding: const EdgeInsets.all(12),
-                        child: Icon(
-                          Icons.keyboard_double_arrow_down_rounded,
+                        child: PhosphorIcon(
+                          PhosphorIconsBold.caretDoubleDown,
                           color: scheme.primary,
                           size: 26,
                         ),
@@ -987,7 +1009,7 @@ class _CamposSecundariosCliente extends StatelessWidget {
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           decoration: const InputDecoration(
             labelText: 'Teléfono',
-            prefixIcon: Icon(Icons.phone_outlined),
+            prefixIcon: PhosphorIcon(PhosphorIconsRegular.phone),
           ),
         ),
         const SizedBox(height: 16),
@@ -996,7 +1018,7 @@ class _CamposSecundariosCliente extends StatelessWidget {
           keyboardType: TextInputType.emailAddress,
           decoration: const InputDecoration(
             labelText: 'Email',
-            prefixIcon: Icon(Icons.email_outlined),
+            prefixIcon: PhosphorIcon(PhosphorIconsRegular.envelopeSimple),
           ),
         ),
         if (esRuc && domicilioFiscalController.text.isNotEmpty) ...[
@@ -1006,7 +1028,7 @@ class _CamposSecundariosCliente extends StatelessWidget {
             readOnly: true,
             decoration: const InputDecoration(
               labelText: 'Domicilio Fiscal (SUNAT)',
-              prefixIcon: Icon(Icons.account_balance_outlined),
+              prefixIcon: PhosphorIcon(PhosphorIconsRegular.bank),
             ),
           ),
         ],
@@ -1017,7 +1039,7 @@ class _CamposSecundariosCliente extends StatelessWidget {
           inputFormatters: const [UpperCaseTextFormatter()],
           decoration: InputDecoration(
             labelText: 'Dirección de Entrega',
-            prefixIcon: const Icon(Icons.place_outlined),
+            prefixIcon: const PhosphorIcon(PhosphorIconsRegular.mapPin),
             suffixIcon:
                 IconButton(
                       tooltip: 'Usar mi ubicación GPS',
@@ -1028,12 +1050,10 @@ class _CamposSecundariosCliente extends StatelessWidget {
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Icon(
-                              Icons.my_location_rounded,
+                          : PhosphorIcon(
+                              PhosphorIconsRegular.crosshair,
                               color: scheme.primary,
                             ),
                     )
@@ -1057,10 +1077,10 @@ class _CamposSecundariosCliente extends StatelessWidget {
           inputFormatters: const [UpperCaseTextFormatter()],
           decoration: InputDecoration(
             labelText: 'Nombre comercial / Puesto',
-            prefixIcon: const Icon(Icons.storefront_outlined),
+            prefixIcon: const PhosphorIcon(PhosphorIconsRegular.storefront),
             suffixIcon: esRuc && nombreComercialBloqueado
-                ? Icon(
-                    Icons.lock_outline_rounded,
+                ? PhosphorIcon(
+                    PhosphorIconsRegular.lockSimple,
                     color: scheme.primary,
                     size: 18,
                   )

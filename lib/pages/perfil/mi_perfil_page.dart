@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/cliente_model.dart';
 import '../../services/api_client.dart';
@@ -8,6 +9,7 @@ import '../../services/geolocation_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/text_formatters.dart';
 import '../../widgets/ad_banner.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/verificacion_otp.dart';
@@ -20,6 +22,13 @@ import 'cambiar_password_seguro_page.dart';
 /// hay algún canal verificado exige autorizar primero con un código
 /// enviado a ese canal — así, si alguien más usa la sesión ya iniciada del
 /// dueño, no puede tocar estos datos sin acceso real a su celular/correo.
+///
+/// Escritorio (>= Breakpoints.escritorio, vía `esEscritorio`): la columna
+/// única de celular (identidad → contacto → dirección → seguridad, todo uno
+/// debajo del otro y con scroll) se reparte en dos columnas — quién eres +
+/// seguridad a la izquierda, los datos editables a la derecha — dentro de
+/// un contenedor centrado con techo de ancho. Por debajo de ese umbral el
+/// árbol de widgets es idéntico al de siempre.
 class MiPerfilPage extends StatefulWidget {
   const MiPerfilPage({super.key, this.mostrarAnuncio = false});
 
@@ -182,14 +191,26 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
     }
   }
 
+  /// Texto del documento tal como se muestra bajo el nombre.
+  String _documento(Cliente cliente) => cliente.dni != null
+      ? '${cliente.dni!.length == 11 ? 'RUC' : 'DNI'} ${cliente.dni}'
+      : 'Sin documento registrado';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final cliente = _cliente;
+    final escritorio = esEscritorio(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi perfil')),
+      appBar: escritorio
+          ? appBarGestion(
+              context,
+              titulo: 'Mi perfil',
+              subtitulo: 'Tus datos, contacto verificado y seguridad',
+            )
+          : AppBar(title: const Text('Mi perfil')),
       bottomNavigationBar: widget.mostrarAnuncio ? const AdBanner() : null,
       body: SafeArea(
         bottom: !widget.mostrarAnuncio,
@@ -206,6 +227,8 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
                   ),
                 ),
               )
+            : escritorio
+            ? _construirEscritorio(theme, scheme, cliente)
             : RefreshIndicator(
                 onRefresh: _cargar,
                 child: SingleChildScrollView(
@@ -221,8 +244,8 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
                               shape: BoxShape.circle,
                               color: scheme.secondaryContainer,
                             ),
-                            child: Icon(
-                              Icons.person_rounded,
+                            child: PhosphorIcon(
+                              PhosphorIconsFill.user,
                               color: scheme.primary,
                               size: 32,
                             ),
@@ -240,9 +263,7 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
                       ).animate().fadeIn(delay: 80.ms, duration: 250.ms),
                       const SizedBox(height: 4),
                       Text(
-                        cliente.dni != null
-                            ? '${cliente.dni!.length == 11 ? 'RUC' : 'DNI'} ${cliente.dni}'
-                            : 'Sin documento registrado',
+                        _documento(cliente),
                         style: theme.textTheme.bodyMedium,
                       ).animate().fadeIn(delay: 120.ms, duration: 250.ms),
                       const SizedBox(height: 24),
@@ -257,7 +278,7 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
                       ),
                       const SizedBox(height: 16),
                       _FilaCanal(
-                        icono: Icons.phone_outlined,
+                        icono: PhosphorIconsRegular.phone,
                         etiqueta: 'Teléfono',
                         valor: cliente.telefono,
                         verificado: cliente.telefonoVerificado,
@@ -265,7 +286,7 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
                       ),
                       const SizedBox(height: 10),
                       _FilaCanal(
-                        icono: Icons.email_outlined,
+                        icono: PhosphorIconsRegular.envelopeSimple,
                         etiqueta: 'Correo',
                         valor: cliente.email,
                         verificado: cliente.emailVerificado,
@@ -277,44 +298,7 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
                         style: theme.textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _direccionController,
-                        textCapitalization: TextCapitalization.characters,
-                        inputFormatters: const [UpperCaseTextFormatter()],
-                        decoration: InputDecoration(
-                          hintText: 'Dirección de entrega',
-                          prefixIcon: const Icon(Icons.place_outlined),
-                          suffixIcon:
-                              IconButton(
-                                    tooltip: 'Usar mi ubicación GPS',
-                                    onPressed: _obteniendoUbicacion
-                                        ? null
-                                        : _autocompletarConGps,
-                                    icon: _obteniendoUbicacion
-                                        ? SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: scheme.primary,
-                                            ),
-                                          )
-                                        : Icon(
-                                            Icons.my_location_rounded,
-                                            color: scheme.primary,
-                                          ),
-                                  )
-                                  .animate(
-                                    onPlay: (c) => c.repeat(reverse: true),
-                                  )
-                                  .scale(
-                                    begin: const Offset(1, 1),
-                                    end: const Offset(1.12, 1.12),
-                                    duration: 900.ms,
-                                    curve: Curves.easeInOut,
-                                  ),
-                        ),
-                      ),
+                      _campoDireccion(scheme),
                       const SizedBox(height: 10),
                       OutlinedButton(
                         onPressed: _guardandoDireccion
@@ -331,26 +315,7 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
                               )
                             : const Text('Guardar dirección'),
                       ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          _error!,
-                          style: TextStyle(
-                            color: scheme.error,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                      if (_mensajeExito != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          _mensajeExito!,
-                          style: const TextStyle(
-                            color: Color(0xFF16A34A),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                      ..._mensajes(scheme),
                       const SizedBox(height: 28),
                       const Divider(),
                       const SizedBox(height: 8),
@@ -358,7 +323,10 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
                       const SizedBox(height: 8),
                       OutlinedButton.icon(
                         onPressed: _abrirCambioPassword,
-                        icon: const Icon(Icons.lock_outline_rounded),
+                        icon: const PhosphorIcon(
+                          PhosphorIconsRegular.lockKey,
+                          size: 18,
+                        ),
                         label: const Text('Cambiar contraseña'),
                       ),
                     ],
@@ -367,6 +335,296 @@ class _MiPerfilPageState extends State<MiPerfilPage> {
               ),
       ),
     );
+  }
+
+  // ---------------------------------------------------------------- común
+
+  List<Widget> _mensajes(ColorScheme scheme) => [
+    if (_error != null) ...[
+      const SizedBox(height: 12),
+      Text(
+        _error!,
+        style: TextStyle(color: scheme.error, fontWeight: FontWeight.w600),
+      ),
+    ],
+    if (_mensajeExito != null) ...[
+      const SizedBox(height: 12),
+      Text(
+        _mensajeExito!,
+        style: const TextStyle(
+          color: Color(0xFF16A34A),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ],
+  ];
+
+  Widget _campoDireccion(ColorScheme scheme) {
+    return TextFormField(
+      controller: _direccionController,
+      textCapitalization: TextCapitalization.characters,
+      inputFormatters: const [UpperCaseTextFormatter()],
+      decoration: InputDecoration(
+        hintText: 'Dirección de entrega',
+        prefixIcon: const PhosphorIcon(PhosphorIconsRegular.mapPin),
+        suffixIcon:
+            IconButton(
+                  tooltip: 'Usar mi ubicación GPS',
+                  onPressed: _obteniendoUbicacion
+                      ? null
+                      : _autocompletarConGps,
+                  icon: _obteniendoUbicacion
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: scheme.primary,
+                          ),
+                        )
+                      : PhosphorIcon(
+                          PhosphorIconsRegular.crosshair,
+                          color: scheme.primary,
+                        ),
+                )
+                .animate(onPlay: (c) => c.repeat(reverse: true))
+                .scale(
+                  begin: const Offset(1, 1),
+                  end: const Offset(1.12, 1.12),
+                  duration: 900.ms,
+                  curve: Curves.easeInOut,
+                ),
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------- escritorio
+
+  Widget _construirEscritorio(
+    ThemeData theme,
+    ColorScheme scheme,
+    Cliente cliente,
+  ) {
+    return RefreshIndicator(
+      onRefresh: _cargar,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
+        child: ContenidoCentrado(
+          anchoMaximo: 1100,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              EncabezadoEscritorio(
+                anteTitulo: 'MI CUENTA',
+                titulo: cliente.nombreParaMostrar,
+                subtitulo: _documento(cliente),
+              ),
+              const SizedBox(height: espacioEscritorio),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _panelIdentidad(theme, scheme, cliente),
+                        const SizedBox(height: espacioEscritorio),
+                        _panelSeguridad(theme),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: espacioEscritorio),
+                  Expanded(
+                    flex: 6,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _panelContacto(theme, cliente),
+                        const SizedBox(height: espacioEscritorio),
+                        _panelDireccion(theme, scheme),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _panelIdentidad(
+    ThemeData theme,
+    ColorScheme scheme,
+    Cliente cliente,
+  ) {
+    return TarjetaEscritorio(
+          padding: const EdgeInsets.fromLTRB(28, 32, 28, 32),
+          radio: 24,
+          child: Column(
+            children: [
+              Container(
+                width: 92,
+                height: 92,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.primary.withValues(alpha: 0.18),
+                      AppColors.secondary.withValues(alpha: 0.12),
+                    ],
+                  ),
+                ),
+                child: PhosphorIcon(
+                  PhosphorIconsDuotone.user,
+                  color: scheme.primary,
+                  size: 44,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                cliente.nombreParaMostrar,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceMuted,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _documento(cliente),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        )
+        .animate(delay: 60.ms)
+        .fadeIn(duration: 320.ms)
+        .moveY(begin: 12, end: 0, curve: Curves.easeOutCubic);
+  }
+
+  Widget _panelSeguridad(ThemeData theme) {
+    return PanelEscritorio(
+          titulo: 'Seguridad',
+          subtitulo: 'Tu contraseña de acceso',
+          icono: PhosphorIconsRegular.shieldCheck,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Cambiarla exige un código enviado a un canal ya verificado.',
+                style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _abrirCambioPassword,
+                icon: const PhosphorIcon(
+                  PhosphorIconsRegular.lockKey,
+                  size: 18,
+                ),
+                label: const Text('Cambiar contraseña'),
+              ),
+            ],
+          ),
+        )
+        .animate(delay: 180.ms)
+        .fadeIn(duration: 320.ms)
+        .moveY(begin: 12, end: 0, curve: Curves.easeOutCubic);
+  }
+
+  Widget _panelContacto(ThemeData theme, Cliente cliente) {
+    return PanelEscritorio(
+          titulo: 'Contacto verificado',
+          subtitulo: 'Protege tu cuenta ante cambios',
+          icono: PhosphorIconsRegular.sealCheck,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Verificar tu celular o correo protege tu cuenta: cambiarlos '
+                'o cambiar tu contraseña más adelante exigirá un código '
+                'enviado a uno de estos canales.',
+                style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+              ),
+              const SizedBox(height: 18),
+              _FilaCanal(
+                icono: PhosphorIconsRegular.phone,
+                etiqueta: 'Teléfono',
+                valor: cliente.telefono,
+                verificado: cliente.telefonoVerificado,
+                onTap: _gestionarCelular,
+              ),
+              const SizedBox(height: 10),
+              _FilaCanal(
+                icono: PhosphorIconsRegular.envelopeSimple,
+                etiqueta: 'Correo',
+                valor: cliente.email,
+                verificado: cliente.emailVerificado,
+                onTap: _gestionarCorreo,
+              ),
+            ],
+          ),
+        )
+        .animate(delay: 120.ms)
+        .fadeIn(duration: 320.ms)
+        .moveY(begin: 12, end: 0, curve: Curves.easeOutCubic);
+  }
+
+  Widget _panelDireccion(ThemeData theme, ColorScheme scheme) {
+    return PanelEscritorio(
+          titulo: 'Dirección de entrega',
+          subtitulo: 'Donde dejamos tus pedidos',
+          icono: PhosphorIconsRegular.mapPinArea,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _campoDireccion(scheme),
+              ..._mensajes(scheme),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton.icon(
+                  onPressed: _guardandoDireccion ? null : _guardarDireccion,
+                  icon: _guardandoDireccion
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: scheme.primary,
+                          ),
+                        )
+                      : const PhosphorIcon(
+                          PhosphorIconsRegular.floppyDisk,
+                          size: 18,
+                        ),
+                  label: const Text('Guardar dirección'),
+                ),
+              ),
+            ],
+          ),
+        )
+        .animate(delay: 240.ms)
+        .fadeIn(duration: 320.ms)
+        .moveY(begin: 12, end: 0, curve: Curves.easeOutCubic);
   }
 }
 
@@ -401,7 +659,7 @@ class _FilaCanal extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icono, color: AppColors.textSecondary, size: 22),
+          PhosphorIcon(icono, color: AppColors.textSecondary, size: 22),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -426,12 +684,12 @@ class _FilaCanal extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      PhosphorIcon(
                         verificado
-                            ? Icons.verified_rounded
+                            ? PhosphorIconsFill.sealCheck
                             : (tieneValor
-                                  ? Icons.error_outline_rounded
-                                  : Icons.help_outline_rounded),
+                                  ? PhosphorIconsRegular.warningCircle
+                                  : PhosphorIconsRegular.question),
                         size: 12,
                         color: colorBadge,
                       ),

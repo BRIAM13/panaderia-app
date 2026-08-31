@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../theme/app_theme.dart';
 
@@ -31,8 +32,8 @@ class EstadoVacio extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-                width: 84,
-                height: 84,
+                width: 96,
+                height: 96,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
@@ -42,23 +43,32 @@ class EstadoVacio extends StatelessWidget {
                     ],
                   ),
                 ),
-                child: Icon(icono, size: 40, color: AppColors.primary),
+                // PhosphorIcon (y no Icon) para que, si el llamador pasa un
+                // ícono duotone, se pinte con sus dos capas — que es
+                // justamente la variante recomendada para ilustraciones
+                // grandes como esta.
+                child: PhosphorIcon(icono, size: 44, color: AppColors.primary),
               )
               .animate()
               .fadeIn(duration: 350.ms)
               .scale(begin: const Offset(0.85, 0.85), end: const Offset(1, 1)),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           Text(
             titulo,
             textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium,
+            style: theme.textTheme.titleMedium?.copyWith(fontSize: 17),
           ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
           if (subtitulo != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              subtitulo!,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
+            const SizedBox(height: 8),
+            // Topado: en una ventana de escritorio el subtítulo se estiraba
+            // en una sola línea larguísima de borde a borde.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Text(
+                subtitulo!,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
+              ),
             ).animate().fadeIn(delay: 140.ms, duration: 300.ms),
           ],
         ],

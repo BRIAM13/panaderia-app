@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../utils/text_formatters.dart';
 
@@ -89,9 +90,7 @@ class _CampoConSugerenciasState extends State<CampoConSugerencias> {
 
   void _seleccionar(String valor) {
     widget.controller.text = valor;
-    widget.controller.selection = TextSelection.collapsed(
-      offset: valor.length,
-    );
+    widget.controller.selection = TextSelection.collapsed(offset: valor.length);
     setState(() => _mostrarLista = false);
     _focusNode.unfocus();
   }
@@ -113,7 +112,7 @@ class _CampoConSugerenciasState extends State<CampoConSugerencias> {
           inputFormatters: const [UpperCaseTextFormatter()],
           decoration: InputDecoration(
             labelText: widget.label,
-            prefixIcon: Icon(widget.icono),
+            prefixIcon: PhosphorIcon(widget.icono),
           ),
           validator: (v) =>
               (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
@@ -133,8 +132,8 @@ class _CampoConSugerenciasState extends State<CampoConSugerencias> {
               itemCount: visibles.length,
               itemBuilder: (context, i) => ListTile(
                 dense: true,
-                leading: Icon(
-                  Icons.history_rounded,
+                leading: PhosphorIcon(
+                  PhosphorIconsRegular.clockCounterClockwise,
                   size: 18,
                   color: scheme.primary,
                 ),

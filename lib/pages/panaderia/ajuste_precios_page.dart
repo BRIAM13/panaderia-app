@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/tienda_model.dart';
 import '../../services/api_client.dart';
@@ -11,12 +12,18 @@ import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/tarjeta_3d.dart';
+import 'escritorio_panaderia.dart';
 
 /// Ajuste de precios del catálogo de una tienda (ADMIN/SUPERADMIN): elegir
 /// un producto de la lista y modificar su precio por unidad. El precio
 /// nuevo aplica desde ese momento — no cambia pedidos ya registrados (mismo
 /// criterio que `AjusteCostosPage`, la versión de Hamburguesas para el
 /// precio del paquete de 12).
+///
+/// En escritorio (>= [anchoEscritorio]) el listado de tarjetas apiladas se
+/// convierte en una tabla de gestión (producto · tipo · precio) con realce
+/// de fila al pasar el mouse, que es como se lee un catálogo desde una
+/// computadora. Por debajo del umbral el árbol es idéntico al de siempre.
 class AjustePreciosPage extends StatefulWidget {
   const AjustePreciosPage({super.key, required this.tienda});
 
@@ -91,10 +98,8 @@ class _AjustePreciosPageState extends State<AjustePreciosPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Ajustar precios')),
+      appBar: appBarGestion(context, titulo: 'Ajustar precios'),
       body: SafeArea(
         child: _cargando
             ? const Center(child: AppLoadingIndicator())
@@ -102,58 +107,190 @@ class _AjustePreciosPageState extends State<AjustePreciosPage> {
             ? EstadoError(mensaje: _error!, onReintentar: _cargar)
             : _productos.isEmpty
             ? EstadoVacio(
-                icono: Icons.bakery_dining_rounded,
+                icono: PhosphorIconsLight.bread,
                 titulo: 'Todavía no hay productos en el catálogo',
                 subtitulo: 'Los panes de ${widget.tienda.nombre} van a aparecer acá.',
                 onRefrescar: _cargar,
               )
-            : RefreshIndicator(
-                onRefresh: _cargar,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                  children: [
-                    Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.secondaryContainer,
-                          ),
-                          child: const Icon(
-                            Icons.price_change_rounded,
-                            color: AppColors.primary,
-                            size: 30,
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(duration: 300.ms)
-                        .scale(
-                          begin: const Offset(0.85, 0.85),
-                          end: const Offset(1, 1),
-                        ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Precios de ${widget.tienda.nombre}',
-                      style: theme.textTheme.titleLarge,
-                    ).animate().fadeIn(delay: 80.ms, duration: 250.ms),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Toca un pan para cambiar su precio por unidad. No afecta pedidos ya registrados.',
-                      style: theme.textTheme.bodyMedium,
-                    ).animate().fadeIn(delay: 120.ms, duration: 250.ms),
-                    const SizedBox(height: 20),
-                    ..._productos.asMap().entries.map(
-                      (entry) => _TarjetaProductoPrecio(
-                            producto: entry.value,
-                            onTap: () => _editarPrecio(entry.value),
-                          )
-                          .animate(delay: (40 * entry.key).ms)
-                          .fadeIn(duration: 250.ms)
-                          .moveY(begin: 8, end: 0),
-                    ),
-                  ],
+            : esEscritorio(context)
+            ? _construirEscritorio(context)
+            : _construirMovil(context),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------- móvil
+
+  Widget _construirMovil(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return RefreshIndicator(
+      onRefresh: _cargar,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        children: [
+          Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.secondaryContainer,
                 ),
+                child: const PhosphorIcon(
+                  PhosphorIconsRegular.tagChevron,
+                  color: AppColors.primary,
+                  size: 30,
+                ),
+              )
+              .animate()
+              .fadeIn(duration: 300.ms)
+              .scale(
+                begin: const Offset(0.85, 0.85),
+                end: const Offset(1, 1),
               ),
+          const SizedBox(height: 14),
+          Text(
+            'Precios de ${widget.tienda.nombre}',
+            style: theme.textTheme.titleLarge,
+          ).animate().fadeIn(delay: 80.ms, duration: 250.ms),
+          const SizedBox(height: 4),
+          Text(
+            'Toca un pan para cambiar su precio por unidad. No afecta pedidos ya registrados.',
+            style: theme.textTheme.bodyMedium,
+          ).animate().fadeIn(delay: 120.ms, duration: 250.ms),
+          const SizedBox(height: 20),
+          ..._productos.asMap().entries.map(
+            (entry) => _TarjetaProductoPrecio(
+                  producto: entry.value,
+                  onTap: () => _editarPrecio(entry.value),
+                )
+                .animate(delay: (40 * entry.key).ms)
+                .fadeIn(duration: 250.ms)
+                .moveY(begin: 8, end: 0),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------- escritorio
+
+  Widget _construirEscritorio(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return RefreshIndicator(
+      onRefresh: _cargar,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
+        children: [
+          ContenidoCentrado(
+            maxAncho: 1080,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                EncabezadoEscritorio(
+                      icono: PhosphorIconsDuotone.tagChevron,
+                      titulo: 'Precios de ${widget.tienda.nombre}',
+                      descripcion:
+                          'Haz clic en una fila para cambiar su precio por '
+                          'unidad. No afecta pedidos ya registrados.',
+                      acciones: [
+                        OutlinedButton.icon(
+                          onPressed: _cargar,
+                          icon: const PhosphorIcon(
+                            PhosphorIconsRegular.arrowsClockwise,
+                            size: 18,
+                          ),
+                          label: const Text('Actualizar'),
+                        ),
+                      ],
+                    )
+                    .animate()
+                    .fadeIn(duration: 300.ms)
+                    .moveY(begin: 10, end: 0),
+                const SizedBox(height: 28),
+                TablaEscritorio(
+                      encabezado: const EncabezadoTabla(
+                        celdas: [
+                          ('Producto', 5),
+                          ('Se vende', 3),
+                          ('Precio', 2),
+                          ('', 2),
+                        ],
+                      ),
+                      filas: _productos.asMap().entries.map((entry) {
+                        final producto = entry.value;
+                        return FilaTabla(
+                          onTap: () => _editarPrecio(producto),
+                          ultima: entry.key == _productos.length - 1,
+                          celdas: [
+                            (
+                              Row(
+                                children: [
+                                  ChipIcono(
+                                    icono: producto.esPaquete
+                                        ? PhosphorIconsRegular.package
+                                        : PhosphorIconsRegular.bread,
+                                    tamano: 38,
+                                    tamanoIcono: 18,
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Text(
+                                      producto.nombre,
+                                      style: theme.textTheme.titleMedium,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              5,
+                            ),
+                            (
+                              Text(
+                                producto.esPaquete
+                                    ? 'Por paquete'
+                                    : 'Por unidad',
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                              3,
+                            ),
+                            (
+                              Text(
+                                'S/ ${producto.precioUnitario.toStringAsFixed(2)}',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              2,
+                            ),
+                            (
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  onPressed: () => _editarPrecio(producto),
+                                  icon: const PhosphorIcon(
+                                    PhosphorIconsRegular.pencilSimple,
+                                    size: 16,
+                                  ),
+                                  label: const Text('Editar'),
+                                ),
+                              ),
+                              2,
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    )
+                    .animate(delay: 90.ms)
+                    .fadeIn(duration: 300.ms)
+                    .moveY(begin: 10, end: 0),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -204,8 +341,8 @@ class _TarjetaProductoPrecio extends StatelessWidget {
                         width: 1.4,
                       ),
                     ),
-                    child: const Icon(
-                      Icons.bakery_dining_rounded,
+                    child: const PhosphorIcon(
+                      PhosphorIconsRegular.bread,
                       color: AppColors.primary,
                       size: 20,
                     ),
@@ -221,8 +358,8 @@ class _TarjetaProductoPrecio extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Chip(
-                    avatar: const Icon(
-                      Icons.sell_outlined,
+                    avatar: const PhosphorIcon(
+                      PhosphorIconsRegular.tag,
                       size: 15,
                       color: AppColors.primary,
                     ),
@@ -240,8 +377,8 @@ class _TarjetaProductoPrecio extends StatelessWidget {
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   const SizedBox(width: 2),
-                  Icon(
-                    Icons.chevron_right_rounded,
+                  PhosphorIcon(
+                    PhosphorIconsRegular.caretRight,
                     size: 18,
                     color: AppColors.textSecondary.withValues(alpha: 0.6),
                   ),
@@ -330,8 +467,8 @@ class _DialogoEditarPrecioState extends State<_DialogoEditarPrecio> {
           shape: BoxShape.circle,
           color: AppColors.secondaryContainer,
         ),
-        child: const Icon(
-          Icons.sell_outlined,
+        child: const PhosphorIcon(
+          PhosphorIconsRegular.tag,
           color: AppColors.primary,
           size: 26,
         ),
@@ -351,7 +488,7 @@ class _DialogoEditarPrecioState extends State<_DialogoEditarPrecio> {
               inputFormatters: const [DecimalTextInputFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Precio por unidad (S/)',
-                prefixIcon: Icon(Icons.sell_outlined),
+                prefixIcon: PhosphorIcon(PhosphorIconsRegular.tag),
               ),
               validator: (v) {
                 final n = double.tryParse((v ?? '').replaceAll(',', '.'));

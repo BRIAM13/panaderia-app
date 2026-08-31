@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/tienda_model.dart';
 import '../../models/usuario_sesion.dart';
@@ -300,20 +301,32 @@ class _HomePageState extends State<HomePage> {
     // El Hub es la raíz de la sesión autenticada: el botón/gesto de
     // retroceso nunca debe devolver al usuario al Login (algunos caminos,
     // como el cambio de clave obligatorio, sí dejan Login en el stack).
+    // En un monitor grande el panel lateral puede respirar un poco más sin
+    // robarle ancho útil al contenido; en 900–1400 se queda en 300 para no
+    // dejar el tablero apretado.
+    final anchoPanel =
+        MediaQuery.sizeOf(context).width >= Breakpoints.escritorioAncho
+        ? 320.0
+        : 300.0;
+
     return PopScope(
       canPop: false,
       child: Scaffold(
         key: _scaffoldKey,
-        appBar: AppBar(
-          title: const Text('Panadería Ronceros'),
-          automaticallyImplyLeading: !esEscritorio,
-        ),
+        // En escritorio la barra superior deja de ser un título centrado
+        // (patrón de celular, donde compite con el ícono de menú) y pasa a
+        // ser la barra de marca del shell: logotipo + nombre + contexto de
+        // la sesión, alineados a la izquierda y separados del contenido por
+        // una línea fina, como cualquier panel de administración web.
+        appBar: esEscritorio
+            ? _barraEscritorio(vistaTrabajador: vistaTrabajador)
+            : AppBar(title: const Text('Panadería Ronceros')),
         drawer: esEscritorio ? null : Drawer(child: contenidoMenu),
         floatingActionButton: vistaTrabajador
             ? null
             : FloatingActionButton.extended(
                     onPressed: _hacerPedido,
-                    icon: const Icon(Icons.add_shopping_cart_rounded),
+                    icon: PhosphorIcon(PhosphorIconsBold.shoppingCartSimple),
                     label: const Text('Hacer pedido'),
                   )
                   .animate()
@@ -331,24 +344,113 @@ class _HomePageState extends State<HomePage> {
         // En escritorio, el mismo drawer (mismo diseño que en celular) se
         // muestra siempre visible como panel lateral en vez de un overlay
         // que hay que abrir con un ícono — el resto del contenido usa
-        // TODO el ancho restante, sin ningún tope artificial.
+        // TODO el ancho restante, sin ningún tope artificial (cada pantalla
+        // decide si se centra con un techo de ancho o no).
         body: esEscritorio
             ? Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(
-                    width: 300,
-                    child: ColoredBox(
-                      color: AppColors.background,
-                      child: contenidoMenu,
+                  // El panel deja de ser un bloque plano del mismo color que
+                  // el contenido: degradado vertical suave, borde derecho
+                  // fino y una sombra que lo separa del tablero. Sin eso, en
+                  // pantalla ancha el menú y el contenido se leían como una
+                  // sola superficie continua y costaba ubicar dónde termina
+                  // la navegación y dónde empieza el trabajo.
+                  Container(
+                    width: anchoPanel,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [AppColors.surface, AppColors.background],
+                      ),
+                      border: const Border(
+                        right: BorderSide(
+                          color: AppColors.surfaceMuted,
+                          width: 1.2,
+                        ),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 18,
+                          offset: const Offset(4, 0),
+                        ),
+                      ],
                     ),
+                    child: contenidoMenu,
                   ),
-                  const VerticalDivider(width: 1),
                   Expanded(child: cuerpo),
                 ],
               )
             : cuerpo,
       ),
+    );
+  }
+
+  /// Barra superior del shell de escritorio. Vive acá (y no en el `build`)
+  /// solo para no engrosar más ese método, ya bastante largo.
+  PreferredSizeWidget _barraEscritorio({required bool vistaTrabajador}) {
+    return AppBar(
+      automaticallyImplyLeading: false,
+      centerTitle: false,
+      titleSpacing: 24,
+      toolbarHeight: 72,
+      shape: const Border(
+        bottom: BorderSide(color: AppColors.surfaceMuted, width: 1.2),
+      ),
+      title: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(13),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.primary, AppColors.secondary],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.28),
+                  blurRadius: 12,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: const Icon(
+              PhosphorIconsFill.bread,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Panadería Ronceros',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                vistaTrabajador ? 'Panel de gestión' : 'Mi cuenta',
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: AppColors.secondary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ).animate().fadeIn(duration: 300.ms).moveX(begin: -8, end: 0),
     );
   }
 }

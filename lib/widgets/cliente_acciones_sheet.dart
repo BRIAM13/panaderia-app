@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart' show Share;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../models/cliente_model.dart';
 import '../theme/app_theme.dart';
@@ -54,13 +55,13 @@ class _ClienteAccionesSheetContent extends StatelessWidget {
   IconData get _iconoTipo {
     switch (cliente.tipoDocumento) {
       case TipoClienteDocumento.dni:
-        return Icons.person_rounded;
+        return PhosphorIconsRegular.user;
       case TipoClienteDocumento.rucPersonaNatural:
-        return Icons.storefront_rounded;
+        return PhosphorIconsRegular.storefront;
       case TipoClienteDocumento.rucPersonaJuridica:
-        return Icons.apartment_rounded;
+        return PhosphorIconsRegular.buildings;
       case TipoClienteDocumento.sinDocumento:
-        return Icons.person_outline_rounded;
+        return PhosphorIconsRegular.user;
     }
   }
 
@@ -177,7 +178,7 @@ class _ClienteAccionesSheetContent extends StatelessWidget {
                       width: 1.4,
                     ),
                   ),
-                  child: Icon(_iconoTipo, color: color, size: 24),
+                  child: PhosphorIcon(_iconoTipo, color: color, size: 24),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -222,8 +223,8 @@ class _ClienteAccionesSheetContent extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.person_off_rounded,
+                    PhosphorIcon(
+                      PhosphorIconsRegular.userMinus,
                       size: 18,
                       color: scheme.error,
                     ),
@@ -254,8 +255,8 @@ class _ClienteAccionesSheetContent extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.place_outlined,
+                    PhosphorIcon(
+                      PhosphorIconsRegular.mapPin,
                       size: 18,
                       color: AppColors.textSecondary,
                     ),
@@ -275,25 +276,25 @@ class _ClienteAccionesSheetContent extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _BotonAccion(
-                  icono: Icons.call_rounded,
+                  icono: PhosphorIconsRegular.phoneCall,
                   etiqueta: 'Llamar',
                   habilitado: tieneTelefono,
                   onTap: () => _llamar(context),
                 ),
                 _BotonAccion(
-                  icono: Icons.chat_rounded,
+                  icono: PhosphorIconsRegular.chatCircleText,
                   etiqueta: 'WhatsApp',
                   habilitado: tieneTelefono,
                   onTap: () => _whatsapp(context),
                 ),
                 _BotonAccion(
-                  icono: Icons.map_rounded,
+                  icono: PhosphorIconsRegular.mapTrifold,
                   etiqueta: 'Mapa',
                   habilitado: tieneDireccion,
                   onTap: () => _abrirMapa(context),
                 ),
                 _BotonAccion(
-                  icono: Icons.share_rounded,
+                  icono: PhosphorIconsRegular.shareNetwork,
                   etiqueta: 'Compartir',
                   habilitado: true,
                   onTap: () => _compartir(context),
@@ -305,18 +306,24 @@ class _ClienteAccionesSheetContent extends StatelessWidget {
             const SizedBox(height: 8),
             if (cliente.activo) ...[
               ListTile(
-                leading: Icon(Icons.badge_outlined, color: scheme.primary),
+                leading: PhosphorIcon(
+                  PhosphorIconsRegular.identificationBadge,
+                  color: scheme.primary,
+                ),
                 title: const Text('Ver perfil'),
                 subtitle: const Text('Historial, puntos y notas del cliente'),
                 onTap: () => Navigator.of(context).pop(ClienteAccion.verPerfil),
               ),
               ListTile(
-                leading: const Icon(Icons.edit_rounded),
+                leading: const PhosphorIcon(PhosphorIconsRegular.pencilSimple),
                 title: const Text('Editar cliente'),
                 onTap: () => Navigator.of(context).pop(ClienteAccion.editar),
               ),
               ListTile(
-                leading: Icon(Icons.person_off_rounded, color: scheme.error),
+                leading: PhosphorIcon(
+                  PhosphorIconsRegular.userMinus,
+                  color: scheme.error,
+                ),
                 title: Text(
                   'Desactivar cliente',
                   style: TextStyle(color: scheme.error),
@@ -326,8 +333,8 @@ class _ClienteAccionesSheetContent extends StatelessWidget {
               ),
             ] else
               ListTile(
-                leading: Icon(
-                  Icons.person_add_alt_1_rounded,
+                leading: PhosphorIcon(
+                  PhosphorIconsRegular.userPlus,
                   color: const Color(0xFF2E7D32),
                 ),
                 title: const Text(
@@ -376,7 +383,7 @@ class _BotonAccion extends StatelessWidget {
             onTap: habilitado ? onTap : null,
             child: Padding(
               padding: const EdgeInsets.all(14),
-              child: Icon(icono, color: color, size: 24),
+              child: PhosphorIcon(icono, color: color, size: 24),
             ),
           ),
         ),

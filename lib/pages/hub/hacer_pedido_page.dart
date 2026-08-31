@@ -2,17 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
+import '../../theme/app_theme.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../utils/text_formatters.dart';
 import '../../widgets/ad_banner.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/premium_button.dart';
+import '../../widgets/selector_desplegable.dart';
 
 /// Nombres EXACTOS de `Productos.Nombre` en la base de datos — mismo
 /// criterio que `NOMBRES_DISPONIBLES` en la página web (`data/config.ts`):
@@ -39,6 +43,13 @@ const _cantidadMinimaUnidad = 50;
 /// personal de LA TIENDA CORRESPONDIENTE (Hamburguesas o Panadería, según
 /// el producto elegido) recibe una notificación push real para aceptarlo o
 /// rechazarlo según stock.
+///
+/// Escritorio (>= Breakpoints.escritorio, vía `esEscritorio`): el patrón de
+/// carrito de toda la vida — los campos a la izquierda y el resumen de
+/// precio + botón de confirmar fijos a la derecha, siempre visibles. En
+/// celular el total vive al final del scroll y hay que bajar para verlo;
+/// en una ventana ancha no hay razón para esconderlo. Por debajo de ese
+/// umbral el árbol de widgets es idéntico al de siempre.
 class HacerPedidoPage extends StatefulWidget {
   const HacerPedidoPage({super.key, this.mostrarAnuncio = false});
 
@@ -221,10 +232,10 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
     return showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(
-          Icons.hourglass_top_rounded,
+        icon: const PhosphorIcon(
+          PhosphorIconsDuotone.hourglassHigh,
           color: Color(0xFFEA8C1B),
-          size: 36,
+          size: 40,
         ),
         title: Text('Pedido #${resultado.numeroPedidoDia} por confirmar'),
         content: Column(
@@ -239,7 +250,10 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.event_available_rounded, size: 18),
+                const PhosphorIcon(
+                  PhosphorIconsRegular.calendarCheck,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -257,7 +271,10 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.history_rounded, size: 18),
+                const PhosphorIcon(
+                  PhosphorIconsRegular.clockCounterClockwise,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -300,9 +317,17 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final escritorio = esEscritorio(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Hacer un pedido')),
+      appBar: escritorio
+          ? appBarGestion(
+              context,
+              titulo: 'Hacer un pedido',
+              subtitulo: 'Tu pedido queda "por confirmar" hasta que la '
+                  'tienda revise su stock',
+            )
+          : AppBar(title: const Text('Hacer un pedido')),
       bottomNavigationBar: widget.mostrarAnuncio ? const AdBanner() : null,
       body: SafeArea(
         bottom: !widget.mostrarAnuncio,
@@ -312,9 +337,11 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
             ? EstadoError(mensaje: _errorCarga!, onReintentar: _cargarCatalogo)
             : _productos.isEmpty
             ? const EstadoVacio(
-                icono: Icons.storefront_outlined,
+                icono: PhosphorIconsRegular.storefront,
                 titulo: 'Todavía no hay pedidos disponibles para hacer.',
               )
+            : escritorio
+            ? _construirEscritorio(theme, scheme)
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Form(
@@ -322,105 +349,23 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      DropdownButtonFormField<ProductoAutoservicio>(
-                        initialValue: _productoSeleccionado,
-                        items: _productos
-                            .map(
-                              (p) => DropdownMenuItem(
-                                value: p,
-                                child: Text(
-                                  p.nombre,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: _cambiarProducto,
-                        decoration: const InputDecoration(
-                          labelText: 'Producto',
-                          prefixIcon: Icon(Icons.inventory_2_rounded),
-                        ),
-                      ),
+                      _campoProducto(),
                       if (_productoSeleccionado != null) ...[
                         const SizedBox(height: 8),
-                        Text(
-                          _esPaquete
-                              ? 'Cada paquete trae 12 panes de hamburguesa y cuesta S/ ${_productoSeleccionado!.precioUnitario.toStringAsFixed(2)}, sin importar cuántos paquetes pidas.'
-                              : 'Pedido mínimo: $_cantidadMinimaUnidad panes.',
-                          style: theme.textTheme.bodyMedium,
-                        ),
+                        Text(_notaProducto, style: theme.textTheme.bodyMedium),
                       ],
                       const SizedBox(height: 20),
-                      TextFormField(
-                        controller: _cantidadController,
-                        keyboardType: TextInputType.number,
-                        maxLength: 4,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: InputDecoration(
-                          labelText: _esPaquete
-                              ? 'Cantidad de paquetes (12 unidades cada uno)'
-                              : 'Cantidad',
-                          prefixIcon: const Icon(Icons.numbers_rounded),
-                          counterText: '',
-                        ),
-                        onChanged: (_) => setState(() {}),
-                        validator: (v) {
-                          final n = int.tryParse(v ?? '');
-                          if (n == null || n <= 0) {
-                            return 'Ingresa una cantidad válida';
-                          }
-                          if (!_esPaquete && n < _cantidadMinimaUnidad) {
-                            return 'El pedido mínimo es de $_cantidadMinimaUnidad panes';
-                          }
-                          return null;
-                        },
-                      ),
+                      _campoCantidad(),
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _elegirFecha,
-                              icon: const Icon(
-                                Icons.calendar_today_rounded,
-                                size: 18,
-                              ),
-                              label: Text(
-                                _fechaEntrega == null
-                                    ? 'Fecha de entrega'
-                                    : DateFormat(
-                                        'dd/MM/yyyy',
-                                      ).format(_fechaEntrega!),
-                              ),
-                            ),
-                          ),
+                          Expanded(child: _botonFecha()),
                           const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _elegirHora,
-                              icon: const Icon(
-                                Icons.access_time_rounded,
-                                size: 18,
-                              ),
-                              label: Text(
-                                _horaEntrega == null
-                                    ? 'Hora de entrega'
-                                    : _horaEntrega!.format(context),
-                              ),
-                            ),
-                          ),
+                          Expanded(child: _botonHora()),
                         ],
                       ),
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _notasController,
-                        textCapitalization: TextCapitalization.characters,
-                        inputFormatters: const [UpperCaseTextFormatter()],
-                        decoration: const InputDecoration(
-                          labelText: 'Notas (opcional)',
-                        ),
-                        maxLines: 2,
-                      ),
+                      _campoNotas(),
                       if (_productoSeleccionado != null && _cantidad > 0) ...[
                         const SizedBox(height: 16),
                         Container(
@@ -485,7 +430,7 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
                       const SizedBox(height: 24),
                       PremiumButton(
                         label: 'Registrar pedido',
-                        icono: Icons.add_shopping_cart_rounded,
+                        icono: PhosphorIconsRegular.shoppingCartSimple,
                         cargando: _enviando,
                         onPressed: _registrarPedido,
                       ),
@@ -494,6 +439,316 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
                 ).animate().fadeIn(duration: 250.ms),
               ),
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------- común
+
+  String get _notaProducto => _esPaquete
+      ? 'Cada paquete trae 12 panes de hamburguesa y cuesta S/ ${_productoSeleccionado!.precioUnitario.toStringAsFixed(2)}, sin importar cuántos paquetes pidas.'
+      : 'Pedido mínimo: $_cantidadMinimaUnidad panes.';
+
+  Widget _campoProducto() {
+    return SelectorDesplegable<ProductoAutoservicio>(
+      valor: _productoSeleccionado,
+      opciones: _productos,
+      etiqueta: (p) => p.nombre,
+      label: 'Producto',
+      icono: PhosphorIconsRegular.bread,
+      onChanged: _cambiarProducto,
+    );
+  }
+
+  Widget _campoCantidad() {
+    return TextFormField(
+      controller: _cantidadController,
+      keyboardType: TextInputType.number,
+      maxLength: 4,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      decoration: InputDecoration(
+        labelText: _esPaquete
+            ? 'Cantidad de paquetes (12 unidades cada uno)'
+            : 'Cantidad',
+        prefixIcon: const PhosphorIcon(PhosphorIconsRegular.listNumbers),
+        counterText: '',
+      ),
+      onChanged: (_) => setState(() {}),
+      validator: (v) {
+        final n = int.tryParse(v ?? '');
+        if (n == null || n <= 0) {
+          return 'Ingresa una cantidad válida';
+        }
+        if (!_esPaquete && n < _cantidadMinimaUnidad) {
+          return 'El pedido mínimo es de $_cantidadMinimaUnidad panes';
+        }
+        return null;
+      },
+    );
+  }
+
+  Widget _botonFecha() {
+    return OutlinedButton.icon(
+      onPressed: _elegirFecha,
+      icon: const PhosphorIcon(PhosphorIconsRegular.calendarBlank, size: 18),
+      label: Text(
+        _fechaEntrega == null
+            ? 'Fecha de entrega'
+            : DateFormat('dd/MM/yyyy').format(_fechaEntrega!),
+      ),
+    );
+  }
+
+  Widget _botonHora() {
+    return OutlinedButton.icon(
+      onPressed: _elegirHora,
+      icon: const PhosphorIcon(PhosphorIconsRegular.clock, size: 18),
+      label: Text(
+        _horaEntrega == null
+            ? 'Hora de entrega'
+            : _horaEntrega!.format(context),
+      ),
+    );
+  }
+
+  Widget _campoNotas() {
+    return TextFormField(
+      controller: _notasController,
+      textCapitalization: TextCapitalization.characters,
+      inputFormatters: const [UpperCaseTextFormatter()],
+      decoration: const InputDecoration(labelText: 'Notas (opcional)'),
+      maxLines: 2,
+    );
+  }
+
+  // ----------------------------------------------------------- escritorio
+
+  Widget _construirEscritorio(ThemeData theme, ColorScheme scheme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
+      child: ContenidoCentrado(
+        anchoMaximo: 1040,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const EncabezadoEscritorio(
+                anteTitulo: 'AUTOSERVICIO',
+                titulo: 'Hacer un pedido',
+                subtitulo:
+                    'Elige el producto, cuánto y cuándo lo recoges. La '
+                    'tienda lo confirma según su stock.',
+              ),
+              const SizedBox(height: espacioEscritorio),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 6, child: _panelDatos(theme)),
+                  const SizedBox(width: espacioEscritorio),
+                  Expanded(flex: 4, child: _panelResumen(theme, scheme)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _panelDatos(ThemeData theme) {
+    return PanelEscritorio(
+          titulo: 'Tu pedido',
+          subtitulo: 'Producto, cantidad y entrega',
+          icono: PhosphorIconsRegular.bread,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _campoProducto(),
+              if (_productoSeleccionado != null) ...[
+                const SizedBox(height: 8),
+                Text(_notaProducto, style: theme.textTheme.bodyMedium),
+              ],
+              const SizedBox(height: 20),
+              _campoCantidad(),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: _botonFecha()),
+                  const SizedBox(width: 12),
+                  Expanded(child: _botonHora()),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _campoNotas(),
+            ],
+          ),
+        )
+        .animate(delay: 60.ms)
+        .fadeIn(duration: 320.ms)
+        .moveY(begin: 12, end: 0, curve: Curves.easeOutCubic);
+  }
+
+  /// Resumen "de carrito": el total y el botón de confirmar quedan a la
+  /// vista mientras se completan los campos de la izquierda.
+  Widget _panelResumen(ThemeData theme, ColorScheme scheme) {
+    final producto = _productoSeleccionado;
+    final hayResumen = producto != null && _cantidad > 0;
+
+    return TarjetaEscritorio(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+          radio: 24,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const PhosphorIcon(
+                      PhosphorIconsRegular.receipt,
+                      size: 19,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('Resumen', style: theme.textTheme.titleMedium),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (!hayResumen)
+                Text(
+                  'Elige un producto y una cantidad para ver el total.',
+                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+                )
+              else ...[
+                _FilaResumen(
+                  etiqueta: 'Producto',
+                  valor: producto.nombre,
+                ),
+                const SizedBox(height: 8),
+                _FilaResumen(
+                  etiqueta: _esPaquete
+                      ? 'Precio del paquete'
+                      : 'Precio por unidad',
+                  valor: 'S/ ${producto.precioUnitario.toStringAsFixed(2)}',
+                ),
+                const SizedBox(height: 8),
+                _FilaResumen(
+                  etiqueta: _esPaquete ? 'Paquetes' : 'Unidades',
+                  valor: '$_cantidad',
+                ),
+                const SizedBox(height: 8),
+                _FilaResumen(
+                  etiqueta: 'Entrega',
+                  valor: _fechaEntrega == null
+                      ? 'Sin fecha'
+                      : DateFormat('dd/MM/yyyy').format(_fechaEntrega!) +
+                            (_horaEntrega == null
+                                ? ''
+                                : ' · ${_horaEntrega!.format(context)}'),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AppColors.primary, AppColors.secondary],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text(
+                        'Total',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        'S/ ${_total.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 14),
+                Text(
+                  _error!,
+                  style: TextStyle(
+                    color: scheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              PremiumButton(
+                label: 'Registrar pedido',
+                icono: PhosphorIconsRegular.shoppingCartSimple,
+                cargando: _enviando,
+                onPressed: _registrarPedido,
+              ),
+            ],
+          ),
+        )
+        .animate(delay: 140.ms)
+        .fadeIn(duration: 320.ms)
+        .moveY(begin: 12, end: 0, curve: Curves.easeOutCubic);
+  }
+}
+
+/// Fila etiqueta/valor del resumen de escritorio.
+class _FilaResumen extends StatelessWidget {
+  const _FilaResumen({required this.etiqueta, required this.valor});
+
+  final String etiqueta;
+  final String valor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            etiqueta,
+            style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12.5),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            valor,
+            textAlign: TextAlign.right,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

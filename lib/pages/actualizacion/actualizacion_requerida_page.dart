@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/app_theme.dart';
@@ -66,6 +67,12 @@ class _ActualizacionRequeridaPageState
     }
   }
 
+  /// Grupo B (pantalla de bloqueo, una sola acción): no hay contenido que
+  /// repartir en columnas — es un mensaje y un botón. En ventana ancha el
+  /// bloque NO se estira: se queda en una tarjeta centrada de 460 px sobre
+  /// el fondo de marca a pantalla completa, con el ícono duotone grande
+  /// como protagonista. Mismo árbol en celular y en escritorio (solo el
+  /// techo de ancho cambia lo que se ve, no la estructura).
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -85,92 +92,109 @@ class _ActualizacionRequeridaPageState
             child: Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                          width: 96,
-                          height: 96,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.18),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.4),
-                              width: 1.6,
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.system_update_rounded,
-                            color: Colors.white,
-                            size: 46,
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(duration: 350.ms)
-                        .scale(
-                          begin: const Offset(0.85, 0.85),
-                          end: const Offset(1, 1),
-                          curve: Curves.easeOutBack,
-                        ),
-                    const SizedBox(height: 28),
-                    Text(
-                      'Actualización requerida',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Hay una nueva versión de la app con correcciones '
-                      'importantes. Actualiza desde Play Store para seguir '
-                      'usándola.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.92),
-                      ),
-                    ).animate().fadeIn(delay: 150.ms, duration: 300.ms),
-                    const SizedBox(height: 32),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 340),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                            width: 112,
+                            height: 112,
                             decoration: BoxDecoration(
-                              color: AppColors.background,
-                              borderRadius: BorderRadius.circular(18),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.2),
-                                  blurRadius: 24,
-                                  offset: const Offset(0, 12),
-                                ),
-                              ],
-                            ),
-                            child: PremiumButton(
-                              label: 'Actualizar en Play Store',
-                              icono: Icons.shop_rounded,
-                              cargando: _abriendo,
-                              onPressed: _irAPlayStore,
-                            ),
-                          ),
-                          if (_error != null) ...[
-                            const SizedBox(height: 14),
-                            Text(
-                              _error!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.18),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.4),
+                                width: 1.6,
                               ),
                             ),
+                            child: const PhosphorIcon(
+                              PhosphorIconsDuotone.cloudArrowDown,
+                              color: Colors.white,
+                              size: 56,
+                              duotoneSecondaryOpacity: 0.35,
+                            ),
+                          )
+                          .animate()
+                          .fadeIn(duration: 350.ms)
+                          .scale(
+                            begin: const Offset(0.85, 0.85),
+                            end: const Offset(1, 1),
+                            curve: Curves.easeOutBack,
+                          ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'ACTUALIZACIÓN DISPONIBLE',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.6,
+                          color: Colors.white.withValues(alpha: 0.75),
+                        ),
+                      ).animate().fadeIn(delay: 80.ms, duration: 300.ms),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Necesitas la última versión',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                        ),
+                      ).animate().fadeIn(delay: 120.ms, duration: 300.ms),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Hay una nueva versión de la app con correcciones '
+                        'importantes. Actualiza desde Play Store para seguir '
+                        'usándola.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          height: 1.5,
+                        ),
+                      ).animate().fadeIn(delay: 160.ms, duration: 300.ms),
+                      const SizedBox(height: 32),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 340),
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.2),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 12),
+                                  ),
+                                ],
+                              ),
+                              child: PremiumButton(
+                                label: 'Actualizar en Play Store',
+                                icono: PhosphorIconsRegular.googlePlayLogo,
+                                cargando: _abriendo,
+                                onPressed: _irAPlayStore,
+                              ),
+                            ),
+                            if (_error != null) ...[
+                              const SizedBox(height: 14),
+                              Text(
+                                _error!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
-                    ).animate().fadeIn(delay: 220.ms, duration: 300.ms).moveY(begin: 14, end: 0),
-                  ],
+                        ),
+                      ).animate().fadeIn(delay: 220.ms, duration: 300.ms).moveY(begin: 14, end: 0),
+                    ],
+                  ),
                 ),
               ),
             ),

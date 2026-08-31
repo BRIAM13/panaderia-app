@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/usuario_sesion.dart';
+import '../../theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../../services/biometric_service.dart';
 import '../../services/version_service.dart';
@@ -95,6 +97,12 @@ class _SplashPageState extends State<SplashPage> {
     );
   }
 
+  /// Grupo B (pantalla de entrada, una sola acción): no hay nada que
+  /// repartir en columnas — un splash es una marca y un indicador de
+  /// espera. El trabajo acá es de jerarquía y aire: el ícono decorativo
+  /// grande (duotone) sobre el indicador, el nombre con peso fuerte y una
+  /// línea de contexto discreta debajo, todo centrado con entrada
+  /// escalonada. Idéntico en celular y en escritorio a propósito.
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -104,14 +112,49 @@ class _SplashPageState extends State<SplashPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const PhosphorIcon(
+                  PhosphorIconsDuotone.bread,
+                  size: 64,
+                  color: AppColors.primary,
+                )
+                .animate()
+                .fadeIn(duration: 450.ms)
+                .scale(
+                  begin: const Offset(0.82, 0.82),
+                  end: const Offset(1, 1),
+                  curve: Curves.easeOutBack,
+                ),
+            const SizedBox(height: 28),
             const AppLoadingIndicator(
               size: 72,
-            ).animate().fadeIn(duration: 300.ms),
-            const SizedBox(height: 20),
+            ).animate().fadeIn(delay: 80.ms, duration: 300.ms),
+            const SizedBox(height: 24),
             Text(
-              'Panadería Ronceros',
-              style: theme.textTheme.titleLarge,
-            ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
+                  'Panadería Ronceros',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                    height: 1.1,
+                  ),
+                )
+                .animate()
+                .fadeIn(delay: 160.ms, duration: 320.ms)
+                .moveY(begin: 8, end: 0),
+            const SizedBox(height: 6),
+            Text(
+                  'Preparando tu sesión…',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
+                    color: AppColors.secondary,
+                  ),
+                )
+                .animate()
+                .fadeIn(delay: 240.ms, duration: 320.ms)
+                .moveY(begin: 6, end: 0),
           ],
         ),
       ),
