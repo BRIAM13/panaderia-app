@@ -29,6 +29,13 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          # Fijo, no "la última stable": Flutter 3.47 marcó `IconData` como
+          # clase `final`, lo que rompe la compilación de phosphor_flutter
+          # 2.1.0 (extiende IconData) — ver el fallo real en el run
+          # 33409605229. 3.41.9 es la que se usa y se prueba en local; subir
+          # esto a mano cuando phosphor_flutter publique una versión
+          # compatible con las nuevas reglas de clases de Dart.
+          flutter-version: '3.41.9'
 
       - name: Instalar dependencias
         run: flutter pub get
