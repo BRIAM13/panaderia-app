@@ -1,0 +1,44 @@
+name: Desplegar portal web (app.panaderiaronceros.com)
+
+# El portal web es el mismo Flutter compilado para navegador
+# (`flutter build web`), servido en Vercel como un proyecto aparte del
+# de la página pública (pagina-web/) — Vercel no sabe compilar Flutter
+# por su cuenta, así que no puede quedar conectado a Git como el resto:
+# este workflow es lo que reemplaza esa conexión, compilando acá y
+# subiendo el resultado ya armado con el CLI de Vercel.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'web/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/deploy-portal-web.yml'
+  workflow_dispatch: {}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_AOFxZYWO53dcHBIsC9XeYVmA
+      VERCEL_PROJECT_ID: prj_EhFPDvYN0hVSNfxVSHcMInTAfYQg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Instalar dependencias
+        run: flutter pub get
+
+      - name: Compilar web de producción
+        run: |
+          flutter build web --release \
+            --dart-define=API_BASE_URL=https://panaderia-backend-vtdy.onrender.com/api
+
+      - name: Desplegar a Vercel (producción)
+        run: npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN" --cwd build/web
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
