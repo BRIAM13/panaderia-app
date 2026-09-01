@@ -210,7 +210,11 @@ export function SeguimientoPedido() {
         <button
           onClick={alternar}
           aria-expanded={abierto}
-          className="group relative flex w-full flex-col items-center gap-6 px-6 py-10 text-center sm:flex-row sm:px-8 sm:py-12 sm:text-left"
+          // La fila (ícono · texto · botón) espera a md: a 640px el título
+          // y la bajada quedaban comprimidos contra el botón, partiéndose
+          // en dos y tres renglones cada uno. Hasta ahí, la versión
+          // centrada en columna se lee mucho mejor.
+          className="group relative flex w-full flex-col items-center gap-6 px-5 py-9 text-center sm:px-8 sm:py-12 md:flex-row md:text-left"
         >
           <motion.div
             whileHover={{ rotate: -8, scale: 1.05 }}
@@ -222,7 +226,7 @@ export function SeguimientoPedido() {
             <p className="mb-1.5 text-[11px] font-semibold tracking-[0.18em] text-pan-crema/70 uppercase">
               Seguimiento
             </p>
-            <h3 className="font-[family-name:var(--font-display-panaderia)] text-2xl font-semibold text-pan-crema">
+            <h3 className="equilibrar-texto font-[family-name:var(--font-display-panaderia)] text-xl font-semibold text-pan-crema sm:text-2xl">
               ¿Ya hiciste un pedido antes?
             </h3>
             <p className="mt-1 text-pan-crema/95">
@@ -230,7 +234,7 @@ export function SeguimientoPedido() {
               por confirmarlo.
             </p>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-pan-crema px-6 py-3.5 font-semibold text-pan-terracota shadow-md transition-transform duration-300 group-hover:scale-105">
+          <span className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-full bg-pan-crema px-6 font-semibold text-pan-terracota shadow-md transition-transform duration-300 group-hover:scale-105">
             {abierto ? "Cerrar" : "Ver mi pedido"}
             <ChevronDown
               className={`h-4 w-4 transition-transform duration-300 ${abierto ? "rotate-180" : ""}`}
@@ -248,7 +252,7 @@ export function SeguimientoPedido() {
               transition={{ duration: 0.4, ease: EASE_PREMIUM }}
               className="relative"
             >
-              <div className="border-t border-pan-crema/15 bg-pan-crema px-5 py-7 sm:px-8 sm:py-8">
+              <div className="border-t border-pan-crema/15 bg-pan-crema px-4 py-6 sm:px-8 sm:py-8">
                 <AnimatePresence mode="wait">
                   {resultado ? (
                     <motion.div
@@ -385,7 +389,15 @@ export function SeguimientoPedido() {
                                                 </p>
                                               </div>
                                               <p className="mt-0.5 text-sm text-pan-carbon-suave">{pedido.producto}</p>
-                                              <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-pan-borde/30 pt-2.5 text-sm">
+                                              {/* `auto` + `1fr` en vez de dos
+                                                  mitades iguales: partidas al
+                                                  medio, la columna del valor
+                                                  se quedaba en ~110px y
+                                                  "31 ago., 7:19pm" caía en dos
+                                                  renglones mientras la
+                                                  etiqueta ("Total") dejaba
+                                                  medio ancho vacío al lado. */}
+                                              <div className="mt-2.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 border-t border-pan-borde/30 pt-2.5 text-sm">
                                                 <span className="text-pan-carbon-suave">Registrado</span>
                                                 <span className="text-right font-medium text-pan-carbon">
                                                   {formatearFechaHora(pedido.fechaCreacion)}
@@ -421,7 +433,7 @@ export function SeguimientoPedido() {
                       )}
                       <button
                         onClick={buscarOtroVez}
-                        className="mx-auto mt-6 flex items-center gap-1.5 text-sm font-semibold text-pan-terracota hover:underline"
+                        className="mx-auto mt-4 flex min-h-11 items-center gap-1.5 rounded-full px-4 text-sm font-semibold text-pan-terracota hover:underline"
                       >
                         <X className="h-3.5 w-3.5" />
                         Buscar con otro documento
@@ -446,7 +458,7 @@ export function SeguimientoPedido() {
                             role="radio"
                             aria-checked={tipoDocumento === tipo}
                             onClick={() => elegirTipoDocumento(tipo)}
-                            className={`relative rounded-full px-6 py-2 text-sm font-semibold transition-colors ${
+                            className={`relative min-h-10 rounded-full px-6 text-sm font-semibold transition-colors ${
                               tipoDocumento === tipo ? "text-pan-crema" : "text-pan-carbon-suave hover:text-pan-carbon"
                             }`}
                           >

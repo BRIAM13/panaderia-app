@@ -40,7 +40,11 @@ export function Footer() {
 
         <nav aria-label="Secciones del sitio">
           <p className="text-xs font-semibold tracking-[0.16em] text-pan-carbon uppercase">Secciones</p>
-          <ul className="mt-4 space-y-2.5">
+          {/* En pantallas táctiles cada enlace ocupa una fila de 44px con su
+              propio relleno (antes eran 20px de texto con 10px de aire: se
+              tocaba el enlace de al lado con facilidad). Desde lg, donde se
+              navega con mouse, vuelve al ritmo compacto original. */}
+          <ul className="mt-3 space-y-0.5 lg:mt-4 lg:space-y-2.5">
             {ENLACES_SECCIONES.map((enlace) => (
               <li key={enlace.id}>
                 <a
@@ -49,7 +53,7 @@ export function Footer() {
                     e.preventDefault();
                     desplazarASeccion(enlace.id);
                   }}
-                  className="group inline-flex items-center gap-1.5 rounded text-sm text-pan-carbon-suave transition-colors hover:text-pan-terracota"
+                  className="group inline-flex min-h-11 items-center gap-1.5 rounded text-sm text-pan-carbon-suave transition-colors hover:text-pan-terracota lg:min-h-0"
                 >
                   <span
                     aria-hidden="true"
@@ -81,7 +85,7 @@ export function Footer() {
             </a>
             <a
               href="https://app.panaderiaronceros.com/"
-              className="flex items-center gap-2 rounded transition-colors hover:text-pan-terracota"
+              className="flex min-h-11 items-center gap-2 rounded transition-colors hover:text-pan-terracota lg:min-h-0"
             >
               <User className="h-4 w-4 shrink-0 text-pan-terracota" strokeWidth={1.75} />
               Entrar a mi cuenta
@@ -96,7 +100,7 @@ export function Footer() {
         </p>
         <a
           href="/privacidad/"
-          className="rounded font-medium text-pan-carbon-suave transition-colors hover:text-pan-terracota"
+          className="inline-flex min-h-11 items-center rounded font-medium text-pan-carbon-suave transition-colors hover:text-pan-terracota lg:min-h-0"
         >
           Política de privacidad
         </a>

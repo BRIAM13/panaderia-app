@@ -197,10 +197,20 @@ footer[id] {
    escribiendo — sobre todo al navegar con teclado. */
 .campo-pan {
   width: 100%;
+  /* 3rem = 48px: el mínimo cómodo para tocar con el pulgar. Los campos ya
+     llegaban a ~50px con su relleno, pero dejarlo escrito acá evita que un
+     campo futuro con menos texto quede por debajo del umbral. */
+  min-height: 3rem;
   border-radius: 0.75rem;
   border: 1px solid var(--color-pan-borde);
   background-color: var(--color-pan-crema);
   padding: 0.75rem 1rem;
+  /* 16px explícito, no heredado: Safari en iOS hace zoom solo al enfocar
+     cualquier campo con letra menor a 16px, y salir de ese zoom queda a
+     cargo del visitante. Fijarlo acá blinda a todos los campos del sitio
+     de ese salto, sin importar el tamaño de texto del bloque que los
+     contenga. */
+  font-size: 1rem;
   color: var(--color-pan-carbon);
   outline: none;
   transition:
@@ -224,6 +234,37 @@ footer[id] {
 .campo-pan:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* Hoja emergente que entra desde abajo en celulares (ver SelectorModal).
+   Dos cosas que el navegador no resuelve solo:
+   1. El relleno inferior descuenta la barra de gestos del iPhone — sin él,
+      el último botón de la hoja queda literalmente debajo de la barra del
+      sistema y no se puede tocar.
+   2. El alto máximo se mide en `dvh` (alto REAL visible), no en `vh`: con
+      la barra de direcciones a la vista, `vh` es más grande que la
+      pantalla y la hoja terminaría cortada por abajo. El contenido de
+      adentro se desplaza solo, así que ni el calendario ni la lista de
+      panes se salen nunca de la pantalla, tampoco en celular acostado. */
+.hoja-emergente {
+  max-height: calc(100dvh - 1.5rem);
+  padding-bottom: max(1.5rem, calc(env(safe-area-inset-bottom) + 0.75rem));
+}
+@media (min-width: 40rem) {
+  .hoja-emergente {
+    max-height: min(85dvh, 44rem);
+    padding-bottom: 1.25rem;
+  }
+}
+
+/* El cuerpo desplazable de la hoja: `overscroll-contain` corta el
+   "scroll chaining" — al llegar al final de la lista, el gesto dejaba de
+   mover la lista y empezaba a mover la página de atrás, que además ya
+   estaba bloqueada, dando la sensación de que la hoja se había trabado. */
+.cuerpo-hoja {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Contorno degradado que se enciende al hacer hover sobre una tarjeta —

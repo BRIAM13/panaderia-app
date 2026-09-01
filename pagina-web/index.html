@@ -4,7 +4,11 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover es lo que hace que env(safe-area-inset-*) deje de
+         valer 0 en iPhone con notch/barra de gestos: sin esto, la hoja
+         inferior de los selectores (ver SelectorModal) quedaría por debajo
+         de la barra de inicio y su último botón sería intocable. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="En Panadería Ronceros hacemos pan artesanal de siempre, hecho en familia en Pisco desde hace generaciones. Conócenos y haz tu pedido en línea." />
     <meta name="theme-color" content="#FDF6EC" />
     <title>Panadería Ronceros: pan artesanal en Pisco</title>

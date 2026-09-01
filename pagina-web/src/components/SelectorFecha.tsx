@@ -130,9 +130,9 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
             type="button"
             aria-label="Mes anterior"
             onClick={() => setMesVisible((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
-            className="rounded-full p-1.5 text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-5 w-5" />
           </button>
           <p className="text-sm font-semibold text-pan-carbon capitalize">
             {MESES[mesVisible.getMonth()]} {mesVisible.getFullYear()}
@@ -141,9 +141,9 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
             type="button"
             aria-label="Mes siguiente"
             onClick={() => setMesVisible((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
-            className="rounded-full p-1.5 text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-5 w-5" />
           </button>
         </div>
 
@@ -165,7 +165,13 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
                 type="button"
                 disabled={deshabilitado}
                 onClick={() => setDraft(clave)}
-                className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-sm transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                // 44px de lado en celular (antes 32px, por debajo del
+                // mínimo cómodo para el pulgar: era muy fácil marcar el día
+                // de al lado). El ancho de columna disponible en la hoja
+                // ronda los 47px, así que la casilla más grande entra sin
+                // apretar la cuadrícula; en pantallas con mouse vuelve a su
+                // tamaño original.
+                className={`mx-auto flex h-11 w-11 items-center justify-center rounded-full text-sm transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] sm:h-9 sm:w-9 ${
                   seleccionado
                     ? "scale-110 bg-pan-terracota font-semibold text-pan-crema shadow-md shadow-pan-terracota/35"
                     : deshabilitado

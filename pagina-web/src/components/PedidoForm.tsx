@@ -488,7 +488,13 @@ export function PedidoForm() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.85 }}
                 transition={{ duration: 0.25, ease: EASE_PREMIUM }}
-                className="absolute -top-14 right-6 z-10 -translate-y-full whitespace-nowrap rounded-2xl rounded-br-md bg-pan-crema-suave px-3.5 py-2 text-xs font-semibold text-pan-carbon shadow-lg shadow-pan-carbon/15 sm:-top-20 sm:right-10"
+                // La frase más larga del saludo ronda los 220px: en un
+                // celular de 375px cabe por poco, pero con un texto nuevo
+                // un poco más largo se saldría de la pantalla por la
+                // izquierda. Acotado y con salto de línea permitido en
+                // celular, el globo crece hacia abajo en vez de hacia
+                // afuera.
+                className="absolute -top-14 right-6 z-10 max-w-[15rem] -translate-y-full rounded-2xl rounded-br-md bg-pan-crema-suave px-3.5 py-2 text-xs font-semibold text-pan-carbon shadow-lg shadow-pan-carbon/15 sm:-top-20 sm:right-10 sm:max-w-none sm:whitespace-nowrap"
               >
                 {mensajeMascota}
               </motion.div>
@@ -526,7 +532,7 @@ export function PedidoForm() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-80px" }}
             transition={{ duration: 0.6, ease: EASE_PREMIUM, delay: 0.1 }}
-            className="relative z-10 rounded-3xl border border-pan-borde/50 bg-pan-crema-suave p-6 shadow-md shadow-pan-carbon/5 sm:p-8"
+            className="relative z-10 rounded-3xl border border-pan-borde/50 bg-pan-crema-suave p-5 shadow-md shadow-pan-carbon/5 sm:p-8"
           >
           <AnimatePresence mode="wait">
             {resultado ? (
@@ -593,7 +599,7 @@ export function PedidoForm() {
                 )}
                 <button
                   onClick={pedirOtroVez}
-                  className="boton-relleno mt-6 rounded-full border border-pan-borde px-5 py-2.5 text-sm font-semibold text-pan-carbon"
+                  className="boton-relleno mt-6 inline-flex min-h-12 items-center justify-center rounded-full border border-pan-borde px-6 text-sm font-semibold text-pan-carbon"
                 >
                   Hacer otro pedido
                 </button>
@@ -632,7 +638,7 @@ export function PedidoForm() {
                             setTipoDocumento(tipo);
                             setNumeroDocumento("");
                           }}
-                          className={`relative rounded-full px-5 py-1.5 text-sm font-semibold transition-colors ${
+                          className={`relative min-h-10 rounded-full px-6 text-sm font-semibold transition-colors ${
                             tipoDocumento === tipo
                               ? "text-pan-crema"
                               : "text-pan-carbon-suave hover:text-pan-carbon"
@@ -763,7 +769,7 @@ export function PedidoForm() {
                               <button
                                 type="button"
                                 onClick={() => void cargarCatalogo(true)}
-                                className="mt-2 inline-flex items-center gap-1.5 rounded text-xs font-semibold text-pan-terracota transition-colors hover:text-pan-terracota-profundo"
+                                className="-mx-2 mt-1 inline-flex min-h-11 items-center gap-1.5 rounded px-2 text-xs font-semibold text-pan-terracota transition-colors hover:text-pan-terracota-profundo"
                               >
                                 <RotateCw className="h-3.5 w-3.5" />
                                 Reintentar
@@ -830,7 +836,13 @@ export function PedidoForm() {
                         <PasoFormulario numero={3} titulo="Recojo" icono={CalendarClock} listo={paso3Listo} />
 
                         <div>
-                          <div className="grid grid-cols-2 gap-3">
+                          {/* Una columna en celular: repartidos en dos, cada
+                              campo quedaba en 133px y una fecha ya elegida
+                              ("Lun 31 de agosto") se partía en TRES
+                              renglones dentro del botón. Recién con el
+                              ancho de sm entran los dos en la misma fila
+                              sin cortar el texto. */}
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <SelectorFecha
                               ref={selectorFechaRef}
                               id="fecha-recojo"
@@ -1014,9 +1026,14 @@ function PasoFormulario({
  * valor para documento, producto, recojo, etc. */
 function FilaDetallePedido({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
+    // La etiqueta no se parte nunca y el valor se queda con el resto del
+    // ancho: una nota larga o un nombre de pan largo se acomodaban antes
+    // empujando la etiqueta hasta partirla ("Doc- / umento") en pantallas
+    // angostas. `break-words` corta además una palabra sin espacios que no
+    // entre por sí sola.
     <div className="flex items-start justify-between gap-4">
-      <span className="text-pan-carbon-suave">{etiqueta}</span>
-      <span className="text-right font-medium text-pan-carbon">{valor}</span>
+      <span className="shrink-0 text-pan-carbon-suave">{etiqueta}</span>
+      <span className="min-w-0 text-right font-medium break-words text-pan-carbon">{valor}</span>
     </div>
   );
 }

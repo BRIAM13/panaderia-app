@@ -80,14 +80,40 @@ export function Navbar() {
 
   // El menú móvil se cierra con Escape (lo que cualquiera espera de un
   // panel desplegado) y deja de poder desplazarse el fondo mientras está
-  // abierto, para que el gesto de scroll no mueva la página por debajo.
+  // abierto, para que el gesto de scroll no mueva la página por debajo —
+  // el bloqueo del fondo estaba descrito acá pero nunca llegó a
+  // implementarse: al deslizar sobre el menú abierto, la página de atrás
+  // se movía y la sección resaltada iba cambiando sola.
   useEffect(() => {
     if (!abierto) return;
     const alPresionar = (e: KeyboardEvent) => {
       if (e.key === "Escape") setAbierto(false);
     };
     window.addEventListener("keydown", alPresionar);
-    return () => window.removeEventListener("keydown", alPresionar);
+    const overflowOriginal = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", alPresionar);
+      document.body.style.overflow = overflowOriginal;
+    };
+  }, [abierto]);
+
+  // Pasar de vertical a horizontal con el menú abierto dejaba el panel
+  // desplegado sobre un layout que ya muestra la navegación completa (y el
+  // fondo bloqueado sin nada que lo desbloquee, porque el botón de cerrar
+  // se oculta a partir de lg). Se cierra solo al cruzar ese ancho.
+  useEffect(() => {
+    if (!abierto) return;
+    const consulta = window.matchMedia("(min-width: 64rem)");
+    if (consulta.matches) {
+      setAbierto(false);
+      return;
+    }
+    const alCambiar = (e: MediaQueryListEvent) => {
+      if (e.matches) setAbierto(false);
+    };
+    consulta.addEventListener("change", alCambiar);
+    return () => consulta.removeEventListener("change", alCambiar);
   }, [abierto]);
 
   return (
@@ -101,10 +127,10 @@ export function Navbar() {
           : "border-pan-borde/60 shadow-none"
       }`}
     >
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3 sm:px-6 sm:py-4">
         <a
           href="/"
-          className="group flex items-center gap-2.5 rounded-lg font-[family-name:var(--font-display-panaderia)] text-xl font-semibold text-pan-carbon transition-colors hover:text-pan-terracota"
+          className="group flex min-h-11 min-w-0 items-center gap-2.5 rounded-lg font-[family-name:var(--font-display-panaderia)] text-lg font-semibold whitespace-nowrap text-pan-carbon transition-colors hover:text-pan-terracota sm:text-xl lg:min-h-0"
         >
           {/* Sello de la marca: las iniciales dentro de un cuadro cálido.
               El logotipo era solo texto y la barra se veía vacía a la
@@ -118,7 +144,12 @@ export function Navbar() {
           {SITE.nombre}
         </a>
 
-        <nav className="hidden items-center gap-8 md:flex">
+        {/* La navegación completa aparece recién en lg (1024px), no en md
+            (768px): en tablet vertical los siete elementos no entraban en
+            una línea y se partían en dos ("Nuestro / pan", "Pedir /
+            ahora"), con el logotipo también cortado en dos renglones. A
+            768px el menú desplegable es la presentación correcta. */}
+        <nav className="hidden items-center gap-4 lg:flex xl:gap-8">
           {ENLACES.map((enlace) => {
             const activo = seccionActiva === enlace.href.slice(1);
             return (
@@ -162,14 +193,23 @@ export function Navbar() {
             <User className="h-4 w-4" strokeWidth={1.75} />
             Iniciar sesión
           </a>
+          {/* Solo el ícono en la barra de escritorio. Este botón únicamente
+              existe para quien navega desde Android, y con su texto
+              ("Descargar app", ~147px) los siete elementos se pasaban del
+              ancho de la barra: a 1024px por 96px, y ni siquiera a 1440px
+              alcanzaba, porque el contenedor está topado en max-w-6xl y
+              nunca crece más de 1104px por dentro. La etiqueta completa
+              sigue estando en el menú desplegable (por debajo de lg) y el
+              nombre accesible del botón la conserva acá. */}
           {ES_ANDROID && (
             <button
               type="button"
               onClick={() => setModalDescargaAbierto(true)}
-              className="boton-relleno inline-flex items-center gap-1.5 rounded-full border border-pan-borde bg-pan-crema-suave px-4 py-2 text-sm font-medium text-pan-carbon"
+              aria-label="Descargar app"
+              title="Descargar app"
+              className="boton-relleno inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-pan-borde bg-pan-crema-suave text-pan-carbon"
             >
-              <Download className="h-4 w-4" strokeWidth={1.75} />
-              Descargar app
+              <Download className="h-4 w-4 shrink-0" strokeWidth={1.75} />
             </button>
           )}
           <motion.a
@@ -188,7 +228,7 @@ export function Navbar() {
 
         <button
           onClick={() => setAbierto((v) => !v)}
-          className="rounded-lg p-1 text-pan-carbon transition-colors hover:text-pan-terracota md:hidden"
+          className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-pan-carbon transition-colors hover:text-pan-terracota lg:hidden"
           aria-label={abierto ? "Cerrar menú" : "Abrir menú"}
           aria-expanded={abierto}
           aria-controls="menu-movil"
@@ -221,12 +261,17 @@ export function Navbar() {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3, ease: EASE_PREMIUM }}
-            className="overflow-hidden border-t border-pan-borde/60 md:hidden"
+            className="overflow-hidden border-t border-pan-borde/60 lg:hidden"
           >
             {/* Fondo propio, opaco: la barra de arriba es translúcida a
                 propósito, pero un panel desplegado sin fondo dejaba leer
-                el titular de la portada por detrás de sus enlaces. */}
-            <div className="flex flex-col gap-1 bg-pan-crema px-6 py-4">
+                el titular de la portada por detrás de sus enlaces.
+                El alto se acota al espacio que queda bajo la barra (con
+                `dvh`, el alto real visible) y el panel se desplaza por
+                dentro: en celular acostado —390px de alto— la lista
+                completa no entra y el botón "Pedir ahora" quedaba fuera
+                de la pantalla, sin forma de alcanzarlo. */}
+            <div className="flex max-h-[calc(100dvh-4rem)] flex-col gap-1 overflow-y-auto overscroll-contain bg-pan-crema px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
               {ENLACES.map((enlace) => {
                 const activo = seccionActiva === enlace.href.slice(1);
                 return (
@@ -239,7 +284,7 @@ export function Navbar() {
                       desplazarASeccion(enlace.href.slice(1));
                     }}
                     aria-current={activo ? "true" : undefined}
-                    className={`rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                    className={`flex min-h-11 items-center rounded-lg px-3 text-[0.9375rem] font-medium transition-colors ${
                       activo
                         ? "bg-pan-terracota-suave/45 text-pan-terracota"
                         : "text-pan-carbon-suave hover:bg-pan-crema-muted"
@@ -252,7 +297,7 @@ export function Navbar() {
               <a
                 href="https://app.panaderiaronceros.com/"
                 onClick={() => setAbierto(false)}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
+                className="flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-[0.9375rem] font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
               >
                 <User className="h-4 w-4" strokeWidth={1.75} />
                 Iniciar sesión
@@ -264,7 +309,7 @@ export function Navbar() {
                     setAbierto(false);
                     setModalDescargaAbierto(true);
                   }}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
+                  className="flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-left text-[0.9375rem] font-medium text-pan-carbon-suave hover:bg-pan-crema-muted"
                 >
                   <Download className="h-4 w-4" strokeWidth={1.75} />
                   Descargar app
@@ -277,7 +322,7 @@ export function Navbar() {
                   setAbierto(false);
                   desplazarASeccion("pedido");
                 }}
-                className="mt-2 rounded-full bg-pan-terracota px-5 py-2.5 text-center text-sm font-semibold text-pan-crema transition-opacity hover:opacity-90"
+                className="mt-2 flex min-h-12 items-center justify-center rounded-full bg-pan-terracota px-5 text-center text-[0.9375rem] font-semibold text-pan-crema transition-opacity hover:opacity-90"
               >
                 Pedir ahora
               </a>
@@ -290,3 +335,4 @@ export function Navbar() {
     </motion.header>
   );
 }
+

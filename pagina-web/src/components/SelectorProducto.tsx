@@ -73,7 +73,11 @@ export const SelectorProducto = forwardRef<SelectorProductoHandle, SelectorProdu
       </button>
 
       <SelectorModal abierto={abierto} titulo="Elige tu pan" onCancelar={() => setAbierto(false)} mostrarPie={false}>
-        <div className="max-h-80 space-y-1 overflow-y-auto">
+        {/* Sin tope propio: la hoja ya acota su alto al de la pantalla y
+            desplaza su contenido (ver SelectorModal). Un `max-h` fijo acá
+            encima solo agregaba una segunda barra de desplazamiento
+            anidada dentro de la primera. */}
+        <div className="space-y-1">
           {productos.map((p) => {
             const activo = p.idProducto === valor;
             return (
@@ -81,19 +85,26 @@ export const SelectorProducto = forwardRef<SelectorProductoHandle, SelectorProdu
                 key={p.idProducto}
                 type="button"
                 onClick={() => elegir(p.idProducto)}
-                className={`flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                // Nombre arriba, precio debajo — en cualquier tamaño. La
+                // hoja mide como mucho 384px y compartiendo fila con el
+                // precio ("S/ 6.50 el paquete") al nombre le quedaban
+                // 154px: "Pan de Hamburguesa Clásico" caía en tres
+                // renglones de dos palabras. Apilado, el nombre entra
+                // entero en una línea y el precio se lee como su dato
+                // secundario, que es lo que es.
+                className={`flex min-h-13 w-full flex-col items-start gap-0.5 rounded-xl px-4 py-3 text-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                   activo
                     ? "bg-pan-terracota text-pan-crema shadow-sm shadow-pan-terracota/30"
                     : "text-pan-carbon hover:translate-x-0.5 hover:bg-pan-terracota-suave/40"
                 }`}
               >
                 <span className="font-medium">{p.nombre}</span>
-                <span className="flex items-center gap-2 shrink-0">
+                <span className="flex w-full items-center justify-between gap-2">
                   <span className={`text-sm ${activo ? "text-pan-crema/80" : "text-pan-carbon-suave"}`}>
                     S/ {p.precioUnitario.toFixed(2)}
                     {p.esPaquete ? " el paquete" : " c/u"}
                   </span>
-                  {activo && <Check className="h-4 w-4" />}
+                  {activo && <Check className="h-4 w-4 shrink-0" />}
                 </span>
               </button>
             );

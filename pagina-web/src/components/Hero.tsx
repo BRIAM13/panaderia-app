@@ -80,7 +80,13 @@ export function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: EASE_PREMIUM, delay: 0.05 }}
-            className="font-[family-name:var(--font-display-panaderia)] text-5xl leading-[1.05] font-semibold tracking-[-0.015em] text-pan-carbon sm:text-6xl"
+            // 48px era demasiado para 375px de ancho: "hecho en familia" no
+            // entraba en una línea y "familia" caía sola en un cuarto
+            // renglón, con el titular ocupando media pantalla antes de que
+            // se leyera una palabra del resto. La escala sube en dos
+            // escalones y a partir de sm queda idéntica al diseño de
+            // escritorio ya aprobado.
+            className="font-[family-name:var(--font-display-panaderia)] text-4xl leading-[1.05] font-semibold tracking-[-0.015em] text-pan-carbon min-[480px]:text-5xl sm:text-6xl"
           >
             {/* `equilibrar-texto` reparte esta primera frase en dos líneas
                 parejas ("Pan artesanal / de siempre") en vez de dejar la
@@ -105,7 +111,11 @@ export function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: EASE_PREMIUM, delay: 0.18 }}
-            className="mt-8 flex flex-wrap gap-4"
+            // En celular los dos botones se apilan a todo el ancho en vez
+            // de quedar uno debajo del otro con anchos distintos (que es
+            // como caían al envolverse): una columna pareja de acciones se
+            // toca mejor con el pulgar y se lee como una jerarquía clara.
+            className="mt-8 flex flex-col gap-3 min-[480px]:flex-row min-[480px]:flex-wrap min-[480px]:gap-4"
           >
             <motion.a
               href="#pedido"
@@ -115,7 +125,7 @@ export function Hero() {
               }}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.97 }}
-              className="group inline-flex items-center gap-2 rounded-full bg-pan-terracota px-6 py-3.5 font-semibold text-pan-crema shadow-lg shadow-pan-terracota/20 transition-shadow hover:shadow-xl hover:shadow-pan-terracota/30"
+              className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-pan-terracota px-6 py-3.5 font-semibold text-pan-crema shadow-lg shadow-pan-terracota/20 transition-shadow hover:shadow-xl hover:shadow-pan-terracota/30 min-[480px]:w-auto"
             >
               Hacer un pedido
               <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
@@ -128,7 +138,7 @@ export function Hero() {
               }}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.97 }}
-              className="boton-relleno inline-flex items-center gap-2 rounded-full border border-pan-borde bg-pan-crema-suave px-6 py-3.5 font-semibold text-pan-carbon"
+              className="boton-relleno inline-flex w-full items-center justify-center gap-2 rounded-full border border-pan-borde bg-pan-crema-suave px-6 py-3.5 font-semibold text-pan-carbon min-[480px]:w-auto"
             >
               Ver nuestro pan
             </motion.a>
@@ -206,7 +216,11 @@ export function Hero() {
           <motion.div
             animate={{ y: [0, -10, 0] }}
             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -bottom-5 -left-5 flex items-center gap-3 rounded-2xl border border-pan-borde/30 bg-pan-crema-suave/95 px-4 py-3 shadow-lg shadow-pan-carbon/10 backdrop-blur-sm sm:-left-8"
+            // En celular la foto ya ocupa casi todo el ancho, así que un
+            // desplazamiento negativo dejaba la ficha rozando el borde de
+            // la pantalla; recién cuando hay margen alrededor (sm) vuelve a
+            // salirse de la foto como en el diseño de escritorio.
+            className="absolute -bottom-4 left-0 flex items-center gap-3 rounded-2xl border border-pan-borde/30 bg-pan-crema-suave/95 px-4 py-3 shadow-lg shadow-pan-carbon/10 backdrop-blur-sm sm:-bottom-5 sm:-left-8"
           >
             {/* Punto que late: señala que el dato es "de hoy", en vivo, no
                 una etiqueta decorativa cualquiera. */}

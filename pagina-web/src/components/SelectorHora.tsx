@@ -12,6 +12,12 @@ const ALTO_ITEM = 40;
 const FILAS_VISIBLES = 5;
 const ALTO_RUEDA = ALTO_ITEM * FILAS_VISIBLES;
 const RELLENO = ALTO_ITEM * Math.floor(FILAS_VISIBLES / 2);
+// Alto de los botones de flecha de cada rueda (44px = mínimo cómodo para
+// tocar con el pulgar; antes eran 24px y en celular casi no se acertaba).
+// El separador ":" reserva exactamente este alto arriba y abajo para
+// quedar centrado en la misma franja que el valor resaltado, así que los
+// dos números tienen que salir de la misma constante.
+const ALTO_FLECHA = 44;
 // Cuántos píxeles de scroll del mouse/trackpad equivalen a "un paso" —
 // una rueda de mouse estándar manda ~100px por clic/muesca, así que esto
 // hace que un clic de rueda mueva exactamente un ítem, no tres o cuatro.
@@ -351,14 +357,19 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
   }
 
   return (
-    <div className="flex flex-col items-center">
+    // w-18 en celular / w-16 desde sm: la columna es también la zona por
+    // la que se arrastra la rueda con el dedo, y 64px se quedaban cortos
+    // para un pulgar. En la hoja de 375px sobra ancho de sobra para las
+    // tres columnas.
+    <div className="flex w-18 flex-col items-center sm:w-16">
       <button
         type="button"
         aria-label={`${ariaLabel} anterior`}
         onClick={() => moverPaso(-1)}
-        className="rounded-full p-1 text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
+        style={{ height: ALTO_FLECHA }}
+        className="flex w-full items-center justify-center rounded-full text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
       >
-        <ChevronUp className="h-4 w-4" />
+        <ChevronUp className="h-4.5 w-4.5" />
       </button>
       <div
         ref={ref}
@@ -370,7 +381,7 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
         onPointerUp={alPointerUp}
         onPointerCancel={alPointerUp}
         style={{ height: ALTO_RUEDA, paddingTop: RELLENO, paddingBottom: RELLENO }}
-        className="w-16 cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing"
+        className="w-full cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing"
       >
         {Array.from({ length: total }, (_, pos) => {
           const logico = mod(pos, n);
@@ -401,9 +412,10 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
         type="button"
         aria-label={`${ariaLabel} siguiente`}
         onClick={() => moverPaso(1)}
-        className="rounded-full p-1 text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
+        style={{ height: ALTO_FLECHA }}
+        className="flex w-full items-center justify-center rounded-full text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
       >
-        <ChevronDown className="h-4 w-4" />
+        <ChevronDown className="h-4.5 w-4.5" />
       </button>
     </div>
   );
@@ -525,6 +537,21 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
 
   const draftInvalido = muyPronto(draftHora, draftMinuto, draftPeriodo);
 
+  // En un celular acostado (390px de alto) las tres ruedas no entran
+  // enteras en la hoja, así que su cuerpo se desplaza — y arrancaba
+  // mostrando las filas de arriba, con la franja del valor elegido justo
+  // por debajo del corte. Al abrir se centra esa franja dentro del cuerpo
+  // desplazable, que es lo primero que el cliente necesita ver. En
+  // pantallas donde todo entra, esto no mueve nada.
+  const bandaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!abierto) return;
+    const id = window.requestAnimationFrame(() => {
+      bandaRef.current?.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [abierto]);
+
   // El piso de tolerancia avanza solo con el reloj (ver `minimoHoy`, que
   // el padre recalcula cada 15s) — si el cliente se queda con la ventana
   // abierta y su elección queda por detrás del nuevo piso efectivo, la
@@ -582,7 +609,10 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
           </p>
         )}
         <div className="relative">
-          <div className="pointer-events-none absolute inset-x-0 top-1/2 h-10 -translate-y-1/2 rounded-xl border-y-2 border-pan-terracota/40 bg-pan-terracota-suave/20" />
+          <div
+            ref={bandaRef}
+            className="pointer-events-none absolute inset-x-0 top-1/2 h-10 -translate-y-1/2 rounded-xl border-y-2 border-pan-terracota/40 bg-pan-terracota-suave/20"
+          />
           <div className="flex items-start justify-center gap-1">
             <Rueda
               valores={HORAS_12}
@@ -594,14 +624,14 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
             />
             <div className="flex flex-col items-center">
               {/* Mismo alto que los botones de flecha de las ruedas
-                  (h-4 + p-1 de cada lado = 24px), para que el ":" quede
-                  centrado en la misma franja que el valor resaltado, no
-                  en el alto total de la columna (que incluye flechas). */}
-              <div className="h-6 shrink-0" aria-hidden="true" />
+                  (ALTO_FLECHA), para que el ":" quede centrado en la misma
+                  franja que el valor resaltado, no en el alto total de la
+                  columna (que incluye flechas). */}
+              <div style={{ height: ALTO_FLECHA }} className="shrink-0" aria-hidden="true" />
               <div style={{ height: ALTO_RUEDA }} className="flex items-center justify-center">
                 <span className="text-lg font-bold text-pan-carbon-suave">:</span>
               </div>
-              <div className="h-6 shrink-0" aria-hidden="true" />
+              <div style={{ height: ALTO_FLECHA }} className="shrink-0" aria-hidden="true" />
             </div>
             <Rueda
               valores={MINUTOS_60}

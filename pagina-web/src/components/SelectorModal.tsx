@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
+import { X } from "lucide-react";
 import { EASE_PREMIUM } from "../utils/animacion";
 
 interface SelectorModalProps {
@@ -34,7 +35,14 @@ interface SelectorModalProps {
  * foco entra al panel al abrirse y vuelve al botón que lo abrió al
  * cerrarse, y el tabulador no se escapa al formulario de atrás. Sin esto,
  * quien navegaba con teclado seguía tabulando por la página que quedaba
- * debajo del modal, sin forma de cerrarlo con el teclado. */
+ * debajo del modal, sin forma de cerrarlo con el teclado.
+ *
+ * En celular se presenta como hoja pegada al borde inferior (más cerca del
+ * pulgar) y en pantallas grandes como tarjeta centrada. En los dos casos
+ * el panel nunca supera el alto real de la pantalla: la cabecera y el pie
+ * quedan fijos y SOLO el contenido se desplaza, así el calendario, la
+ * rueda de horas o la lista de panes siguen siendo usables incluso con el
+ * celular acostado, donde antes el panel se salía por abajo. */
 export function SelectorModal({
   abierto,
   titulo,
@@ -130,30 +138,47 @@ export function SelectorModal({
             exit={{ opacity: 0, y: 28, scale: 0.97 }}
             transition={{ duration: 0.22, ease: EASE_PREMIUM }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm rounded-t-3xl border border-pan-borde/60 bg-pan-crema-suave p-5 pb-6 shadow-2xl shadow-pan-carbon/25 outline-none sm:rounded-3xl sm:pb-5"
+            className="hoja-emergente flex w-full max-w-sm flex-col rounded-t-3xl border border-pan-borde/60 bg-pan-crema-suave px-5 pt-5 shadow-2xl shadow-pan-carbon/25 outline-none sm:rounded-3xl"
           >
             {/* Agarradera visual: en móvil el panel entra desde abajo como
                 una hoja, y esta barrita comunica que se trata de una capa
                 sobre el formulario. */}
             <span
               aria-hidden="true"
-              className="mx-auto mb-3 block h-1 w-10 rounded-full bg-pan-borde/45 sm:hidden"
+              className="mx-auto mb-3 block h-1 w-10 shrink-0 rounded-full bg-pan-borde/45 sm:hidden"
             />
-            <p
-              id={tituloId}
-              className="mb-4 text-center text-xs font-semibold tracking-[0.16em] text-pan-carbon-suave uppercase"
-            >
-              {titulo}
-            </p>
+            <div className="relative mb-4 shrink-0">
+              <p
+                id={tituloId}
+                className="px-12 text-center text-xs font-semibold tracking-[0.16em] text-pan-carbon-suave uppercase"
+              >
+                {titulo}
+              </p>
+              {/* Cerrar explícito y de 44px: tocar fuera del panel o
+                  presionar Escape ya cerraban, pero ninguno de los dos se
+                  ve, y las hojas sin pie (elegir pan, descargar la app) no
+                  tenían ni un solo control visible para salir — quedaba
+                  adivinar que había que tocar el fondo oscurecido. */}
+              <button
+                type="button"
+                onClick={onCancelar}
+                aria-label="Cerrar"
+                className="absolute -top-2.5 -right-2 flex h-11 w-11 items-center justify-center rounded-full text-pan-carbon-suave transition-colors hover:bg-pan-crema-muted hover:text-pan-carbon"
+              >
+                <X className="h-4.5 w-4.5" strokeWidth={2} />
+              </button>
+            </div>
 
-            {children}
+            {/* -mx-1/px-1: el recorte del área desplazable no debe comer el
+                anillo de foco ni la sombra de los ítems de adentro. */}
+            <div className="cuerpo-hoja -mx-1 min-h-0 flex-1 px-1">{children}</div>
 
             {mostrarPie && (
-              <div className="mt-5 flex gap-3">
+              <div className="mt-5 flex shrink-0 gap-3">
                 <button
                   type="button"
                   onClick={onCancelar}
-                  className="boton-relleno flex-1 rounded-full border border-pan-borde py-2.5 text-sm font-semibold text-pan-carbon-suave"
+                  className="boton-relleno flex-1 rounded-full border border-pan-borde py-3 text-sm font-semibold text-pan-carbon-suave"
                   style={
                     {
                       "--color-relleno": "var(--color-pan-crema-muted)",
@@ -167,7 +192,7 @@ export function SelectorModal({
                   type="button"
                   onClick={onAceptar}
                   disabled={aceptarDeshabilitado}
-                  className="flex-1 rounded-full bg-pan-terracota py-2.5 text-sm font-semibold text-pan-crema shadow-sm shadow-pan-terracota/25 transition-all duration-300 hover:shadow-md hover:shadow-pan-terracota/35 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                  className="flex-1 rounded-full bg-pan-terracota py-3 text-sm font-semibold text-pan-crema shadow-sm shadow-pan-terracota/25 transition-all duration-300 hover:shadow-md hover:shadow-pan-terracota/35 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
                 >
                   Aceptar
                 </button>

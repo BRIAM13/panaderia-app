@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Croissant } from "lucide-react";
 import { PRODUCTOS, type ProductoMenu } from "../data/config";
@@ -18,7 +18,12 @@ export function Menu() {
           descripcion="El de siempre, hecho como siempre se hizo, fresco todos los días. Pronto sumamos el resto de nuestra variedad con sus propias fotos."
         />
 
-        <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-3">
+        {/* Las tres columnas arrancan en md (768px), no en sm (640px): a
+            640px cada tarjeta quedaba en 180px y la descripción se partía
+            en siete renglones de dos o tres palabras. Entre 640 y 767px una
+            sola columna a todo el ancho se ve mucho mejor que tres
+            comprimidas. */}
+        <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-14 sm:gap-6 md:grid-cols-3">
           {PRODUCTOS.map((producto, index) => (
             <TarjetaProducto key={producto.nombreEnCatalogo} producto={producto} index={index} />
           ))}
@@ -37,6 +42,17 @@ function TarjetaProducto({ producto, index }: { producto: ProductoMenu; index: n
   // tarjeta se quedaba con un rectángulo de color plano y la imagen
   // aparecía de golpe.
   const [cargada, setCargada] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // Si el navegador ya tenía la foto en caché (visita repetida, o varias
+  // tarjetas comparten imagen), el evento `load` puede disparar antes de
+  // que React llegue a conectar `onLoad` — la tarjeta se quedaba con la
+  // foto invisible (opacity:0) para siempre, sin ningún fundido pendiente
+  // que lo arregle. `complete` ya viene en true en ese caso, así que un
+  // solo chequeo al montar cubre el hueco que deja `onLoad` por sí solo.
+  useEffect(() => {
+    if (imgRef.current?.complete) setCargada(true);
+  }, []);
 
   return (
     <motion.div
@@ -49,8 +65,16 @@ function TarjetaProducto({ producto, index }: { producto: ProductoMenu; index: n
       className="group h-full"
     >
       <article className="shine-sweep tarjeta-realce flex h-full flex-col overflow-hidden rounded-3xl border border-pan-borde/20 bg-pan-crema-suave shadow-sm shadow-pan-carbon/5 transition-shadow duration-300 hover:shadow-2xl hover:shadow-pan-carbon/15">
-        <div className={`relative aspect-square w-full overflow-hidden ${cargada ? "" : "esqueleto"}`}>
+        {/* En una sola columna la foto cuadrada llegaba a ocupar casi una
+            pantalla entera de alto por tarjeta (600px en tablet vertical),
+            dejando el nombre y la descripción siempre fuera de cuadro; en
+            apaisado (4/3) se ve la foto y su texto de una sola mirada. A
+            partir de md vuelve a ser cuadrada, como en escritorio. */}
+        <div
+          className={`relative aspect-4/3 w-full overflow-hidden md:aspect-square ${cargada ? "" : "esqueleto"}`}
+        >
           <img
+            ref={imgRef}
             src={producto.imagen}
             alt={producto.nombre}
             loading="lazy"
@@ -75,7 +99,7 @@ function TarjetaProducto({ producto, index }: { producto: ProductoMenu; index: n
           <button
             type="button"
             onClick={() => desplazarASeccion("pedido")}
-            className="mt-4 inline-flex w-fit items-center gap-1.5 rounded text-sm font-semibold text-pan-terracota transition-colors hover:text-pan-terracota-profundo"
+            className="mt-2 -ml-1 inline-flex min-h-11 w-fit items-center gap-1.5 rounded px-1 text-sm font-semibold text-pan-terracota transition-colors hover:text-pan-terracota-profundo"
           >
             Pedir este pan
             <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-1" />

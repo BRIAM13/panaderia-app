@@ -49,16 +49,23 @@ export function Nosotros() {
               bloque se leía como un muro de texto sin punto de entrada. */}
           <motion.p
             variants={subirAlAparecer}
-            className="text-xl leading-relaxed text-pan-carbon-suave sm:text-[1.32rem]"
+            className="text-lg leading-relaxed text-pan-carbon-suave sm:text-xl md:text-[1.32rem]"
           >
             {HISTORIA.parrafo1}
           </motion.p>
-          <motion.p variants={subirAlAparecer} className="mt-5 text-lg leading-relaxed text-pan-carbon-suave">
+          <motion.p
+            variants={subirAlAparecer}
+            className="mt-5 text-base leading-relaxed text-pan-carbon-suave sm:text-lg"
+          >
             {HISTORIA.parrafo2}
           </motion.p>
         </motion.div>
 
-        <div className="mt-16 grid gap-6 sm:grid-cols-2">
+        {/* Igual que en el menú, las dos columnas esperan a md: a 640px cada
+            pilar quedaba en 270px menos 64px de relleno interno, y la
+            misión/visión (párrafos largos) se leían como una tira angosta
+            de doce renglones. */}
+        <div className="mt-12 grid gap-5 sm:mt-16 sm:gap-6 md:grid-cols-2">
           {PILARES.map((pilar, indice) => (
             <TarjetaPilar key={pilar.titulo} {...pilar} indice={indice} />
           ))}
@@ -90,7 +97,7 @@ function TarjetaPilar({
       viewport={VIEWPORT_REVEAL}
       transition={{ duration: 0.6, ease: EASE_PREMIUM, delay: indice * 0.09 }}
       whileHover={{ y: -6 }}
-      className="tarjeta-realce group rounded-3xl border border-pan-borde/25 bg-pan-crema-suave p-8 shadow-sm shadow-pan-carbon/5 transition-shadow duration-300 hover:shadow-xl hover:shadow-pan-carbon/10"
+      className="tarjeta-realce group rounded-3xl border border-pan-borde/25 bg-pan-crema-suave p-6 shadow-sm sm:p-8 shadow-pan-carbon/5 transition-shadow duration-300 hover:shadow-xl hover:shadow-pan-carbon/10"
     >
       <div className="flex items-center gap-3">
         <span
