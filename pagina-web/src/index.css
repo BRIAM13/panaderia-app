@@ -219,7 +219,13 @@ footer[id] {
     background-color 0.25s var(--ease-premium);
 }
 .campo-pan::placeholder {
-  color: color-mix(in srgb, var(--color-pan-carbon-suave) 65%, transparent);
+  /* 65% dejaba el texto de ayuda en 3.48:1 sobre el fondo crema del campo,
+     por debajo del mínimo de 4.5:1 — y en un formulario donde el
+     placeholder es lo que dice QUÉ va en cada campo ("Ingresa tu DNI"),
+     no es texto decorativo que se pueda perder. Con 85% queda en 5.7:1 y
+     se sigue distinguiendo a simple vista del texto ya escrito, que es
+     carbón pleno. */
+  color: color-mix(in srgb, var(--color-pan-carbon-suave) 85%, transparent);
 }
 .campo-pan:hover:not(:disabled) {
   border-color: var(--color-pan-bronce);

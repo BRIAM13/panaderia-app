@@ -10,6 +10,11 @@ const ENLACES = [
   { href: "#nosotros", texto: "Nosotros" },
   { href: "#menu", texto: "Nuestro pan" },
   { href: "#pedido", texto: "Hacer un pedido" },
+  // Quien ya pidió y vuelve a ver cómo va no tenía forma de llegar acá más
+  // que bajando por la página a ciegas. Se llama "Mi pedido" y no "Ver mi
+  // pedido" (como el botón de la propia sección) porque la barra va justa
+  // de ancho y cada palabra de más empuja al resto.
+  { href: "#seguimiento", texto: "Mi pedido" },
   { href: "#ubicacion", texto: "Ubicación" },
 ];
 
@@ -101,10 +106,11 @@ export function Navbar() {
   // Pasar de vertical a horizontal con el menú abierto dejaba el panel
   // desplegado sobre un layout que ya muestra la navegación completa (y el
   // fondo bloqueado sin nada que lo desbloquee, porque el botón de cerrar
-  // se oculta a partir de lg). Se cierra solo al cruzar ese ancho.
+  // se oculta a partir de xl). Se cierra solo al cruzar ese ancho — 80rem
+  // debe seguir siendo el mismo punto de corte que el `xl:` del nav.
   useEffect(() => {
     if (!abierto) return;
-    const consulta = window.matchMedia("(min-width: 64rem)");
+    const consulta = window.matchMedia("(min-width: 80rem)");
     if (consulta.matches) {
       setAbierto(false);
       return;
@@ -130,7 +136,7 @@ export function Navbar() {
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3 sm:px-6 sm:py-4">
         <a
           href="/"
-          className="group flex min-h-11 min-w-0 items-center gap-2.5 rounded-lg font-[family-name:var(--font-display-panaderia)] text-lg font-semibold whitespace-nowrap text-pan-carbon transition-colors hover:text-pan-terracota sm:text-xl lg:min-h-0"
+          className="group flex min-h-11 min-w-0 items-center gap-2.5 rounded-lg font-[family-name:var(--font-display-panaderia)] text-lg font-semibold whitespace-nowrap text-pan-carbon transition-colors hover:text-pan-terracota sm:text-xl xl:min-h-0"
         >
           {/* Sello de la marca: las iniciales dentro de un cuadro cálido.
               El logotipo era solo texto y la barra se veía vacía a la
@@ -144,12 +150,14 @@ export function Navbar() {
           {SITE.nombre}
         </a>
 
-        {/* La navegación completa aparece recién en lg (1024px), no en md
-            (768px): en tablet vertical los siete elementos no entraban en
-            una línea y se partían en dos ("Nuestro / pan", "Pedir /
-            ahora"), con el logotipo también cortado en dos renglones. A
-            768px el menú desplegable es la presentación correcta. */}
-        <nav className="hidden items-center gap-4 lg:flex xl:gap-8">
+        {/* La navegación completa aparece recién en xl (1280px). Estaba en
+            lg (1024px) y ahí entraba por poco con cuatro enlaces; al sumar
+            "Mi pedido" ya no: los enlaces empezaban a apretarse contra el
+            botón "Pedir ahora" y a partirse en dos renglones, y en Android
+            (que además muestra el botón de descarga) se salían del ancho.
+            Entre 1024 y 1279px el menú desplegable es la presentación
+            correcta — la misma que ya se usa en tablet. */}
+        <nav className="hidden items-center gap-6 xl:flex">
           {ENLACES.map((enlace) => {
             const activo = seccionActiva === enlace.href.slice(1);
             return (
@@ -228,7 +236,7 @@ export function Navbar() {
 
         <button
           onClick={() => setAbierto((v) => !v)}
-          className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-pan-carbon transition-colors hover:text-pan-terracota lg:hidden"
+          className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-pan-carbon transition-colors hover:text-pan-terracota xl:hidden"
           aria-label={abierto ? "Cerrar menú" : "Abrir menú"}
           aria-expanded={abierto}
           aria-controls="menu-movil"
@@ -261,7 +269,7 @@ export function Navbar() {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3, ease: EASE_PREMIUM }}
-            className="overflow-hidden border-t border-pan-borde/60 lg:hidden"
+            className="overflow-hidden border-t border-pan-borde/60 xl:hidden"
           >
             {/* Fondo propio, opaco: la barra de arriba es translúcida a
                 propósito, pero un panel desplegado sin fondo dejaba leer

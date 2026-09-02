@@ -21,6 +21,8 @@ import {
 } from "../services/api";
 import { formatearHora12 } from "../utils/horariosPan";
 import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
+import { LONGITUD_DOCUMENTO, type TipoDocumento } from "../hooks/useVerificacionDocumento";
+import { SelectorTipoDocumento } from "./SelectorTipoDocumento";
 
 const ESTADO_INFO = {
   SOLICITADO: {
@@ -86,10 +88,6 @@ function formatearFechaHora(fechaIso: string): string {
   const horaTexto = `${String(fecha.getHours()).padStart(2, "0")}:${String(fecha.getMinutes()).padStart(2, "0")}`;
   return `${formatearFechaCorta(fechaIso)}, ${formatearHora12(horaTexto)}`;
 }
-
-type TipoDocumento = "DNI" | "RUC";
-
-const LONGITUD_DOCUMENTO: Record<TipoDocumento, number> = { DNI: 8, RUC: 11 };
 
 /** Búsqueda pública y sin login: DNI o RUC (el cliente elige cuál), y los
  * pedidos recientes del cliente en cualquier estado. Es una consulta pura
@@ -192,7 +190,10 @@ export function SeguimientoPedido() {
   }, [abierto, resultado]);
 
   return (
-    <section className="px-6 py-16">
+    // Con `id` propio para que el navbar y el pie puedan enlazarlo: es la
+    // sección que busca quien ya pidió y vuelve a ver cómo va, y hasta
+    // ahora solo se llegaba a ella bajando por la página a ciegas.
+    <section id="seguimiento" className="px-6 py-16">
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -223,13 +224,23 @@ export function SeguimientoPedido() {
             <PackageSearch className="h-7 w-7" strokeWidth={1.6} />
           </motion.div>
           <div className="flex-1">
-            <p className="mb-1.5 text-[11px] font-semibold tracking-[0.18em] text-pan-crema/70 uppercase">
+            {/* Sin transparencia. Con /70 esta etiqueta quedaba en 3.1:1
+                sobre el extremo claro del degradado terracota (que es
+                justo donde cae), muy por debajo del mínimo de 4.5:1 — y
+                con 11px en negrita no califica como "texto grande", que es
+                lo único que permitiría bajar de ahí. Ni /85 ni /90 llegan
+                (3.9 y 4.2); recién el crema pleno da 4.8:1. La jerarquía
+                frente al título la marcan el tamaño, el espaciado entre
+                letras y las mayúsculas, no un color más lavado. */}
+            <p className="mb-1.5 text-[11px] font-semibold tracking-[0.18em] text-pan-crema uppercase">
               Seguimiento
             </p>
             <h3 className="equilibrar-texto font-[family-name:var(--font-display-panaderia)] text-xl font-semibold text-pan-crema sm:text-2xl">
               ¿Ya hiciste un pedido antes?
             </h3>
-            <p className="mt-1 text-pan-crema/95">
+            {/* Por lo mismo que la etiqueta de arriba: /95 se quedaba en
+                4.49:1, a una centésima del mínimo. */}
+            <p className="mt-1 text-pan-crema">
               Escribe tu DNI o RUC y te decimos si tu pedido ya está confirmado o si todavía estamos
               por confirmarlo.
             </p>
@@ -446,33 +457,12 @@ export function SeguimientoPedido() {
                       animate={{ opacity: 1 }}
                       className="mx-auto flex max-w-md flex-col items-center gap-3"
                     >
-                      <div
-                        role="radiogroup"
-                        aria-label="Tipo de documento"
-                        className="inline-flex rounded-full bg-pan-borde/30 p-1"
-                      >
-                        {(["DNI", "RUC"] as const).map((tipo) => (
-                          <button
-                            key={tipo}
-                            type="button"
-                            role="radio"
-                            aria-checked={tipoDocumento === tipo}
-                            onClick={() => elegirTipoDocumento(tipo)}
-                            className={`relative min-h-10 rounded-full px-6 text-sm font-semibold transition-colors ${
-                              tipoDocumento === tipo ? "text-pan-crema" : "text-pan-carbon-suave hover:text-pan-carbon"
-                            }`}
-                          >
-                            {tipoDocumento === tipo && (
-                              <motion.span
-                                layoutId="seguimiento-tipo-documento-activo"
-                                className="absolute inset-0 rounded-full bg-pan-terracota"
-                                transition={{ duration: 0.25, ease: EASE_PREMIUM }}
-                              />
-                            )}
-                            <span className="relative">{tipo}</span>
-                          </button>
-                        ))}
-                      </div>
+                      <SelectorTipoDocumento
+                        valor={tipoDocumento}
+                        onChange={elegirTipoDocumento}
+                        layoutId="seguimiento-tipo-documento-activo"
+                        variante="relleno"
+                      />
 
                       <form
                         onSubmit={buscar}

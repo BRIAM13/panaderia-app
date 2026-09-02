@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { motion, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
 import { ArrowRight, ChevronDown, Croissant, MapPin, Sunrise, Users } from "lucide-react";
-import { SITE, UBICACION } from "../data/config";
+import { FOTO_PRODUCTO, SITE, UBICACION } from "../data/config";
 import { desplazarASeccion } from "../utils/scroll";
 import { EASE_PREMIUM } from "../utils/animacion";
 
@@ -175,13 +175,28 @@ export function Hero() {
 
           <div className="relative h-full w-full overflow-hidden rounded-[2.5rem] shadow-2xl shadow-pan-carbon/15">
             {/* La foto se agranda muy despacio mientras se hace scroll: el
-                encuadre "respira" en vez de quedarse congelado. */}
-            <motion.img
-              style={{ scale: escalaImagen }}
-              src="/images/productos/pan-de-agua.jpg"
-              alt="Pan de agua recién horneado de Panadería Ronceros"
-              className="h-full w-full object-cover"
-            />
+                encuadre "respira" en vez de quedarse congelado.
+
+                Es la imagen más grande de lo primero que se ve (el LCP de
+                la página), así que va con `fetchPriority="high"` y SIN
+                `loading="lazy"`: marcarla como diferida haría que el
+                navegador la pida DESPUÉS del resto, justo la imagen por la
+                que se mide qué tan rápido carga el sitio. El
+                `<link rel="preload">` de index.html la arranca aún antes,
+                sin esperar a que React monte nada. */}
+            <picture>
+              <source srcSet="/images/productos/pan-de-agua.webp" type="image/webp" />
+              <motion.img
+                style={{ scale: escalaImagen }}
+                src="/images/productos/pan-de-agua.jpg"
+                alt="Pan de agua recién horneado de Panadería Ronceros"
+                width={FOTO_PRODUCTO.ancho}
+                height={FOTO_PRODUCTO.alto}
+                fetchPriority="high"
+                decoding="async"
+                className="h-full w-full object-cover"
+              />
+            </picture>
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-pan-carbon/15 via-transparent to-transparent" />
 
             {/* Vapor: tres hilos de humo tenues que suben y se disuelven

@@ -1,0 +1,16 @@
+{
+  "name": "Panadería Ronceros",
+  "short_name": "Ronceros",
+  "description": "Pan artesanal de siempre, hecho en familia en Pisco. Haz tu pedido en línea.",
+  "lang": "es-PE",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FDF6EC",
+  "theme_color": "#FDF6EC",
+  "icons": [
+    { "src": "/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/favicon-64.png", "sizes": "64x64", "type": "image/png" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

@@ -1,11 +1,7 @@
-import { forwardRef, useImperativeHandle, useState } from "react";
+import { useState } from "react";
 import { Check, ChevronDown, Croissant } from "lucide-react";
 import { SelectorModal } from "./SelectorModal";
 import type { ProductoPublico } from "../services/api";
-
-export interface SelectorProductoHandle {
-  abrir: () => void;
-}
 
 interface SelectorProductoProps {
   id?: string;
@@ -21,18 +17,20 @@ interface SelectorProductoProps {
  * uno ya aplica y cierra de una vez — no hace falta un paso extra de
  * "Aceptar" como en fecha/hora, porque acá no hay nada que ajustar antes
  * de confirmar. */
-export const SelectorProducto = forwardRef<SelectorProductoHandle, SelectorProductoProps>(function SelectorProducto(
-  { id, productos, valor, onChange, cargando = false, placeholder = "Selecciona un pan" },
-  ref,
-) {
+export function SelectorProducto({
+  id,
+  productos,
+  valor,
+  onChange,
+  cargando = false,
+  placeholder = "Selecciona un pan",
+}: SelectorProductoProps) {
   const [abierto, setAbierto] = useState(false);
 
   function abrir() {
     if (cargando || productos.length === 0) return;
     setAbierto(true);
   }
-
-  useImperativeHandle(ref, () => ({ abrir }));
 
   const seleccionado = productos.find((p) => p.idProducto === valor);
 
@@ -113,4 +111,4 @@ export const SelectorProducto = forwardRef<SelectorProductoHandle, SelectorProdu
       </SelectorModal>
     </div>
   );
-});
+}

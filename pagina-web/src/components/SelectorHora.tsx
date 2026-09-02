@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Clock } from "lucide-react";
-import { formatearHora12 } from "../utils/horariosPan";
+import { formatearHora12, horaAMinutos, minutosAHora } from "../utils/horariosPan";
 import { SelectorModal } from "./SelectorModal";
 
 const HORAS_12 = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -40,17 +40,6 @@ function a24h(hora12: number, minuto: number, periodo: Periodo): string {
   let h = hora12 % 12;
   if (periodo === "PM") h += 12;
   return `${String(h).padStart(2, "0")}:${String(minuto).padStart(2, "0")}`;
-}
-
-function horaTextoAMinutos(horaTexto: string): number {
-  const [h, m] = horaTexto.split(":").map(Number);
-  return h * 60 + m;
-}
-
-function minutosAHoraTexto(minutos: number): string {
-  const h = Math.floor(minutos / 60);
-  const m = minutos % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 function mod(n: number, m: number): number {
@@ -361,7 +350,7 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
     // la que se arrastra la rueda con el dedo, y 64px se quedaban cortos
     // para un pulgar. En la hoja de 375px sobra ancho de sobra para las
     // tres columnas.
-    <div className="flex w-18 flex-col items-center sm:w-16">
+    <div className="flex w-18 flex-col items-center sm:w-16" role="group" aria-label={ariaLabel}>
       <button
         type="button"
         aria-label={`${ariaLabel} anterior`}
@@ -371,10 +360,23 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
       >
         <ChevronUp className="h-4.5 w-4.5" />
       </button>
+      {/* La rueda es un control de puntero: se gira arrastrando, con el
+          scroll o haciendo clic en un valor. No es un `listbox`, y decía
+          serlo: anunciaba `role="listbox"` con `role="option"` en cada fila
+          sin ser enfocable ni operable con el teclado (sin tabIndex, sin
+          onKeyDown, sin aria-activedescendant), así que un lector de
+          pantalla prometía una lista que después no respondía a nada — y
+          además leía decenas de "opciones" repetidas, porque las filas son
+          copias del mismo valor para simular el giro infinito.
+
+          Acá se dice la verdad: la rueda queda como adorno visual
+          (`aria-hidden`), y quien navega con teclado o lector de pantalla
+          usa los dos botones de flecha —que ya estaban, ya son enfocables y
+          ya tienen nombre— mientras el valor vigente se anuncia solo en el
+          texto de abajo cada vez que cambia. */}
       <div
         ref={ref}
-        role="listbox"
-        aria-label={ariaLabel}
+        aria-hidden="true"
         onWheel={alWheel}
         onPointerDown={alPointerDown}
         onPointerMove={alPointerMove}
@@ -391,9 +393,6 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
           return (
             <div
               key={pos}
-              role="option"
-              aria-selected={activo}
-              aria-disabled={off}
               style={{ height: ALTO_ITEM }}
               className={`flex items-center justify-center rounded-lg text-lg tabular-nums transition-all duration-150 ${
                 off
@@ -417,6 +416,12 @@ function Rueda<T>({ valores, indice, onCambio, deshabilitado, render, ariaLabel,
       >
         <ChevronDown className="h-4.5 w-4.5" />
       </button>
+      {/* El valor vigente de esta columna, solo para lectores de pantalla:
+          es lo que reemplaza a los `aria-selected` que se quitaron de la
+          rueda, y se vuelve a leer solo cada vez que cambia. */}
+      <span className="sr-only" aria-live="polite">
+        {ariaLabel}: {render(valores[mod(posCentral, n)])}
+      </span>
     </div>
   );
 }
@@ -487,10 +492,10 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
   // horario de atención (por ejemplo, a la 1am la tolerancia por sí sola
   // dejaría elegir casi cualquier hora, pero el horario de atención la
   // empuja hasta que abre la tienda).
-  const minutosPisoHoy = minimoHoy ? horaTextoAMinutos(minimoHoy) : null;
-  const minutosTopeHoy = maximoHoy ? horaTextoAMinutos(maximoHoy) : null;
-  const minutosPisoSiempre = minimoSiempre ? horaTextoAMinutos(minimoSiempre) : null;
-  const minutosTopeSiempre = maximoSiempre ? horaTextoAMinutos(maximoSiempre) : null;
+  const minutosPisoHoy = minimoHoy ? horaAMinutos(minimoHoy) : null;
+  const minutosTopeHoy = maximoHoy ? horaAMinutos(maximoHoy) : null;
+  const minutosPisoSiempre = minimoSiempre ? horaAMinutos(minimoSiempre) : null;
+  const minutosTopeSiempre = maximoSiempre ? horaAMinutos(maximoSiempre) : null;
   const minutosPisoEfectivo =
     minutosPisoHoy === null && minutosPisoSiempre === null
       ? null
@@ -501,14 +506,14 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
       : Math.min(minutosTopeHoy ?? Infinity, minutosTopeSiempre ?? Infinity);
 
   function muyPronto(hora12: number, minuto: number, periodo: Periodo): boolean {
-    const totalMinutos = horaTextoAMinutos(a24h(hora12, minuto, periodo));
+    const totalMinutos = horaAMinutos(a24h(hora12, minuto, periodo));
     if (minutosPisoEfectivo !== null && totalMinutos < minutosPisoEfectivo) return true;
     if (minutosTopeEfectivo !== null && totalMinutos > minutosTopeEfectivo) return true;
     return false;
   }
 
   function abrir() {
-    const pisoInicial = minutosPisoEfectivo !== null ? minutosAHoraTexto(minutosPisoEfectivo) : null;
+    const pisoInicial = minutosPisoEfectivo !== null ? minutosAHora(minutosPisoEfectivo) : null;
     const base = valor
       ? desde24h(valor)
       : pisoInicial
@@ -568,7 +573,7 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
       return;
     }
     if (muyPronto(draftHora, draftMinuto, draftPeriodo)) {
-      const piso = desde24h(minutosAHoraTexto(minutosPisoEfectivo));
+      const piso = desde24h(minutosAHora(minutosPisoEfectivo));
       setDraftHora(piso.hora12);
       setDraftMinuto(piso.minuto);
       setDraftPeriodo(piso.periodo);
@@ -601,11 +606,11 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
           <p className="mb-3 text-center text-xs text-pan-carbon-suave">
             {minutosPisoEfectivo !== null && minutosTopeEfectivo !== null
               ? minimoHoy
-                ? `Para hoy, puedes elegir entre las ${formatearHora12(minutosAHoraTexto(minutosPisoEfectivo))} y las ${formatearHora12(minutosAHoraTexto(minutosTopeEfectivo))}.`
-                : `Atendemos de ${formatearHora12(minutosAHoraTexto(minutosPisoEfectivo))} a ${formatearHora12(minutosAHoraTexto(minutosTopeEfectivo))}.`
+                ? `Para hoy, puedes elegir entre las ${formatearHora12(minutosAHora(minutosPisoEfectivo))} y las ${formatearHora12(minutosAHora(minutosTopeEfectivo))}.`
+                : `Atendemos de ${formatearHora12(minutosAHora(minutosPisoEfectivo))} a ${formatearHora12(minutosAHora(minutosTopeEfectivo))}.`
               : minutosPisoEfectivo !== null
-                ? `${minimoHoy ? "Para hoy, lo" : "Lo"} más pronto que puedes elegir es ${formatearHora12(minutosAHoraTexto(minutosPisoEfectivo))}.`
-                : `${minimoHoy ? "Para hoy, lo" : "Lo"} más tarde que puedes elegir es ${formatearHora12(minutosAHoraTexto(minutosTopeEfectivo!))}.`}
+                ? `${minimoHoy ? "Para hoy, lo" : "Lo"} más pronto que puedes elegir es ${formatearHora12(minutosAHora(minutosPisoEfectivo))}.`
+                : `${minimoHoy ? "Para hoy, lo" : "Lo"} más tarde que puedes elegir es ${formatearHora12(minutosAHora(minutosTopeEfectivo!))}.`}
           </p>
         )}
         <div className="relative">

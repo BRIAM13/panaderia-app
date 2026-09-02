@@ -1,20 +1,23 @@
 import { ExternalLink, MapPin, User } from "lucide-react";
-import { SITE, UBICACION } from "../data/config";
+import { CONTACTO, SITE, UBICACION, enlaceWhatsApp } from "../data/config";
 import { desplazarASeccion } from "../utils/scroll";
+import { IconoWhatsApp } from "./IconoWhatsApp";
 
 const ENLACES_SECCIONES = [
   { id: "nosotros", texto: "Nosotros" },
   { id: "menu", texto: "Nuestro pan" },
   { id: "pedido", texto: "Hacer un pedido" },
+  { id: "seguimiento", texto: "Mi pedido" },
+  { id: "preguntas", texto: "Preguntas frecuentes" },
   { id: "ubicacion", texto: "Ubicación" },
 ];
 
 /** Cierre de la página. Antes era una sola línea de copyright: se veía
  * como el final abrupto de un sitio que hasta ahí venía muy cuidado. Ahora
- * repite la marca, deja a mano la navegación y la dirección, y recién
- * abajo del todo pone la letra chica legal — sin inventar ningún dato que
- * el negocio no tenga (no hay teléfono ni redes en data/config.ts, así que
- * no se muestran). */
+ * repite la marca, deja a mano la navegación, el WhatsApp del negocio y la
+ * dirección, y recién abajo del todo pone la letra chica legal — sin
+ * inventar ningún dato que el negocio no tenga (no hay redes sociales en
+ * data/config.ts, así que no se muestran). */
 export function Footer() {
   return (
     <footer id="pie-de-pagina" className="relative border-t border-pan-borde/60 bg-pan-crema px-6 pt-14 pb-10">
@@ -82,6 +85,15 @@ export function Footer() {
                 {UBICACION.ciudad}
                 <ExternalLink className="ml-1.5 inline h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
               </span>
+            </a>
+            <a
+              href={enlaceWhatsApp()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-11 items-center gap-2 rounded transition-colors hover:text-pan-terracota lg:min-h-0"
+            >
+              <IconoWhatsApp className="h-4 w-4 shrink-0 text-pan-terracota" />
+              {CONTACTO.telefonoVisible}
             </a>
             <a
               href="https://app.panaderiaronceros.com/"

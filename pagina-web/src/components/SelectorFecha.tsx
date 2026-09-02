@@ -1,12 +1,9 @@
 import { forwardRef, useImperativeHandle, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { formatearFechaBonita, nombreMes } from "../utils/horariosPan";
 import { SelectorModal } from "./SelectorModal";
 
 const DIAS_SEMANA = ["D", "L", "M", "M", "J", "V", "S"];
-const MESES = [
-  "enero", "febrero", "marzo", "abril", "mayo", "junio",
-  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-];
 
 function aClaveFecha(fecha: Date): string {
   const y = fecha.getFullYear();
@@ -17,16 +14,6 @@ function aClaveFecha(fecha: Date): string {
 
 function inicioDelDia(fecha: Date): Date {
   return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
-}
-
-/** "YYYY-MM-DD" -> "Mié 19 de agosto". Exportada porque el resumen del
- * pedido (pantalla de éxito en PedidoForm) reusa el mismo formato. */
-export function formatearFechaBonita(clave: string): string {
-  const [y, m, d] = clave.split("-").map(Number);
-  const fecha = new Date(y, m - 1, d);
-  const diasCorto = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
-  const texto = `${diasCorto[fecha.getDay()]} ${d} de ${MESES[m - 1]}`;
-  return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 export interface SelectorFechaHandle {
@@ -135,7 +122,7 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
             <ChevronLeft className="h-5 w-5" />
           </button>
           <p className="text-sm font-semibold text-pan-carbon capitalize">
-            {MESES[mesVisible.getMonth()]} {mesVisible.getFullYear()}
+            {nombreMes(mesVisible.getMonth())} {mesVisible.getFullYear()}
           </p>
           <button
             type="button"

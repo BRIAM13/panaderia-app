@@ -5,10 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Política de Privacidad · Panadería Ronceros</title>
 <meta name="description" content="Cómo Panadería Ronceros recopila, usa y protege tus datos, tanto en panaderiaronceros.com como en la app del personal." />
-<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<!-- Apuntaba a /favicon.svg, que no existe: el unico icono real del
+     sitio son los PNG de 32/64px. El navegador caia al /favicon.ico por
+     defecto (que tampoco existe) y esta pagina quedaba sin icono. -->
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<!-- Mismos pesos que carga la pagina principal: Fraunces solo en 600
+     (ver la regla de h1/h2/h3 mas abajo, que ahora lo fija explicito) e
+     Inter en 400/500/600/700. -->
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   :root {
     --crema: #fdf6ec;
@@ -41,7 +49,10 @@
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
   }
-  h1, h2, h3 { font-family: "Fraunces", Georgia, serif; }
+  /* El peso va explicito: sin el, h3 heredaba el bold (700) por defecto
+     del navegador y obligaba a descargar una variante mas de Fraunces
+     solo para un titulo. */
+  h1, h2, h3 { font-family: "Fraunces", Georgia, serif; font-weight: 600; }
   a { color: inherit; }
   :focus-visible { outline: 2px solid var(--terracota); outline-offset: 3px; border-radius: 4px; }
 

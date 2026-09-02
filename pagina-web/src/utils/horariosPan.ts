@@ -7,9 +7,20 @@ interface VentanaRecojo {
   horaMinima: string;
 }
 
-function horaAMinutos(hora: string): number {
+/** "HH:mm" (24h) -> minutos desde medianoche. Es la unidad en la que se
+ * comparan todos los horarios del sitio: comparar cadenas "HH:mm" funciona
+ * de casualidad y sumar/restar minutos sobre texto no funciona en
+ * absoluto. */
+export function horaAMinutos(hora: string): number {
   const [h, m] = hora.split(":").map(Number);
   return h * 60 + m;
+}
+
+/** El inverso de `horaAMinutos`: minutos desde medianoche -> "HH:mm". */
+export function minutosAHora(minutos: number): string {
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 function formatearFecha(fecha: Date): string {
@@ -23,6 +34,28 @@ function formatearFecha(fecha: Date): string {
  * cliente sin repetir el formateo en cada componente que lo necesita. */
 export function hoyISO(ahora = new Date()): string {
   return formatearFecha(ahora);
+}
+
+const MESES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+const DIAS_CORTO = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+
+/** "YYYY-MM-DD" -> "Mié 19 de agosto". Vive acá (y no dentro del
+ * calendario) porque también lo usa el resumen del pedido confirmado, y el
+ * calendario se descarga aparte: importarlo desde ahí obligaba a traerse el
+ * calendario entero solo para formatear una fecha. */
+export function formatearFechaBonita(clave: string): string {
+  const [y, m, d] = clave.split("-").map(Number);
+  const fecha = new Date(y, m - 1, d);
+  const texto = `${DIAS_CORTO[fecha.getDay()]} ${d} de ${MESES[m - 1]}`;
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+/** El nombre del mes en español, para la cabecera del calendario. */
+export function nombreMes(indice: number): string {
+  return MESES[indice];
 }
 
 /** "HH:mm" (24h) -> "3:15pm"/"4:00am": sin espacio ni puntos, porque mucha
@@ -124,10 +157,7 @@ export function esMuyProntoHoy(
  * medianoche, ya no queda ninguna hora válida hoy (ver `esMuyProntoHoy`
  * con cualquier hora del día siempre da true en ese caso). */
 export function horaMinimaHoy(horarios: HorariosPanaderia, ahora = new Date()): string {
-  const minutos = Math.min(minutosDesdeAhoraMasTolerancia(horarios, ahora), 23 * 60 + 59);
-  const h = Math.floor(minutos / 60);
-  const m = minutos % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  return minutosAHora(Math.min(minutosDesdeAhoraMasTolerancia(horarios, ahora), 23 * 60 + 59));
 }
 
 /** Segundo piso duro: para un pedido de HOY, tampoco se puede elegir una

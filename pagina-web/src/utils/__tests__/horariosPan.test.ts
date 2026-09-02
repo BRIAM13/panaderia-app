@@ -4,12 +4,15 @@ import {
   estaFueraDeVentana,
   esMuyProntoHoy,
   esMuyTardeHoy,
+  formatearFechaBonita,
   formatearHora12,
   franjaAjustada,
   fueraDeHorarioAtencion,
   hayVentanaHoy,
+  horaAMinutos,
   horaMinimaHoy,
   hoyISO,
+  minutosAHora,
 } from "../horariosPan";
 
 // Mismos valores por defecto que usa el backend (ver
@@ -42,6 +45,42 @@ describe("formatearHora12", () => {
   test("mediodía y medianoche se muestran como 12", () => {
     expect(formatearHora12("00:00")).toBe("12:00am");
     expect(formatearHora12("12:00")).toBe("12:00pm");
+  });
+});
+
+// horaAMinutos/minutosAHora salieron de dentro de SelectorHora, donde
+// existían por duplicado con otro nombre. Se prueban acá porque ahora son
+// la única versión que usa todo el sitio.
+describe("horaAMinutos y minutosAHora", () => {
+  test("convierten entre HH:mm y minutos desde medianoche", () => {
+    expect(horaAMinutos("00:00")).toBe(0);
+    expect(horaAMinutos("04:30")).toBe(270);
+    expect(horaAMinutos("23:59")).toBe(1439);
+    expect(minutosAHora(0)).toBe("00:00");
+    expect(minutosAHora(270)).toBe("04:30");
+    expect(minutosAHora(1439)).toBe("23:59");
+  });
+
+  test("una es el inverso exacto de la otra", () => {
+    for (const hora of ["00:00", "07:05", "12:00", "15:30", "22:00", "23:59"]) {
+      expect(minutosAHora(horaAMinutos(hora))).toBe(hora);
+    }
+  });
+});
+
+describe("formatearFechaBonita", () => {
+  test("arma el día de la semana, el número y el mes en español", () => {
+    // 2026-08-31 es lunes.
+    expect(formatearFechaBonita("2026-08-31")).toBe("Lun 31 de agosto");
+    // 2026-08-30 es domingo.
+    expect(formatearFechaBonita("2026-08-30")).toBe("Dom 30 de agosto");
+  });
+
+  test("no interpreta la fecha en UTC (no se corre un día hacia atrás)", () => {
+    // Con `new Date(\"2026-01-01\")` la fecha se lee como medianoche UTC y
+    // en Perú (UTC-5) cae el 31 de diciembre: por eso se construye a mano
+    // desde año/mes/día.
+    expect(formatearFechaBonita("2026-01-01")).toBe("Jue 1 de enero");
   });
 });
 

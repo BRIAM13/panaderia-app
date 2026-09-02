@@ -4,32 +4,115 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <!-- iOS lo usa al guardar la página en la pantalla de inicio: los
+         favicon de 32/64px se veían borrosos ampliados a 180px, así que
+         este se genera aparte (ver scripts/optimizar-imagenes.mjs). -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <!-- viewport-fit=cover es lo que hace que env(safe-area-inset-*) deje de
          valer 0 en iPhone con notch/barra de gestos: sin esto, la hoja
-         inferior de los selectores (ver SelectorModal) quedaría por debajo
-         de la barra de inicio y su último botón sería intocable. -->
+         inferior de los selectores (ver SelectorModal) y el botón flotante
+         de WhatsApp quedarían por debajo de la barra de inicio y serían
+         intocables. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="En Panadería Ronceros hacemos pan artesanal de siempre, hecho en familia en Pisco desde hace generaciones. Conócenos y haz tu pedido en línea." />
     <meta name="theme-color" content="#FDF6EC" />
     <title>Panadería Ronceros: pan artesanal en Pisco</title>
 
+    <!-- Sin esto, un enlace con parámetros de campaña (?fbclid=…, utm_*) o
+         con/sin barra final se indexa como si fuera una página distinta y
+         la autoridad del sitio se reparte entre varias copias. -->
+    <link rel="canonical" href="https://panaderiaronceros.com/" />
+
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Panadería Ronceros" />
     <meta property="og:title" content="Panadería Ronceros: pan artesanal en Pisco" />
     <meta property="og:description" content="Pan artesanal de siempre, hecho en familia en Pisco desde hace generaciones. Conócenos y haz tu pedido en línea." />
-    <meta property="og:image" content="https://panaderiaronceros.com/images/productos/pan-de-agua.jpg" />
+    <!-- Imagen social dedicada de 1200x630 (la proporción que recortan
+         Facebook, WhatsApp y X). Antes apuntaba a la foto cuadrada de
+         2048px del pan: 2.7MB que la vista previa recortaba igual por
+         arriba y por abajo. -->
+    <meta property="og:image" content="https://panaderiaronceros.com/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Pan de agua recién horneado de Panadería Ronceros" />
     <meta property="og:url" content="https://panaderiaronceros.com/" />
     <meta property="og:locale" content="es_PE" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Panadería Ronceros: pan artesanal en Pisco" />
     <meta name="twitter:description" content="Pan artesanal de siempre, hecho en familia en Pisco desde hace generaciones. Conócenos y haz tu pedido en línea." />
-    <meta name="twitter:image" content="https://panaderiaronceros.com/images/productos/pan-de-agua.jpg" />
+    <meta name="twitter:image" content="https://panaderiaronceros.com/og-image.jpg" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Solo los pesos que el sitio usa de verdad: Fraunces se usa
+         ÚNICAMENTE en 600 (todos los títulos display llevan font-semibold)
+         e Inter en 400/500/600/700. Antes se descargaban también Fraunces
+         500 y 700, que no aparecen en ninguna parte: dos archivos de fuente
+         completos bajados en cada visita para nada. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+
+    <!-- La foto de portada es el elemento más grande de lo primero que se
+         ve (el LCP de la página). Sin este preload, el navegador recién se
+         entera de que existe cuando React ya montó el componente: el
+         preload la pide en paralelo con el JavaScript, no después. Es la
+         versión WebP porque es la que va a elegir el <picture> en
+         cualquier navegador actual; quien no la soporte cae al JPEG y
+         simplemente ignora este preload. -->
+    <link
+      rel="preload"
+      as="image"
+      href="/images/productos/pan-de-agua.webp"
+      type="image/webp"
+      fetchpriority="high"
+    />
+
+    <!-- Ficha del negocio para Google: es lo que alimenta el panel lateral
+         con dirección, teléfono y horario cuando alguien busca "panadería
+         en Pisco". Todos los datos salen de los mismos sitios que la
+         página: la dirección de UBICACION y el teléfono de CONTACTO (ver
+         src/data/config.ts), y el horario del catálogo público
+         (horaApertura/horaCierre), el mismo que rige los pedidos. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Bakery",
+        "@id": "https://panaderiaronceros.com/#panaderia",
+        "name": "Panadería Ronceros",
+        "description": "Panadería familiar en Pisco: pan artesanal hecho a mano con recetas que pasan de generación en generación.",
+        "url": "https://panaderiaronceros.com/",
+        "image": "https://panaderiaronceros.com/og-image.jpg",
+        "telephone": "+51935369086",
+        "priceRange": "S/ 0.20 - S/ 3.50",
+        "currenciesAccepted": "PEN",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Calle Ayacucho, cuadra 4",
+          "addressLocality": "Pisco",
+          "addressRegion": "Ica",
+          "addressCountry": "PE"
+        },
+        "openingHoursSpecification": [
+          {
+            "@type": "OpeningHoursSpecification",
+            "dayOfWeek": [
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday",
+              "Saturday",
+              "Sunday"
+            ],
+            "opens": "04:00",
+            "closes": "22:00"
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

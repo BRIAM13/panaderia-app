@@ -14,6 +14,33 @@ export const SITE = {
   ruc: "10223034255",
 };
 
+// Un solo número real de la panadería, en los tres formatos que hacen
+// falta: el que se le muestra al cliente, el de un enlace `tel:`/schema.org
+// (E.164) y el que pide wa.me (sin "+" ni espacios). Escribirlo una sola
+// vez evita que el botón flotante, el pie y la ficha de contacto se vayan
+// separando con el tiempo.
+export const CONTACTO = {
+  telefonoVisible: "+51 935 369 086",
+  telefonoE164: "+51935369086",
+  whatsapp: "51935369086",
+};
+
+/** Enlace a WhatsApp con un mensaje ya escrito — el cliente solo tiene que
+ * enviarlo. Sin texto previo, la mayoría abre el chat y no sabe cómo
+ * empezar. */
+export function enlaceWhatsApp(
+  mensaje = "Hola, quisiera hacer un pedido de pan. ¿Me pueden ayudar?",
+): string {
+  return `https://wa.me/${CONTACTO.whatsapp}?text=${encodeURIComponent(mensaje)}`;
+}
+
+// Pan vendido por unidad (Pan de Agua/Francés): pedido mínimo. Es el mismo
+// número que valida el backend al crear el pedido (CANTIDAD_MINIMA_UNIDAD
+// en publicoController.js), así que se escribe una sola vez acá y lo
+// reusan el menú, el formulario y las preguntas frecuentes. El pan de
+// hamburguesa no aplica: se vende por paquete de 12 a precio fijo.
+export const CANTIDAD_MINIMA_UNIDAD = 50;
+
 export const HISTORIA = {
   parrafo1:
     "Somos un negocio familiar. El pan que hacemos hoy es la misma receta que se fue pasando de generación en generación dentro de nuestra familia, así que no encontrarás aquí ninguna fórmula nueva ni ningún experimento, sino lo que siempre hemos horneado y como siempre lo hicimos.",
@@ -51,8 +78,19 @@ export interface ProductoMenu {
   nombreEnCatalogo: string;
   nombre: string;
   descripcion: string;
+  /** Respaldo JPEG del <picture> — lo carga cualquier navegador. */
   imagen: string;
+  /** La versión que carga de verdad casi todo el mundo: ~25% más liviana
+   * que el JPEG a la misma calidad visible. Las dos las genera
+   * `npm run optimizar-imagenes` a partir de fotos-originales/. */
+  imagenWebp: string;
 }
+
+/** Medidas reales de las fotos ya optimizadas (todas cuadradas, ver
+ * scripts/optimizar-imagenes.mjs). Se declaran en el <img> para que el
+ * navegador reserve el hueco antes de descargar la foto y la página no dé
+ * el salto de layout al aparecer. */
+export const FOTO_PRODUCTO = { ancho: 1200, alto: 1200 } as const;
 
 // Solo los panes que ya tienen foto propia — el resto del catálogo (pan de
 // yema, de maíz, integral, de manteca, petipanes) se agrega acá apenas
@@ -64,18 +102,21 @@ export const PRODUCTOS: ProductoMenu[] = [
     nombre: "Pan de hamburguesa",
     descripcion: "Suave, dorado y recién horneado, el compañero perfecto para tu hamburguesa.",
     imagen: "/images/productos/pan-de-hamburguesa.jpg",
+    imagenWebp: "/images/productos/pan-de-hamburguesa.webp",
   },
   {
     nombreEnCatalogo: "Pan de Agua",
     nombre: "Pan de agua",
     descripcion: "El clásico de siempre, con esa corteza crujiente y esa miga suave que ya conoces.",
     imagen: "/images/productos/pan-de-agua.jpg",
+    imagenWebp: "/images/productos/pan-de-agua.webp",
   },
   {
     nombreEnCatalogo: "Pan Francés",
     nombre: "Pan francés",
     descripcion: "Dorado y crocante por fuera, ligero por dentro.",
     imagen: "/images/productos/pan-frances.jpg",
+    imagenWebp: "/images/productos/pan-frances.webp",
   },
 ];
 
