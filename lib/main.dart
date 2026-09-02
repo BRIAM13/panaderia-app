@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -104,6 +105,22 @@ class PanaderiaApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       theme: buildAppTheme(),
+      // Toda la app es de un negocio peruano y TODO lo que escribimos
+      // nosotros está en español; lo que faltaba era decírselo a los widgets
+      // que trae Material de fábrica. Sin estos delegados, cualquier pieza
+      // con texto propio (selector de fecha, selector de hora, botones
+      // "Cancel"/"OK", tooltip de "Back" en la AppBar, menú contextual de
+      // los campos de texto) sale en INGLÉS aunque el resto de la pantalla
+      // esté en español — se detectó primero en el calendario del tablero.
+      // Una sola locale fija: no se ofrece la app en ningún otro idioma, así
+      // que no tiene sentido seguir la del dispositivo.
+      locale: const Locale('es'),
+      supportedLocales: const [Locale('es')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       // Respeta la fuente grande del sistema (accesibilidad) pero la limita
       // a 1.25x para que nunca desborde botones ni formularios. Ojo:
       // encadenar `.clamp()` sobre el TextScaler del sistema (en vez de

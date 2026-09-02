@@ -21,6 +21,7 @@ import '../../widgets/escritorio.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/premium_button.dart';
 import '../../widgets/selector_desplegable.dart';
+import '../../widgets/selector_fecha_calendario.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../widgets/tarjeta_3d.dart';
 import '../horneados/deudas_horneados_page.dart';
@@ -65,6 +66,12 @@ class _DashboardPageState extends State<DashboardPage> {
   /// había forma de preguntar "¿cómo nos fue ayer?" sin entrar a otra
   /// pantalla.
   DateTime? _fechaResumen;
+
+  /// Días de la tienda seleccionada que tienen al menos una venta, y de
+  /// esos cuáles arrastran deuda — alimentan el calendario de arriba (ver
+  /// [_elegirFecha]). Es la MISMA llamada que ya hacía Historial de ventas.
+  List<DateTime> _fechasConDatos = [];
+  List<DateTime> _fechasConDeuda = [];
 
   /// Cartera de clientes segmentada (`/clientes/analitica/resumen-segmentos`,
   /// solo ADMIN/SUPERADMIN). Es la MISMA llamada que ya hacía la pantalla de
@@ -167,15 +174,22 @@ class _DashboardPageState extends State<DashboardPage> {
     pushSlideUpFade(context, (_) => AnaliticaPage(usuario: widget.usuario));
   }
 
+  /// Calendario propio (el mismo de Historial de ventas) en vez del
+  /// `showDatePicker` de Material, por dos razones concretas que reportó el
+  /// dueño: el de Material sale en INGLÉS (nombres de mes/día, "Cancel"/
+  /// "OK") y deja elegir cualquier día del último año, incluidos los cientos
+  /// que no tuvieron ninguna venta — buscar "el día que vendimos harto" a
+  /// ciegas, día por día. Acá solo se pueden tocar los días con ventas
+  /// reales (más hoy, siempre, para volver al modo en vivo) y los que
+  /// arrastran deuda salen marcados con un aro.
   Future<void> _elegirFecha() async {
     final hoy = DateTime.now();
     final soloHoy = DateTime(hoy.year, hoy.month, hoy.day);
-    final elegida = await showDatePicker(
+    final elegida = await mostrarSelectorFechaVentas(
       context: context,
-      initialDate: _fechaResumen ?? soloHoy,
-      firstDate: soloHoy.subtract(const Duration(days: 365)),
-      lastDate: soloHoy,
-      helpText: 'Ver el día',
+      fechaSeleccionada: _fechaResumen ?? soloHoy,
+      fechasHabilitadas: _fechasConDatos,
+      fechasConDeuda: _fechasConDeuda,
     );
     if (elegida == null) return;
     setState(() {
@@ -201,6 +215,7 @@ class _DashboardPageState extends State<DashboardPage> {
       });
       if (_tiendaSeleccionada != null) await _cargarResumen();
       unawaited(_cargarSegmentos());
+      unawaited(_cargarFechasConVentas());
     } on ApiException catch (e) {
       setState(() => _error = e.mensaje);
     } catch (_) {
@@ -235,6 +250,48 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  /// Días con ventas de la tienda que se está mirando — se pide aparte del
+  /// resumen (y sin bloquearlo) porque solo lo consume el calendario: si
+  /// falla, el tablero se dibuja igual y el calendario simplemente se abre
+  /// con hoy como único día elegible.
+  ///
+  /// Se vuelve a pedir cada vez que cambia [_tiendaSeleccionada] — los días
+  /// con ventas son de la tienda, no del usuario, y quedarse con los de la
+  /// tienda anterior habilitaría días que en esta no existen.
+  Future<void> _cargarFechasConVentas() async {
+    final tienda = _tiendaSeleccionada;
+    if (tienda == null) return;
+    try {
+      final fechas = await _tiendasService.fechasConVentas(tienda.idTienda);
+      // Si el usuario ya cambió de tienda mientras volvía esta respuesta,
+      // se descarta: son los días de la tienda equivocada.
+      if (!mounted || _tiendaSeleccionada?.idTienda != tienda.idTienda) return;
+      setState(() {
+        _fechasConDatos = fechas.fechas;
+        _fechasConDeuda = fechas.fechasConDeuda;
+      });
+    } catch (_) {
+      // Silencioso a propósito: es el insumo de un selector, no del tablero.
+    }
+  }
+
+  /// Cambiar de tienda desde cualquiera de los dos encabezados (celular y
+  /// escritorio arman su propio selector) recarga las DOS cosas que dependen
+  /// de la tienda: el resumen y los días elegibles del calendario.
+  void _cambiarTienda(Tienda? tienda) {
+    if (tienda == null) return;
+    setState(() {
+      _tiendaSeleccionada = tienda;
+      // Los días con ventas de la tienda anterior no valen acá; se vacían
+      // hasta que llegue la lista nueva, así el calendario nunca ofrece un
+      // día que en esta tienda no tuvo ninguna venta.
+      _fechasConDatos = [];
+      _fechasConDeuda = [];
+    });
+    _cargarResumen();
+    unawaited(_cargarFechasConVentas());
+  }
+
   /// Una sola petición extra, en paralelo y sin bloquear el tablero: si
   /// falla (o el rol no tiene permiso) simplemente no se dibuja el bloque de
   /// "clientes en riesgo" y todo lo demás sigue igual.
@@ -252,7 +309,11 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _refrescarTodo() async {
-    await Future.wait([_cargarResumen(), _cargarSegmentos()]);
+    await Future.wait([
+      _cargarResumen(),
+      _cargarSegmentos(),
+      _cargarFechasConVentas(),
+    ]);
   }
 
   @override
@@ -385,10 +446,7 @@ class _DashboardPageState extends State<DashboardPage> {
             etiqueta: (t) => t.nombre,
             label: 'Tienda',
             icono: PhosphorIconsRegular.storefront,
-            onChanged: (t) {
-              setState(() => _tiendaSeleccionada = t);
-              _cargarResumen();
-            },
+            onChanged: _cambiarTienda,
           ),
         ),
       SizedBox(
@@ -1038,10 +1096,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         label: 'Tienda',
                         icono: PhosphorIconsRegular.storefront,
                         denso: true,
-                        onChanged: (t) {
-                          setState(() => _tiendaSeleccionada = t);
-                          _cargarResumen();
-                        },
+                        onChanged: _cambiarTienda,
                       ),
                     ),
                   SizedBox(

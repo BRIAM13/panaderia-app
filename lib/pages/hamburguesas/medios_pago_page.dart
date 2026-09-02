@@ -132,19 +132,17 @@ class _MediosPagoPageState extends State<MediosPagoPage> {
             ? 'Yape, Plin o transferencia para cobrar deudas'
             : '${_medios.length} configurado(s) · $activos activo(s)',
         acciones: [
-          // Sin Padding extra alrededor: appBarGestion ya centra sus
-          // acciones dentro de su toolbarHeight fijo (72), y PremiumButton
-          // ya trae su propio padding vertical (16) — sumarle más empuja
-          // el botón fuera de esa altura y AppBar recorta lo que sobra,
-          // silenciosamente en release (nunca se ve el aviso de overflow
-          // de debug). Se nota primero en la descendente de letras como
-          // "p"/"g" porque son las que menos margen tienen antes de tocar
-          // el borde recortado — bug real reportado en producción.
+          // Variante `compacto` y sin Padding propio — mismo criterio que
+          // en Pedidos: appBarGestion ya centra cada acción dentro de su
+          // toolbarHeight fijo (72), y el PremiumButton normal (~54 px de
+          // alto) ahí adentro pesa más que el título de la pantalla. Ver
+          // el comentario largo en `pedidos_page.dart`.
           if (escritorio && _tiendaSeleccionada != null)
             PremiumButton(
               label: 'Agregar método',
               icono: PhosphorIconsBold.plus,
               expandido: false,
+              compacto: true,
               onPressed: () => _abrirFormulario(),
             ),
         ],

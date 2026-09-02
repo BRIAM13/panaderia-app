@@ -16,6 +16,7 @@ class PremiumButton extends StatefulWidget {
     this.cargando = false,
     this.relleno = true,
     this.expandido = true,
+    this.compacto = false,
   });
 
   final String label;
@@ -31,6 +32,17 @@ class PremiumButton extends StatefulWidget {
   final bool relleno;
 
   final bool expandido;
+
+  /// Variante BAJA del mismo botón (mismo degradado, mismo hover, mismo
+  /// hundimiento) para ranuras donde el alto está mandado por otra cosa:
+  /// la fila de acciones de un `appBarGestion` (72 px de barra), una
+  /// cabecera de panel, una barra de filtros. La versión normal —pensada
+  /// para el botón principal de un formulario a todo el ancho— mide ~54 px
+  /// de alto con texto `titleMedium` en negrita, y ahí adentro compite con
+  /// el título de la pantalla en vez de acompañarlo: se lee como el
+  /// elemento más pesado de la barra. Esta mide ~40 px y deja aire arriba
+  /// y abajo.
+  final bool compacto;
 
   @override
   State<PremiumButton> createState() => _PremiumButtonState();
@@ -67,6 +79,19 @@ class _PremiumButtonState extends State<PremiumButton>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorContenido = widget.relleno ? Colors.white : AppColors.primary;
+    final compacto = widget.compacto;
+
+    final estiloEtiqueta =
+        (compacto ? theme.textTheme.bodyMedium : theme.textTheme.titleMedium)
+            ?.copyWith(
+              color: colorContenido,
+              fontWeight: FontWeight.w700,
+              fontSize: compacto ? 13.5 : null,
+              // Alto de línea holgado a propósito: con `height` apretado la
+              // descendente de la "p" de "Nuevo pedido" queda pegada al
+              // borde inferior de la caja de texto.
+              height: compacto ? 1.25 : null,
+            );
 
     final contenido = AnimatedSwitcher(
       duration: const Duration(milliseconds: 200),
@@ -75,10 +100,10 @@ class _PremiumButtonState extends State<PremiumButton>
       child: widget.cargando
           ? SizedBox(
               key: const ValueKey('cargando'),
-              width: 20,
-              height: 20,
+              width: compacto ? 16 : 20,
+              height: compacto ? 16 : 20,
               child: CircularProgressIndicator(
-                strokeWidth: 2.4,
+                strokeWidth: compacto ? 2 : 2.4,
                 color: colorContenido,
               ),
             )
@@ -88,16 +113,14 @@ class _PremiumButtonState extends State<PremiumButton>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (widget.icono != null) ...[
-                  PhosphorIcon(widget.icono!, size: 18, color: colorContenido),
-                  const SizedBox(width: 8),
-                ],
-                Text(
-                  widget.label,
-                  style: theme.textTheme.titleMedium?.copyWith(
+                  PhosphorIcon(
+                    widget.icono!,
+                    size: compacto ? 15 : 18,
                     color: colorContenido,
-                    fontWeight: FontWeight.w700,
                   ),
-                ),
+                  SizedBox(width: compacto ? 7 : 8),
+                ],
+                Text(widget.label, style: estiloEtiqueta),
               ],
             ),
     );
@@ -130,12 +153,12 @@ class _PremiumButtonState extends State<PremiumButton>
                       : 1,
                   child: Container(
                     width: widget.expandido ? double.infinity : null,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 16,
-                      horizontal: 24,
+                    padding: EdgeInsets.symmetric(
+                      vertical: compacto ? 10 : 16,
+                      horizontal: compacto ? 18 : 24,
                     ),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(compacto ? 12 : 16),
                       gradient: widget.relleno
                           ? const LinearGradient(
                               colors: [AppColors.primary, AppColors.secondary],
@@ -156,10 +179,17 @@ class _PremiumButtonState extends State<PremiumButton>
                           ? [
                               BoxShadow(
                                 color: AppColors.primary.withValues(
-                                  alpha: (_hover ? 0.38 : 0.28) - (0.12 * t),
+                                  alpha: compacto
+                                      ? (_hover ? 0.30 : 0.20) - (0.08 * t)
+                                      : (_hover ? 0.38 : 0.28) - (0.12 * t),
                                 ),
-                                blurRadius: (_hover ? 22 : 16) - (8 * t),
-                                offset: Offset(0, 6 - (3 * t)),
+                                blurRadius: compacto
+                                    ? (_hover ? 16 : 11) - (5 * t)
+                                    : (_hover ? 22 : 16) - (8 * t),
+                                offset: Offset(
+                                  0,
+                                  compacto ? 4 - (2 * t) : 6 - (3 * t),
+                                ),
                               ),
                             ]
                           : null,

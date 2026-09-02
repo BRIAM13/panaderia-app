@@ -30,6 +30,31 @@ Future<DateTime?> mostrarSelectorFechaVentas({
 bool _mismoDia(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 
+/// ¿Se puede tocar [dia] en el calendario? Regla ÚNICA para todos los que
+/// usan [mostrarSelectorFechaVentas] — vive acá y no en cada pantalla para
+/// que ninguna tenga que acordarse de inyectar el día de hoy dentro de su
+/// propia lista de [fechasHabilitadas].
+///
+/// HOY siempre se puede elegir, tenga o no ventas: es el modo "en vivo" al
+/// que el usuario tiene que poder volver siempre. Si se mira ayer y hoy
+/// todavía no hubo ninguna venta, sin esta excepción el calendario dejaba
+/// al usuario encerrado en el pasado, sin ninguna celda tocable que lo
+/// devolviera al día de hoy.
+///
+/// Ojo con el matiz: la excepción es contra el [hoy] REAL del momento en
+/// que se abre el calendario, no contra "el día que estaba seleccionado".
+/// Un día pasado que no tuvo ventas NO queda habilitado para siempre solo
+/// porque en su momento fue hoy: apenas cambia la fecha vuelve a ser un día
+/// sin datos y se apaga.
+bool diaHabilitadoEnCalendario({
+  required DateTime dia,
+  required List<DateTime> fechasHabilitadas,
+  required DateTime hoy,
+}) {
+  if (_mismoDia(dia, hoy)) return true;
+  return fechasHabilitadas.any((f) => _mismoDia(f, dia));
+}
+
 class _DialogoCalendarioVentas extends StatefulWidget {
   const _DialogoCalendarioVentas({
     required this.fechaSeleccionada,
@@ -80,8 +105,16 @@ class _DialogoCalendarioVentasState extends State<_DialogoCalendarioVentas> {
     );
   }
 
-  bool _habilitado(DateTime dia) =>
-      widget.fechasHabilitadas.any((f) => _mismoDia(f, dia));
+  /// Se congela al abrir el diálogo para que todas las celdas se pinten
+  /// contra el MISMO "hoy" aunque el usuario deje el calendario abierto
+  /// cruzando la medianoche.
+  final DateTime _hoy = DateTime.now();
+
+  bool _habilitado(DateTime dia) => diaHabilitadoEnCalendario(
+    dia: dia,
+    fechasHabilitadas: widget.fechasHabilitadas,
+    hoy: _hoy,
+  );
 
   bool _conDeuda(DateTime dia) =>
       widget.fechasConDeuda.any((f) => _mismoDia(f, dia));
@@ -209,30 +242,35 @@ class _DialogoCalendarioVentasState extends State<_DialogoCalendarioVentas> {
                 );
               },
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFFC62828),
-                      width: 2,
+            // La leyenda solo aparece si hay algún día marcado: explicar un
+            // aro rojo que no se ve en ninguna celda solo hace pensar al
+            // usuario que se le está escapando algo.
+            if (widget.fechasConDeuda.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFC62828),
+                        width: 2,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Con deuda pendiente',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
+                  const SizedBox(width: 6),
+                  Text(
+                    'Con deuda pendiente',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
             const SizedBox(height: 4),
             TextButton(
               onPressed: () => Navigator.of(context).pop(),

@@ -247,19 +247,22 @@ class _PedidosPageState extends State<PedidosPage> {
         titulo: 'Pedidos',
         subtitulo: _resumenCabecera(),
         acciones: [
-          // Sin Padding extra alrededor: appBarGestion ya centra sus
-          // acciones dentro de su toolbarHeight fijo (72), y PremiumButton
-          // ya trae su propio padding vertical (16) — sumarle más empuja
-          // el botón fuera de esa altura y AppBar recorta lo que sobra,
-          // silenciosamente en release (nunca se ve el aviso de overflow
-          // de debug). Se nota primero en la descendente de letras como
-          // "p"/"g" porque son las que menos margen tienen antes de tocar
-          // el borde recortado — bug real reportado en producción.
+          // Variante `compacto` y sin Padding propio: appBarGestion ya
+          // centra cada acción dentro de su toolbarHeight fijo (72). El
+          // PremiumButton normal mide ~54 px de alto (padding vertical 16 +
+          // texto titleMedium en negrita) y dentro de esa barra se lee más
+          // pesado que el propio título de la pantalla — "se ve enorme y
+          // choca con la parte de arriba", reportado en producción. La
+          // versión compacta mide ~40 px y deja aire arriba y abajo. Ojo
+          // con volver a envolverlo en un Padding: la altura de la barra es
+          // fija y AppBar recorta lo que sobre, en silencio en release (se
+          // nota primero en la descendente de la "p" de "pedido").
           if (escritorio)
             PremiumButton(
               label: 'Nuevo pedido',
               icono: PhosphorIconsBold.shoppingCartSimple,
               expandido: false,
+              compacto: true,
               onPressed: _nuevoPedido,
             ),
         ],

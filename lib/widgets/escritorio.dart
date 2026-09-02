@@ -127,7 +127,26 @@ PreferredSizeWidget appBarGestion(
         ],
       ],
     ),
-    actions: [...acciones, const SizedBox(width: 20)],
+    // Cada acción se libera de la restricción de ALTO de la barra. Sin
+    // esto, el `Row` con el que `AppBar` arma sus `actions` usa
+    // `CrossAxisAlignment.stretch` y le pasa a cada hijo una altura
+    // APRETADA de 72 px: un `IconButton` la ignora (se centra solo), pero
+    // cualquier widget con fondo propio —un `PremiumButton`, un chip— se
+    // estira de borde a borde y aparece como un bloque enorme pegado al
+    // filo superior de la barra. Ese era el "el botón se ve enooooorme y
+    // choca con la parte de arriba" reportado en producción: no era el
+    // padding del botón, era la barra estirándolo.
+    //
+    // Un `Center` NO alcanza (afloja el mínimo pero deja el máximo en 72, y
+    // un `Container` con `alignment` se come todo el alto disponible que le
+    // ofrezcan). `UnconstrainedBox` sobre el eje vertical sí: mide al hijo
+    // sin límite de alto, se queda con el tamaño de la ranura y lo centra
+    // adentro. Como los botones de acción rondan los 40 px, nunca desborda.
+    actions: [
+      for (final accion in acciones)
+        UnconstrainedBox(constrainedAxis: Axis.horizontal, child: accion),
+      const SizedBox(width: 20),
+    ],
   );
 }
 
