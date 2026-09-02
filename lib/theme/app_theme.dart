@@ -64,6 +64,12 @@ ThemeData buildAppTheme() {
     useMaterial3: true,
     colorScheme: colorScheme,
     scaffoldBackgroundColor: AppColors.background,
+    // Fuente empaquetada (ver pubspec.yaml) en vez del Roboto por defecto:
+    // en Flutter Web, sin una fuente propia, CanvasKit la descarga de la
+    // red recién al pintar el primer texto — si esa descarga no terminó
+    // (típico justo después de una transición de pantalla), los glifos
+    // salen recortados y no siempre se autocorrigen.
+    fontFamily: 'Inter',
     textTheme: textTheme,
     appBarTheme: const AppBarTheme(
       backgroundColor: AppColors.background,

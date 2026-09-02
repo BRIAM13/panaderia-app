@@ -145,6 +145,33 @@ flutter:
     - assets/icon/app_icon.png
     - assets/icon/app_icon_foreground.png
 
+  # Sin esto, Flutter Web (CanvasKit) usa la fuente por defecto (Roboto)
+  # descargándola de la red recién al pintar el primer texto. Empaquetar
+  # la fuente acá la deja disponible localmente desde el primer frame.
+  #
+  # Un solo .ttf VARIABLE mapeado a varios `weight:` (probado primero, más
+  # liviano) renderizaba con la descendente de la "p" recortada en pesos
+  # bold — confirmado con capturas a pantalla completamente asentada, no
+  # era un problema de timing de carga. CanvasKit no resuelve bien el eje
+  # de peso de una fuente variable cuando se registra la misma más de una
+  # vez con `weight:` distinto. Un archivo .ttf ESTÁTICO real por peso
+  # (generado con `fonttools varLib.instancer` desde la variable de
+  # Google Fonts) rinde correctamente. Mismo criterio visual que ya usa
+  # pagina-web/ para Inter, así la marca se ve igual en los dos lugares.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

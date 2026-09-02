@@ -247,15 +247,20 @@ class _PedidosPageState extends State<PedidosPage> {
         titulo: 'Pedidos',
         subtitulo: _resumenCabecera(),
         acciones: [
+          // Sin Padding extra alrededor: appBarGestion ya centra sus
+          // acciones dentro de su toolbarHeight fijo (72), y PremiumButton
+          // ya trae su propio padding vertical (16) — sumarle más empuja
+          // el botón fuera de esa altura y AppBar recorta lo que sobra,
+          // silenciosamente en release (nunca se ve el aviso de overflow
+          // de debug). Se nota primero en la descendente de letras como
+          // "p"/"g" porque son las que menos margen tienen antes de tocar
+          // el borde recortado — bug real reportado en producción.
           if (escritorio)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: PremiumButton(
-                label: 'Nuevo pedido',
-                icono: PhosphorIconsBold.shoppingCartSimple,
-                expandido: false,
-                onPressed: _nuevoPedido,
-              ),
+            PremiumButton(
+              label: 'Nuevo pedido',
+              icono: PhosphorIconsBold.shoppingCartSimple,
+              expandido: false,
+              onPressed: _nuevoPedido,
             ),
         ],
       ),
