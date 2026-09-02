@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -12,7 +12,7 @@ import '../../services/medios_pago_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/text_formatters.dart';
-import 'escritorio_hamburguesas.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
@@ -188,6 +188,7 @@ class _MediosPagoPageState extends State<MediosPagoPage> {
     return RefreshIndicator(
       onRefresh: _cargarMedios,
       child: ContenidoCentrado(
+        anchoMaximo: 1400,
         child: ListView(
           padding: EdgeInsets.fromLTRB(
             escritorio ? 28 : 20,

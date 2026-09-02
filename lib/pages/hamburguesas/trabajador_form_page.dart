@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +14,7 @@ import '../../services/roles_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../services/trabajadores_service.dart';
 import '../../utils/text_formatters.dart';
-import 'escritorio_hamburguesas.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/premium_button.dart';
 import '../../widgets/selector_desplegable.dart';
 import '../../widgets/skeleton_loader.dart';

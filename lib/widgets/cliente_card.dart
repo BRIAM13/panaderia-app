@@ -10,10 +10,22 @@ import 'tarjeta_3d.dart';
 /// jurídica) y "Auditoría Visual" del Estándar Briam en el badge lateral
 /// (azul = RENIEC/SUNAT, ámbar = manual, rojo = sin documento).
 class ClienteCard extends StatelessWidget {
-  const ClienteCard({super.key, required this.cliente, required this.onTap});
+  const ClienteCard({
+    super.key,
+    required this.cliente,
+    required this.onTap,
+    this.onAcciones,
+  });
 
   final Cliente cliente;
   final VoidCallback onTap;
+
+  /// El toque en la tarjeta abre lo que se hace el 90% de las veces (el
+  /// perfil del cliente). El menú de acciones — editar, desactivar, llamar —
+  /// es el caso raro y vive en su propio botón, igual que en la fila de
+  /// escritorio: antes TODO toque abría el menú y para ver un perfil había
+  /// que dar dos pasos.
+  final VoidCallback? onAcciones;
 
   static const _colorReniec = Color(0xFF2563EB);
   static const _colorManual = Color(0xFFEA8C1B);
@@ -103,10 +115,13 @@ class ClienteCard extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(22),
             onTap: onTap,
+            // Mantener presionado abre el mismo menú que el botón "⋮" — es
+            // el gesto que la gente ya prueba en una lista táctil.
+            onLongPress: onAcciones,
             splashColor: color.withValues(alpha: 0.08),
             highlightColor: color.withValues(alpha: 0.04),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 14, 16),
+              padding: EdgeInsets.fromLTRB(16, 16, onAcciones == null ? 14 : 4, 16),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -180,6 +195,16 @@ class ClienteCard extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
+                  if (onAcciones != null)
+                    IconButton(
+                      onPressed: onAcciones,
+                      icon: const PhosphorIcon(
+                        PhosphorIconsRegular.dotsThreeVertical,
+                      ),
+                      tooltip: 'Acciones',
+                      color: AppColors.textSecondary,
+                      visualDensity: VisualDensity.compact,
+                    ),
                 ],
               ),
             ),

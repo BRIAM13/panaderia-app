@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -8,7 +8,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/premium_button.dart';
-import 'escritorio_panaderia.dart';
+import '../../widgets/escritorio.dart';
 
 const _claveHoraLimite = 'PANADERIA_HORA_LIMITE_PEDIDO';
 const _claveHoraMismoDia = 'PANADERIA_HORA_RECOJO_MISMO_DIA';
@@ -48,7 +48,7 @@ String _horaATexto(TimeOfDay hora) =>
 /// Panadería) — mismo permiso que "Ajustar precios".
 ///
 /// Es la pantalla con más controles del sistema, así que en escritorio
-/// (>= [anchoEscritorio]) deja de ser una sola columna de ~700px de scroll:
+/// (>= [esEscritorio]) deja de ser una sola columna de ~700px de scroll:
 /// los 5 bloques de configuración se reparten en dos columnas de paneles
 /// ([PanelEscritorio]) y el guardado queda fijo arriba, en la barra de la
 /// página, para no tener que bajar hasta el final cada vez. Por debajo del
@@ -524,7 +524,7 @@ class _HorariosPedidoPageState extends State<HorariosPedidoPage> {
       PanelEscritorio(
         icono: PhosphorIconsRegular.storefront,
         titulo: 'Horario de atención',
-        descripcion:
+        subtitulo:
             'Ningún pedido, de ningún día, se puede recoger fuera de este '
             'rango — se suma a las demás restricciones, no las reemplaza.',
         hijos: [_tarjetaApertura(), _tarjetaCierre()],
@@ -532,7 +532,7 @@ class _HorariosPedidoPageState extends State<HorariosPedidoPage> {
       PanelEscritorio(
         icono: PhosphorIconsRegular.bread,
         titulo: 'Recojo de Pan de Agua y Francés',
-        descripcion:
+        subtitulo:
             'Solo aplica a los panes que se venden por unidad. El pan de '
             'hamburguesa (por paquete) no usa este horario.',
         hijos: [
@@ -549,7 +549,7 @@ class _HorariosPedidoPageState extends State<HorariosPedidoPage> {
       PanelEscritorio(
         icono: PhosphorIconsRegular.clockAfternoon,
         titulo: 'Turnos de pedido',
-        descripcion:
+        subtitulo:
             'Un pedido hecho antes de la hora límite se recoge hoy mismo; '
             'después de esta hora ya se considera del turno tarde/noche '
             '(informativo, no bloquea nada por sí solo).',
@@ -558,7 +558,7 @@ class _HorariosPedidoPageState extends State<HorariosPedidoPage> {
       PanelEscritorio(
         icono: PhosphorIconsRegular.calendarStar,
         titulo: 'Domingo',
-        descripcion:
+        subtitulo:
             'Los domingos usan esta hora en vez de la "hora límite de '
             'pedido" — el resto del horario se comparte con la semana.',
         hijos: [_tarjetaDomingo()],
@@ -567,7 +567,7 @@ class _HorariosPedidoPageState extends State<HorariosPedidoPage> {
         icono: PhosphorIconsRegular.lightning,
         titulo: 'Control de stock en vivo',
         acento: AppColors.secondary,
-        descripcion:
+        subtitulo:
             'Si se acaba el stock de una hornada, apaga su interruptor: los '
             'pedidos nuevos saltan directo a la otra franja. Vuelve a '
             'activarlo tú mismo cuando llegue la siguiente hornada — no se '
@@ -592,14 +592,14 @@ class _HorariosPedidoPageState extends State<HorariosPedidoPage> {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
       child: ContenidoCentrado(
-        maxAncho: 1400,
+        anchoMaximo: 1400,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const EncabezadoEscritorio(
                   icono: PhosphorIconsDuotone.clock,
                   titulo: 'Horarios de pedido',
-                  descripcion:
+                  subtitulo:
                       'Todo lo que decide cuándo se puede pedir y recoger pan '
                       'desde la página web. Los cambios se aplican al guardar, '
                       'sin necesidad de volver a publicar la web.',

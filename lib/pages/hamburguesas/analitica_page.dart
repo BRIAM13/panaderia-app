@@ -15,6 +15,7 @@ import '../../services/pedidos_service.dart' show ProductoAutoservicio;
 import '../../services/prediccion_demanda_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../utils/segmento_utils.dart';
 import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
@@ -291,26 +292,85 @@ class _AnaliticaPageState extends State<AnaliticaPage> {
       );
     }
 
+    final ancho = anchoVentana(context);
+    // Los 5 segmentos en una grilla de 2 columnas dejan 3 filas con una
+    // celda huérfana al final. Desde 600 px se usan las MISMAS tarjetas
+    // bajas del escritorio: 3+2 en una tablet angosta y las 5 en una sola
+    // fila desde 760, que es donde de verdad entran sin apretarse.
+    final columnasSegmentos = ancho >= 760
+        ? 5
+        : ancho >= Breakpoints.tablet
+        ? 3
+        : 2;
+
+    final enRiesgo = _ListaClientes(
+      titulo: 'Hay que reactivarlos',
+      subtitulo:
+          'Compraban y dejaron de hacerlo. Ordenados por los que más tiempo llevan sin volver.',
+      icono: Icons.warning_amber_rounded,
+      clientes: resumen.enRiesgo,
+      mensajeVacio: 'Ningún cliente está en riesgo ahora mismo. Buen trabajo.',
+      onTapCliente: _abrirPerfil,
+      mostrarDias: true,
+    );
+
+    final topGasto = _ListaClientes(
+      titulo: 'Los que más te compran',
+      subtitulo: 'Top 10 por gasto acumulado en pedidos ya entregados.',
+      icono: Icons.workspace_premium_rounded,
+      clientes: resumen.topPorGasto,
+      mensajeVacio: 'Todavía no hay compras entregadas para armar un top.',
+      onTapCliente: _abrirPerfil,
+      mostrarDias: false,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.5,
-          children: [
-            for (var i = 0; i < ordenSegmentos.length; i++)
-              _TarjetaSegmento(
-                segmento: ordenSegmentos[i],
-                cantidad: resumen.conteoDe(ordenSegmentos[i]),
-                total: resumen.totalClientes,
-                delay: 80 + (i * 40),
-              ),
-          ],
-        ),
+        if (columnasSegmentos == 2)
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 1.5,
+            children: [
+              for (var i = 0; i < ordenSegmentos.length; i++)
+                _TarjetaSegmento(
+                  segmento: ordenSegmentos[i],
+                  cantidad: resumen.conteoDe(ordenSegmentos[i]),
+                  total: resumen.totalClientes,
+                  delay: 80 + (i * 40),
+                ),
+            ],
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final anchoTarjeta = anchoColumna(
+                constraints.maxWidth,
+                columnasSegmentos,
+                12,
+              );
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (var i = 0; i < ordenSegmentos.length; i++)
+                    SizedBox(
+                      width: anchoTarjeta,
+                      child: _tarjetaSegmentoEscritorio(
+                        segmento: ordenSegmentos[i],
+                        cantidad: resumen.conteoDe(ordenSegmentos[i]),
+                        total: resumen.totalClientes,
+                        delay: 80 + (i * 40),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
         const SizedBox(height: 24),
         Text(
           'Cómo se reparte tu cartera',
@@ -322,69 +382,91 @@ class _AnaliticaPageState extends State<AnaliticaPage> {
             .fadeIn(delay: 260.ms, duration: 400.ms)
             .moveY(begin: 16, end: 0),
         const SizedBox(height: 24),
-        _ListaClientes(
-          titulo: 'Hay que reactivarlos',
-          subtitulo: 'Compraban y dejaron de hacerlo. Ordenados por los que más tiempo llevan sin volver.',
-          icono: Icons.warning_amber_rounded,
-          clientes: resumen.enRiesgo,
-          mensajeVacio: 'Ningún cliente está en riesgo ahora mismo. Buen trabajo.',
-          onTapCliente: _abrirPerfil,
-          mostrarDias: true,
-        ),
-        const SizedBox(height: 20),
-        _ListaClientes(
-          titulo: 'Los que más te compran',
-          subtitulo: 'Top 10 por gasto acumulado en pedidos ya entregados.',
-          icono: Icons.workspace_premium_rounded,
-          clientes: resumen.topPorGasto,
-          mensajeVacio: 'Todavía no hay compras entregadas para armar un top.',
-          onTapCliente: _abrirPerfil,
-          mostrarDias: false,
-        ),
+        // Las dos listas accionables entran lado a lado bastante antes de
+        // los 900 px: a 700 quedan ~330 px cada una, igual que una lista a
+        // pantalla completa en celular, y se dejan de leer como un rollo
+        // vertical de dos pantallazos.
+        if (ancho >= 700)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: enRiesgo),
+                const SizedBox(width: 20),
+                Expanded(child: topGasto),
+              ],
+            ),
+          )
+        else ...[
+          enRiesgo,
+          const SizedBox(height: 20),
+          topGasto,
+        ],
       ],
     );
   }
 
   Widget _construirSeccionPrediccion() {
-    const anchoSelector = double.infinity;
+    // Desde 600 px los dos selectores comparten fila: apilados eran dos
+    // filas completas de controles empujando el gráfico —el contenido real
+    // de la sección— fuera de la pantalla.
+    final enFila = anchoVentana(context) >= Breakpoints.tablet;
+
+    final selectorTienda = _tiendas.length > 1
+        ? SelectorDesplegable<Tienda>(
+            valor: _tienda,
+            opciones: _tiendas,
+            etiqueta: (t) => t.nombre,
+            label: 'Tienda',
+            icono: PhosphorIconsRegular.storefront,
+            onChanged: (t) {
+              if (t == null) return;
+              setState(() => _tienda = t);
+              _cargarProductos();
+            },
+          )
+        : null;
+
+    final selectorProducto = _productos.isNotEmpty
+        ? SelectorDesplegable<ProductoAutoservicio>(
+            valor: _producto,
+            opciones: _productos,
+            etiqueta: (p) => p.nombre,
+            label: 'Producto',
+            icono: PhosphorIconsFill.bread,
+            onChanged: (p) {
+              if (p == null) return;
+              setState(() => _producto = p);
+              _cargarPrediccion();
+            },
+          )
+        : null;
+
+    final selectores = <Widget>[?selectorTienda, ?selectorProducto];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_tiendas.length > 1) ...[
-          SizedBox(
-            width: anchoSelector,
-            child: SelectorDesplegable<Tienda>(
-              valor: _tienda,
-              opciones: _tiendas,
-              etiqueta: (t) => t.nombre,
-              label: 'Tienda',
-              icono: PhosphorIconsRegular.storefront,
-              onChanged: (t) {
-                if (t == null) return;
-                setState(() => _tienda = t);
-                _cargarProductos();
-              },
+        if (selectores.isNotEmpty) ...[
+          if (enFila)
+            Row(
+              children: [
+                for (var i = 0; i < selectores.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 12),
+                  Expanded(child: selectores[i]),
+                ],
+              ],
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < selectores.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 12),
+                  selectores[i],
+                ],
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-        ],
-        if (_productos.isNotEmpty) ...[
-          SizedBox(
-            width: anchoSelector,
-            child: SelectorDesplegable<ProductoAutoservicio>(
-              valor: _producto,
-              opciones: _productos,
-              etiqueta: (p) => p.nombre,
-              label: 'Producto',
-              icono: PhosphorIconsFill.bread,
-              onChanged: (p) {
-                if (p == null) return;
-                setState(() => _producto = p);
-                _cargarPrediccion();
-              },
-            ),
-          ),
           const SizedBox(height: 16),
         ],
         _construirResultadoPrediccion(),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -6,7 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/premium_button.dart';
 import 'deudas_horneados_page.dart';
-import 'escritorio_horneados.dart';
+import '../../widgets/escritorio.dart';
 import 'nuevo_pedido_horneados_page.dart';
 import 'pedidos_horneados_page.dart';
 
@@ -14,7 +14,7 @@ import 'pedidos_horneados_page.dart';
 /// se construye el resto del apartado (medios de pago, ajuste de costos,
 /// etc., igual que Hamburguesas).
 ///
-/// En escritorio (>= [anchoEscritorio]) deja de ser una columna angosta de
+/// En escritorio (>= [esEscritorio]) deja de ser una columna angosta de
 /// botones apilados: pasa a un encabezado con el ícono grande a la izquierda
 /// y una grilla de tarjetas de acción con hover. En móvil/tablet el árbol es
 /// el de siempre.
@@ -140,14 +140,14 @@ class HorneadosHomePage extends StatelessWidget {
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(32, 32, 32, 48),
           child: ContenidoCentrado(
-            maxAncho: 1120,
+            anchoMaximo: 1120,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const EncabezadoEscritorio(
                       icono: PhosphorIconsDuotone.bread,
                       titulo: 'Gestión de Horneados',
-                      descripcion:
+                      subtitulo:
                           'Registra pedidos de carnes horneadas con su '
                           'presentación, aderezo opcional y precio.',
                     )

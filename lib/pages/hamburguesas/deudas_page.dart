@@ -197,66 +197,58 @@ class _DeudasPageState extends State<DeudasPage> {
     }
 
     final grupos = _agruparPorCliente(_deudas);
+    final deudaTotal = grupos.fold<double>(0, (acc, g) => acc + g.total);
 
-    if (esEscritorio(context)) return _cuerpoEscritorio(grupos);
+    if (esEscritorio(context)) return _cuerpoEscritorio(grupos, deudaTotal);
 
-    return RefreshIndicator(
-      onRefresh: _cargar,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-        children: [
-          if (_solicitudes.isNotEmpty) ...[
-            Row(
-              children: [
-                const Icon(
-                  Icons.qr_code_2_rounded,
-                  color: Color(0xFFEA8C1B),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Pagos reportados',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: const Color(0xFFEA8C1B),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Padding(
-              padding: const EdgeInsets.only(left: 28),
-              child: Text(
-                'Revisa y confirma según tu Yape/Plin/cuenta',
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ..._solicitudes.asMap().entries.map(
-              (entry) =>
-                  _TarjetaSolicitudPago(
-                        solicitud: entry.value,
-                        onConfirmar: () => _confirmarSolicitud(entry.value),
-                        onRechazar: () => _rechazarSolicitud(entry.value),
-                      )
-                      .animate(delay: (60 * entry.key).ms)
-                      .fadeIn(duration: 300.ms)
-                      .moveY(begin: 10, end: 0)
-                      .flipH(begin: 0.12, end: 0, duration: 320.ms),
-            ),
-            const SizedBox(height: 20),
-          ],
-          ...grupos.asMap().entries.map(
-            (entry) =>
-                _GrupoDeudaCliente(
-                      grupo: entry.value,
-                      onMarcarPagada: _marcarPagada,
-                    )
-                    .animate(delay: (60 * entry.key).ms)
-                    .fadeIn(duration: 300.ms)
-                    .moveY(begin: 10, end: 0),
+    return Column(
+      children: [
+        // Cuánto se debe EN TOTAL y a cuántos clientes: el dato que resume
+        // la pantalla entera y que en celular no estaba en ningún lado (solo
+        // el escritorio lo calculaba). Fijo arriba, fuera del scroll.
+        _BarraTotalDeuda(total: deudaTotal, clientes: grupos.length),
+        // La cola de pagos por confirmar deja de ser el primer bloque de un
+        // scroll largo: queda anclada arriba y se puede plegar. Con varias
+        // deudas abajo, antes había que subir hasta el tope cada vez que se
+        // quería volver a ella.
+        if (_solicitudes.isNotEmpty)
+          _SolicitudesPlegables(
+            solicitudes: _solicitudes,
+            onConfirmar: _confirmarSolicitud,
+            onRechazar: _rechazarSolicitud,
           ),
-        ],
-      ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _cargar,
+            child: grupos.isEmpty
+                ? ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 40, 20, 40),
+                    children: [
+                      Text(
+                        'Ningún cliente tiene deuda abierta ahora mismo.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ],
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                    children: [
+                      ...grupos.asMap().entries.map(
+                        (entry) =>
+                            _GrupoDeudaCliente(
+                                  grupo: entry.value,
+                                  onMarcarPagada: _marcarPagada,
+                                )
+                                .animate(delay: (60 * entry.key).ms)
+                                .fadeIn(duration: 300.ms)
+                                .moveY(begin: 10, end: 0),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -269,9 +261,7 @@ class _DeudasPageState extends State<DeudasPage> {
   /// abierta por cliente. En celular la cola queda encima de la lista y, con
   /// varias deudas, hay que desplazarse hacia arriba cada vez que se quiere
   /// volver a ella; acá las dos están a la vista al mismo tiempo.
-  Widget _cuerpoEscritorio(List<_GrupoDeuda> grupos) {
-    final deudaTotal = grupos.fold<double>(0, (acc, g) => acc + g.total);
-
+  Widget _cuerpoEscritorio(List<_GrupoDeuda> grupos, double deudaTotal) {
     final panelSolicitudes = PanelEscritorio(
       icono: Icons.qr_code_2_rounded,
       titulo: 'Pagos reportados',
@@ -338,27 +328,35 @@ class _DeudasPageState extends State<DeudasPage> {
             ),
     );
 
-    return RefreshIndicator(
-      onRefresh: _cargar,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(32, 24, 32, 56),
-        children: [
-          ContenidoCentrado(
-            child: _solicitudes.isEmpty
-                // Sin cola pendiente no tiene sentido reservarle media
-                // pantalla: la lista de deudas se queda con todo el ancho.
-                ? panelDeudas
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 2, child: panelSolicitudes),
-                      const SizedBox(width: espacioEscritorio),
-                      Expanded(flex: 3, child: panelDeudas),
-                    ],
-                  ),
+    return Column(
+      children: [
+        _BarraTotalDeuda(total: deudaTotal, clientes: grupos.length),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _cargar,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 56),
+              children: [
+                ContenidoCentrado(
+                  child: _solicitudes.isEmpty
+                      // Sin cola pendiente no tiene sentido reservarle media
+                      // pantalla: la lista de deudas se queda con todo el
+                      // ancho.
+                      ? panelDeudas
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(flex: 2, child: panelSolicitudes),
+                            const SizedBox(width: espacioEscritorio),
+                            Expanded(flex: 3, child: panelDeudas),
+                          ],
+                        ),
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -374,6 +372,201 @@ class _DeudasPageState extends State<DeudasPage> {
         .toList();
     grupos.sort((a, b) => b.total.compareTo(a.total));
     return grupos;
+  }
+}
+
+/// Franja fija con el total adeudado y a cuántos clientes. Es la única
+/// cifra que resume la pantalla: sin ella hay que sumar mentalmente las
+/// tarjetas para saber cuánta plata hay en la calle.
+class _BarraTotalDeuda extends StatelessWidget {
+  const _BarraTotalDeuda({required this.total, required this.clientes});
+
+  final double total;
+  final int clientes;
+
+  @override
+  Widget build(BuildContext context) {
+    const rojo = Color(0xFFC62828);
+    final sinDeuda = clientes == 0;
+    final color = sinDeuda ? const Color(0xFF2E7D32) : rojo;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        border: Border(
+          bottom: BorderSide(color: color.withValues(alpha: 0.25), width: 1.2),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            sinDeuda
+                ? Icons.check_circle_outline_rounded
+                : Icons.account_balance_wallet_rounded,
+            color: color,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sinDeuda
+                      ? 'Sin deuda abierta'
+                      : 'Deuda abierta: S/ ${total.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+                Text(
+                  sinDeuda
+                      ? 'Ningún cliente debe nada ahora mismo.'
+                      : '$clientes cliente(s) con saldo pendiente',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 250.ms);
+  }
+}
+
+/// La cola "Pagos reportados" anclada arriba de la lista y plegable. En
+/// escritorio esto mismo se resuelve con una columna lateral fija; en
+/// celular no hay ancho para eso, pero el problema es idéntico: hay que
+/// poder volver a la cola sin recorrer toda la lista de deudas.
+class _SolicitudesPlegables extends StatefulWidget {
+  const _SolicitudesPlegables({
+    required this.solicitudes,
+    required this.onConfirmar,
+    required this.onRechazar,
+  });
+
+  final List<SolicitudPagoPendiente> solicitudes;
+  final ValueChanged<SolicitudPagoPendiente> onConfirmar;
+  final ValueChanged<SolicitudPagoPendiente> onRechazar;
+
+  @override
+  State<_SolicitudesPlegables> createState() => _SolicitudesPlegablesState();
+}
+
+class _SolicitudesPlegablesState extends State<_SolicitudesPlegables> {
+  bool _abierto = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const ambar = Color(0xFFEA8C1B);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: ambar.withValues(alpha: 0.05),
+        border: Border(
+          bottom: BorderSide(color: ambar.withValues(alpha: 0.25), width: 1.2),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _abierto = !_abierto),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.qr_code_2_rounded,
+                    color: ambar,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Pagos reportados',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: ambar,
+                          ),
+                        ),
+                        Text(
+                          'Revisa y confirma según tu Yape/Plin/cuenta',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: ambar.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${widget.solicitudes.length}',
+                      style: const TextStyle(
+                        color: ambar,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => _abierto = !_abierto),
+                    icon: Icon(
+                      _abierto
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      color: ambar,
+                    ),
+                    tooltip: _abierto ? 'Plegar' : 'Desplegar',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Techo de alto para que la cola no se coma la pantalla cuando hay
+          // muchos pagos reportados: adentro se desplaza sola.
+          if (_abierto)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 300),
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                children: [
+                  for (var i = 0; i < widget.solicitudes.length; i++)
+                    _TarjetaSolicitudPago(
+                          solicitud: widget.solicitudes[i],
+                          plana: true,
+                          onConfirmar: () =>
+                              widget.onConfirmar(widget.solicitudes[i]),
+                          onRechazar: () =>
+                              widget.onRechazar(widget.solicitudes[i]),
+                        )
+                        .animate(delay: (50 * i).ms)
+                        .fadeIn(duration: 260.ms)
+                        .moveY(begin: 8, end: 0),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

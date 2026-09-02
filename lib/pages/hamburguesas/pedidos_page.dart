@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -8,7 +8,8 @@ import '../../models/tienda_model.dart';
 import '../../services/api_client.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
-import 'escritorio_hamburguesas.dart';
+import '../../theme/breakpoints.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
@@ -396,59 +397,55 @@ class _PedidosPageState extends State<PedidosPage> {
     );
 
     // Misma grilla justificada que usan las secciones de abajo, para que la
-    // cola de decisiones no se vea con otra retícula que el resto.
+    // cola de decisiones no se vea con otra retícula que el resto — y desde
+    // 600 px, no solo en escritorio (ver `anchoTarjetaPedido`).
     final grillaSolicitados = LayoutBuilder(
       builder: (context, constraints) {
-        if (!escritorio) {
+        if (MediaQuery.sizeOf(context).width < Breakpoints.tablet) {
           return Column(children: tarjetasSolicitados.toList());
         }
-        const separacion = 14.0;
-        const anchoObjetivo = 380.0;
-        final columnas =
-            ((constraints.maxWidth + separacion) / (anchoObjetivo + separacion))
-                .floor()
-                .clamp(1, 4);
-        final ancho =
-            (constraints.maxWidth - separacion * (columnas - 1)) / columnas;
         return Wrap(
-          spacing: separacion,
+          spacing: 14,
           runSpacing: 0,
           children: tarjetasSolicitados
-              .map((t) => SizedBox(width: ancho, child: t))
+              .map(
+                (t) => SizedBox(
+                  width: anchoTarjetaPedido(constraints.maxWidth),
+                  child: t,
+                ),
+              )
               .toList(),
         );
       },
     );
 
-    final bloqueSolicitados = escritorio
-        ? Container(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 6),
-            decoration: BoxDecoration(
-              color: ambar.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: ambar.withValues(alpha: 0.22)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                encabezadoSolicitados,
-                const SizedBox(height: 14),
-                grillaSolicitados,
-              ],
-            ),
-          )
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              encabezadoSolicitados,
-              const SizedBox(height: 10),
-              grillaSolicitados,
-            ],
-          );
+    // El marco teñido no era una decoración de escritorio: es lo que hace
+    // que la cola de decisiones se despegue del resto de la lista. En
+    // celular, donde justamente hay MENOS contexto a la vista, era donde
+    // más falta hacía y era el único sitio donde no estaba.
+    final bloqueSolicitados = Container(
+      padding: escritorio
+          ? const EdgeInsets.fromLTRB(18, 16, 18, 6)
+          : const EdgeInsets.fromLTRB(14, 14, 14, 4),
+      decoration: BoxDecoration(
+        color: ambar.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: ambar.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          encabezadoSolicitados,
+          SizedBox(height: escritorio ? 14 : 10),
+          grillaSolicitados,
+        ],
+      ),
+    );
 
     return RefreshIndicator(
       onRefresh: _cargar,
       child: ContenidoCentrado(
+        anchoMaximo: 1400,
         child: ListView(
           padding: EdgeInsets.fromLTRB(
             escritorio ? 28 : 20,

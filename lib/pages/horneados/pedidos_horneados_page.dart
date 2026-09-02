@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -17,7 +17,7 @@ import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/pedidos_secciones.dart';
 import '../../widgets/tarjeta_3d.dart';
-import 'escritorio_horneados.dart';
+import '../../widgets/escritorio.dart';
 import 'nuevo_pedido_horneados_page.dart';
 
 /// Lista de pedidos de Horneados para el personal — mismo tema visual y
@@ -27,7 +27,7 @@ import 'nuevo_pedido_horneados_page.dart';
 /// `PedidosService` — no son exclusivos de Hamburguesas, solo resuelven la
 /// tienda real de cada pedido (ver pedidosController.js).
 ///
-/// En escritorio (>= [anchoEscritorio]) el contenido se centra con ancho
+/// En escritorio (>= [esEscritorio]) el contenido se centra con ancho
 /// máximo, la grilla de tarjetas pasa a 2/3/4 columnas según la ventana y el
 /// FAB se reemplaza por el botón "Nuevo pedido" del encabezado. Por debajo de
 /// ese ancho el árbol es idéntico al de siempre (incluida la grilla de 380px
@@ -340,14 +340,14 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
         padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
         children: [
           ContenidoCentrado(
-            maxAncho: 1560,
+            anchoMaximo: 1560,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 EncabezadoEscritorio(
                       icono: PhosphorIconsDuotone.bread,
                       titulo: 'Pedidos de Horneados',
-                      descripcion:
+                      subtitulo:
                           '$pendientes ${pendientes == 1 ? 'pedido activo' : 'pedidos activos'} '
                           'por atender — agrupados por fecha de entrega.',
                       acciones: [

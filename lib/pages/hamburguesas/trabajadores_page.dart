@@ -9,10 +9,11 @@ import '../../services/roles_service.dart';
 import '../../services/tiendas_service.dart';
 import '../../services/trabajadores_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
+import '../../utils/texto_utils.dart';
 import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
-import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../widgets/tarjeta_3d.dart';
@@ -43,10 +44,34 @@ class _TrabajadoresPageState extends State<TrabajadoresPage> {
   bool _cargando = true;
   String? _error;
 
+  /// El directorio se trae ENTERO en una sola llamada, así que filtrar es
+  /// cosa de la propia pantalla: no hace falta ningún endpoint de búsqueda.
+  /// Antes no había campo de búsqueda en ningún ancho y con 30 personas la
+  /// única forma de encontrar a alguien era desplazarse leyendo nombres.
+  final _busquedaController = TextEditingController();
+  String _busqueda = '';
+
   @override
   void initState() {
     super.initState();
     _cargar();
+  }
+
+  @override
+  void dispose() {
+    _busquedaController.dispose();
+    super.dispose();
+  }
+
+  List<Trabajador> get _trabajadoresFiltrados {
+    final query = normalizarBusqueda(_busqueda);
+    if (query.isEmpty) return _trabajadores;
+    return _trabajadores.where((t) {
+      final texto = normalizarBusqueda(
+        '${t.nombreCompleto} ${t.dni ?? ''} ${t.cargo}',
+      );
+      return texto.contains(query);
+    }).toList();
   }
 
   Future<void> _cargar() async {
@@ -240,8 +265,31 @@ class _TrabajadoresPageState extends State<TrabajadoresPage> {
     );
   }
 
+  Widget _buscador() => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+    child: TextField(
+      controller: _busquedaController,
+      onChanged: (v) => setState(() => _busqueda = v),
+      decoration: InputDecoration(
+        hintText: 'Buscar por nombre o DNI',
+        prefixIcon: const Icon(Icons.search_rounded),
+        suffixIcon: _busqueda.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () {
+                  _busquedaController.clear();
+                  setState(() => _busqueda = '');
+                },
+              ),
+      ),
+    ),
+  );
+
   Widget _construirCuerpo() {
-    if (_cargando) return const Center(child: AppLoadingIndicator());
+    if (_cargando) {
+      return const _EsqueletoTarjetasTrabajadores();
+    }
 
     if (_error != null) {
       return EstadoError(mensaje: _error!, onReintentar: _cargar);
@@ -256,29 +304,71 @@ class _TrabajadoresPageState extends State<TrabajadoresPage> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _cargar,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
-        itemCount: _trabajadores.length,
-        itemBuilder: (context, index) {
-          final trabajador = _trabajadores[index];
-          return _TrabajadorCard(
-                trabajador: trabajador,
-                misTiendas: _misTiendas,
-                onAlternarAcceso: (tienda, otorgar) =>
-                    _alternarAcceso(trabajador, tienda, otorgar),
-                onEditarRol: _puedeEditarRoles
-                    ? () => _editarRol(trabajador)
-                    : null,
-                onDarDeBaja: () => _darDeBaja(trabajador),
-              )
-              .animate(delay: (30 * index).ms)
-              .fadeIn(duration: 250.ms)
-              .moveY(begin: 8, end: 0)
-              .flipH(begin: 0.12, end: 0, duration: 320.ms);
-        },
-      ),
+    final trabajadores = _trabajadoresFiltrados;
+    // Desde 600 px las tarjetas van de a dos: a 820 px una sola columna deja
+    // tarjetas de 780 px con el mismo contenido que a 390.
+    final dosColumnas = anchoVentana(context) >= Breakpoints.tablet;
+
+    Widget tarjeta(int index) {
+      final trabajador = trabajadores[index];
+      return _TrabajadorCard(
+            trabajador: trabajador,
+            misTiendas: _misTiendas,
+            onAlternarAcceso: (tienda, otorgar) =>
+                _alternarAcceso(trabajador, tienda, otorgar),
+            onEditarRol: _puedeEditarRoles
+                ? () => _editarRol(trabajador)
+                : null,
+            onDarDeBaja: () => _darDeBaja(trabajador),
+          )
+          .animate(delay: (30 * index).ms)
+          .fadeIn(duration: 250.ms)
+          .moveY(begin: 8, end: 0)
+          .flipH(begin: 0.12, end: 0, duration: 320.ms);
+    }
+
+    return Column(
+      children: [
+        _buscador(),
+        Expanded(
+          child: trabajadores.isEmpty
+              ? EstadoVacio(
+                  icono: Icons.search_off_rounded,
+                  titulo: 'Nadie coincide con "$_busqueda"',
+                  subtitulo: 'Prueba con otro nombre o con el DNI completo.',
+                )
+              : RefreshIndicator(
+                  onRefresh: _cargar,
+                  child: dosColumnas
+                      ? LayoutBuilder(
+                          builder: (context, constraints) {
+                            const separacion = 14.0;
+                            final ancho = anchoColumna(
+                              constraints.maxWidth,
+                              2,
+                              separacion,
+                            );
+                            return SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                              child: Wrap(
+                                spacing: separacion,
+                                runSpacing: 0,
+                                children: [
+                                  for (var i = 0; i < trabajadores.length; i++)
+                                    SizedBox(width: ancho, child: tarjeta(i)),
+                                ],
+                              ),
+                            );
+                          },
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
+                          itemCount: trabajadores.length,
+                          itemBuilder: (context, index) => tarjeta(index),
+                        ),
+                ),
+        ),
+      ],
     );
   }
 
@@ -305,23 +395,56 @@ class _TrabajadoresPageState extends State<TrabajadoresPage> {
                       '${_misTiendas.map((t) => t.nombre).join(', ')}.',
             accion: _cargando || _error != null
                 ? null
-                : Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${_trabajadores.length}',
-                      style: const TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 260,
+                        child: TextField(
+                          controller: _busquedaController,
+                          onChanged: (v) => setState(() => _busqueda = v),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: 'Buscar por nombre o DNI',
+                            prefixIcon: const Icon(
+                              Icons.search_rounded,
+                              size: 20,
+                            ),
+                            suffixIcon: _busqueda.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 18,
+                                    ),
+                                    onPressed: () {
+                                      _busquedaController.clear();
+                                      setState(() => _busqueda = '');
+                                    },
+                                  ),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${_trabajadoresFiltrados.length}',
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
             child: _tablaEscritorio(),
@@ -352,6 +475,18 @@ class _TrabajadoresPageState extends State<TrabajadoresPage> {
       );
     }
 
+    final trabajadores = _trabajadoresFiltrados;
+    if (trabajadores.isEmpty) {
+      return SizedBox(
+        height: 280,
+        child: EstadoVacio(
+          icono: Icons.search_off_rounded,
+          titulo: 'Nadie coincide con "$_busqueda"',
+          subtitulo: 'Prueba con otro nombre o con el DNI completo.',
+        ),
+      );
+    }
+
     return Column(
       children: [
         const EncabezadoTabla(
@@ -364,21 +499,76 @@ class _TrabajadoresPageState extends State<TrabajadoresPage> {
           padding: EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         ),
         const SizedBox(height: 4),
-        for (var i = 0; i < _trabajadores.length; i++)
+        for (var i = 0; i < trabajadores.length; i++)
           _FilaTrabajadorEscritorio(
-                trabajador: _trabajadores[i],
+                trabajador: trabajadores[i],
                 misTiendas: _misTiendas,
                 onAlternarAcceso: (tienda, otorgar) =>
-                    _alternarAcceso(_trabajadores[i], tienda, otorgar),
+                    _alternarAcceso(trabajadores[i], tienda, otorgar),
                 onEditarRol: _puedeEditarRoles
-                    ? () => _editarRol(_trabajadores[i])
+                    ? () => _editarRol(trabajadores[i])
                     : null,
-                onDarDeBaja: () => _darDeBaja(_trabajadores[i]),
+                onDarDeBaja: () => _darDeBaja(trabajadores[i]),
               )
               .animate(delay: (25 * i).ms)
               .fadeIn(duration: 240.ms)
               .moveY(begin: 8, end: 0),
       ],
+    );
+  }
+}
+
+/// Esqueleto de las tarjetas de celular/tablet mientras llegan los datos —
+/// el equivalente de [_EsqueletoTablaTrabajadores], que solo existía para la
+/// tabla de escritorio.
+class _EsqueletoTarjetasTrabajadores extends StatelessWidget {
+  const _EsqueletoTarjetasTrabajadores();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      itemCount: 6,
+      itemBuilder: (context, index) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.surfaceMuted, width: 1.2),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  SkeletonBox(width: 44, height: 44, borderRadius: 22),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SkeletonBox(width: 150, height: 14),
+                        SizedBox(height: 8),
+                        SkeletonBox(width: 190, height: 11),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 16),
+              Row(
+                children: [
+                  SkeletonBox(width: 110, height: 28, borderRadius: 20),
+                  SizedBox(width: 8),
+                  SkeletonBox(width: 92, height: 28, borderRadius: 20),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

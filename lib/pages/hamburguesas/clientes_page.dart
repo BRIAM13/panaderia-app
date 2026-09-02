@@ -6,13 +6,13 @@ import '../../models/usuario_sesion.dart';
 import '../../services/api_client.dart';
 import '../../services/clientes_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../utils/texto_utils.dart';
 import '../../widgets/cliente_acciones_sheet.dart';
 import '../../widgets/cliente_card.dart';
 import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
-import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/segmented_switch.dart';
 import '../../widgets/skeleton_loader.dart';
@@ -22,12 +22,16 @@ import 'cliente_perfil_page.dart';
 /// Módulo de Clientes de Hamburguesas: lista con búsqueda predictiva local,
 /// tarjetas con auditoría visual de calidad de dato y acciones directas.
 class ClientesPage extends StatefulWidget {
-  const ClientesPage({super.key, this.usuario});
+  const ClientesPage({super.key, this.usuario, this.busquedaInicial});
 
   /// Necesario solo para decidir si se muestra el botón de campaña de
   /// reactivación (exclusivo ADMIN/SUPERADMIN) — opcional para no romper
   /// otros lugares que todavía navegan aquí sin sesión a mano.
   final UsuarioSesion? usuario;
+
+  /// Texto con el que abrir la lista ya filtrada — lo usa el buscador de
+  /// DNI/RUC del Dashboard, para no obligar a escribir lo mismo dos veces.
+  final String? busquedaInicial;
 
   @override
   State<ClientesPage> createState() => _ClientesPageState();
@@ -55,6 +59,11 @@ class _ClientesPageState extends State<ClientesPage> {
   @override
   void initState() {
     super.initState();
+    final inicial = widget.busquedaInicial?.trim() ?? '';
+    if (inicial.isNotEmpty) {
+      _busqueda = inicial;
+      _busquedaController.text = inicial;
+    }
     _cargarClientes();
   }
 
@@ -136,14 +145,23 @@ class _ClientesPageState extends State<ClientesPage> {
     if (guardado == true) _cargarClientes();
   }
 
+  /// A partir de este ancho la pantalla se parte en lista + ficha. Antes el
+  /// corte estaba en 900: una tablet en vertical (768–820) tiene ancho de
+  /// sobra para 320 px de lista y ~450 de ficha, y se quedaba con la vista
+  /// de celular — entrar y volver por cada cliente que se quería mirar.
+  static const double _anchoMaestroDetalle = 760;
+
+  bool get _maestroDetalle =>
+      MediaQuery.sizeOf(context).width >= _anchoMaestroDetalle;
+
   Future<void> _abrirAcciones(Cliente cliente) async {
     final accion = await showClienteAccionesSheet(context, cliente);
     if (!mounted || accion == null) return;
 
     if (accion == ClienteAccion.verPerfil) {
-      // En escritorio el perfil ya está a la vista: "Ver perfil" solo mueve
-      // la selección del panel derecho, sin apilar otra ruta encima.
-      if (esEscritorio(context)) {
+      // Con maestro-detalle el perfil ya está a la vista: "Ver perfil" solo
+      // mueve la selección del panel derecho, sin apilar otra ruta encima.
+      if (_maestroDetalle) {
         setState(() => _seleccionado = cliente);
       } else {
         await _abrirPerfil(cliente);
@@ -293,7 +311,30 @@ class _ClientesPageState extends State<ClientesPage> {
   @override
   Widget build(BuildContext context) {
     final escritorio = esEscritorio(context);
+    final maestroDetalle = _maestroDetalle;
 
+    final campoBusqueda = TextField(
+      controller: _busquedaController,
+      onChanged: (value) => setState(() => _busqueda = value),
+      decoration: InputDecoration(
+        hintText: escritorio
+            ? 'Buscar por nombre, RUC o DNI'
+            : 'Buscar nombre, RUC o DNI',
+        prefixIcon: const Icon(Icons.search_rounded),
+        suffixIcon: _busqueda.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () {
+                  _busquedaController.clear();
+                  setState(() => _busqueda = '');
+                },
+              ),
+      ),
+    );
+
+    // Columna del maestro: el filtro sigue siendo un interruptor de ancho
+    // completo (la columna mide ~360 px, no hay problema de alto ahí).
     final filtro = Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: SegmentedSwitch(
@@ -305,24 +346,23 @@ class _ClientesPageState extends State<ClientesPage> {
 
     final buscador = Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-      child: TextField(
-        controller: _busquedaController,
-        onChanged: (value) => setState(() => _busqueda = value),
-        decoration: InputDecoration(
-          hintText: escritorio
-              ? 'Buscar por nombre, RUC o DNI'
-              : 'Buscar por nombre, razón social, RUC o DNI',
-          prefixIcon: const Icon(Icons.search_rounded),
-          suffixIcon: _busqueda.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () {
-                    _busquedaController.clear();
-                    setState(() => _busqueda = '');
-                  },
-                ),
-        ),
+      child: campoBusqueda,
+    );
+
+    // Celular/tablet angosta: filtro y búsqueda comparten UNA fila. Apilados
+    // se comían ~140 px verticales antes del primer cliente, en la pantalla
+    // donde lo único que importa es ver clientes.
+    final barraCompacta = Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      child: Row(
+        children: [
+          Expanded(child: campoBusqueda),
+          const SizedBox(width: 10),
+          _SelectorEstadoClientes(
+            indice: _filtroIndice,
+            onChanged: _cambiarFiltro,
+          ),
+        ],
       ),
     );
 
@@ -362,10 +402,18 @@ class _ClientesPageState extends State<ClientesPage> {
                 ),
               ),
             ),
-          ],
+          ] else if (maestroDetalle)
+            // En la tablet con maestro-detalle tampoco hay FAB (taparía la
+            // ficha), pero la barra todavía es la compacta de celular: ahí
+            // la acción entra como ícono, no como botón con etiqueta.
+            IconButton(
+              onPressed: () => _abrirFormulario(),
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              tooltip: 'Nuevo cliente',
+            ),
         ],
       ),
-      floatingActionButton: escritorio
+      floatingActionButton: maestroDetalle
           ? null
           : FloatingActionButton.extended(
               onPressed: () => _abrirFormulario(),
@@ -373,12 +421,11 @@ class _ClientesPageState extends State<ClientesPage> {
               label: const Text('Nuevo cliente'),
             ),
       body: SafeArea(
-        child: escritorio
+        child: maestroDetalle
             ? _cuerpoEscritorio(context, filtro: filtro, buscador: buscador)
             : Column(
                 children: [
-                  filtro,
-                  buscador,
+                  barraCompacta,
                   Expanded(child: _construirCuerpo()),
                 ],
               ),
@@ -497,8 +544,12 @@ class _ClientesPageState extends State<ClientesPage> {
   }
 
   Widget _construirCuerpo() {
+    // Mismo esqueleto en shimmer que la lista maestra de escritorio: la
+    // silueta de las filas que van a llegar, en vez de un spinner suelto.
     if (_cargando) {
-      return const Center(child: AppLoadingIndicator());
+      return const _EsqueletoListaClientes(
+        padding: EdgeInsets.fromLTRB(20, 8, 20, 24),
+      );
     }
 
     if (_error != null) {
@@ -525,21 +576,114 @@ class _ClientesPageState extends State<ClientesPage> {
       );
     }
 
+    // Desde 600 px las tarjetas van de a dos. Estiradas a 780 px de ancho
+    // muestran exactamente los mismos tres renglones de texto que a 390 px,
+    // solo que con medio metro de aire a la derecha y la mitad de clientes
+    // a la vista.
+    final dosColumnas = anchoVentana(context) >= Breakpoints.tablet;
+
+    Widget tarjeta(int index) {
+      final cliente = clientes[index];
+      return ClienteCard(
+            cliente: cliente,
+            // El toque abre el PERFIL (lo que se busca casi siempre); el
+            // menú de acciones queda en el "⋮" y en mantener presionado,
+            // igual que en la fila de escritorio.
+            onTap: () => _abrirPerfil(cliente),
+            onAcciones: () => _abrirAcciones(cliente),
+          )
+          .animate(delay: (30 * index).ms)
+          .fadeIn(duration: 250.ms)
+          .moveY(begin: 8, end: 0);
+    }
+
     return RefreshIndicator(
       onRefresh: _cargarClientes,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-        itemCount: clientes.length,
-        itemBuilder: (context, index) {
-          final cliente = clientes[index];
-          return ClienteCard(
-                cliente: cliente,
-                onTap: () => _abrirAcciones(cliente),
-              )
-              .animate(delay: (30 * index).ms)
-              .fadeIn(duration: 250.ms)
-              .moveY(begin: 8, end: 0);
-        },
+      child: dosColumnas
+          ? LayoutBuilder(
+              builder: (context, constraints) {
+                const separacion = 14.0;
+                final ancho = anchoColumna(
+                  constraints.maxWidth,
+                  2,
+                  separacion,
+                );
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  child: Wrap(
+                    spacing: separacion,
+                    runSpacing: 0,
+                    children: [
+                      for (var i = 0; i < clientes.length; i++)
+                        SizedBox(width: ancho, child: tarjeta(i)),
+                    ],
+                  ),
+                );
+              },
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+              itemCount: clientes.length,
+              itemBuilder: (context, index) => tarjeta(index),
+            ),
+    );
+  }
+}
+
+/// Filtro Activos/Desactivados en su versión compacta: un chip con el estado
+/// actual que despliega el otro. Ocupa ~130 px en vez de una fila entera,
+/// para poder compartir línea con el buscador en pantallas angostas.
+class _SelectorEstadoClientes extends StatelessWidget {
+  const _SelectorEstadoClientes({
+    required this.indice,
+    required this.onChanged,
+  });
+
+  final int indice;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final activos = indice == 0;
+    final color = activos ? AppColors.primary : AppColors.textSecondary;
+
+    return PopupMenuButton<int>(
+      initialValue: indice,
+      tooltip: 'Filtrar por estado',
+      onSelected: onChanged,
+      itemBuilder: (context) => const [
+        PopupMenuItem(value: 0, child: Text('Activos')),
+        PopupMenuItem(value: 1, child: Text('Desactivados')),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.09),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.35), width: 1.3),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              activos
+                  ? Icons.person_rounded
+                  : Icons.person_off_outlined,
+              size: 17,
+              color: color,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              activos ? 'Activos' : 'De baja',
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+            Icon(Icons.arrow_drop_down_rounded, size: 20, color: color),
+          ],
+        ),
       ),
     );
   }
@@ -695,12 +839,19 @@ class _FilaClienteEscritorio extends StatelessWidget {
 /// Esqueleto de la lista maestra mientras carga: filas en shimmer con la
 /// misma altura que las reales, para que no salte nada al llegar los datos.
 class _EsqueletoListaClientes extends StatelessWidget {
-  const _EsqueletoListaClientes();
+  const _EsqueletoListaClientes({
+    this.padding = const EdgeInsets.fromLTRB(12, 4, 12, 24),
+  });
+
+  /// La columna maestra de escritorio y la lista a pantalla completa de
+  /// celular tienen márgenes distintos; el esqueleto tiene que respetar el
+  /// del sitio donde se muestra o el contenido "salta" al llegar.
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+      padding: padding,
       itemCount: 8,
       itemBuilder: (context, index) => const Padding(
         padding: EdgeInsets.fromLTRB(12, 10, 6, 12),

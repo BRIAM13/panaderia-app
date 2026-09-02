@@ -5,6 +5,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../models/cliente_model.dart';
 import '../theme/app_theme.dart';
+import '../utils/contacto_utils.dart';
 
 /// Acciones que puede devolver el sheet, para que la pantalla que lo abrió
 /// decida qué hacer (editar / desactivar / reactivar) sin acoplarse a la
@@ -21,15 +22,6 @@ Future<ClienteAccion?> showClienteAccionesSheet(
     backgroundColor: Colors.transparent,
     builder: (context) => _ClienteAccionesSheetContent(cliente: cliente),
   );
-}
-
-String _numeroWhatsApp(String telefono) {
-  final soloDigitos = telefono.replaceAll(RegExp(r'[^0-9]'), '');
-  if (soloDigitos.startsWith('51')) return soloDigitos;
-  if (soloDigitos.length == 9) {
-    return '51$soloDigitos'; // celular peruano sin código de país
-  }
-  return soloDigitos;
 }
 
 class _ClienteAccionesSheetContent extends StatelessWidget {
@@ -84,21 +76,14 @@ class _ClienteAccionesSheetContent extends StatelessWidget {
       cliente.esNegocio ? cliente.nombreComercial : null;
 
   Future<void> _llamar(BuildContext context) async {
-    final telefono = cliente.telefono;
-    if (telefono == null || telefono.isEmpty) return;
-    await launchUrl(Uri(scheme: 'tel', path: telefono));
+    await llamarPorTelefono(cliente.telefono ?? '');
   }
 
   Future<void> _whatsapp(BuildContext context) async {
-    final telefono = cliente.telefono;
-    if (telefono == null || telefono.isEmpty) return;
-    final numero = _numeroWhatsApp(telefono);
-    final mensaje = Uri.encodeComponent(
-      'Hola ${cliente.nombreParaMostrar}, te contactamos de Panadería Ronceros.',
-    );
-    await launchUrl(
-      Uri.parse('https://wa.me/$numero?text=$mensaje'),
-      mode: LaunchMode.externalApplication,
+    await abrirWhatsApp(
+      cliente.telefono ?? '',
+      mensaje:
+          'Hola ${cliente.nombreParaMostrar}, te contactamos de Panadería Ronceros.',
     );
   }
 

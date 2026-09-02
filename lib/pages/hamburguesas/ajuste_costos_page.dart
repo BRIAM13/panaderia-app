@@ -1,11 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../services/api_client.dart';
 import '../../services/configuraciones_service.dart';
 import '../../utils/text_formatters.dart';
-import 'escritorio_hamburguesas.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/premium_button.dart';
 

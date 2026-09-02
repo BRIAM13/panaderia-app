@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -13,7 +13,7 @@ import '../../widgets/estado_vacio.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/pedidos_secciones.dart';
 import '../../widgets/tarjeta_3d.dart';
-import 'escritorio_horneados.dart';
+import '../../widgets/escritorio.dart';
 
 /// Color de "deuda" — el mismo rojo ladrillo que usa Hamburguesas.
 const _rojoDeuda = Color(0xFFC62828);
@@ -23,7 +23,7 @@ const _rojoDeuda = Color(0xFFC62828);
 /// la sección de pagos reportados por QR (ese flujo de Yape/Plin todavía
 /// no está conectado a Horneados).
 ///
-/// En escritorio (>= [anchoEscritorio]) suma una fila de KPIs (total por
+/// En escritorio (>= [esEscritorio]) suma una fila de KPIs (total por
 /// cobrar, clientes y pedidos involucrados) y reparte los grupos en 2/3
 /// columnas con hover. Por debajo del umbral, el árbol es el de siempre.
 class DeudasHorneadosPage extends StatefulWidget {
@@ -155,14 +155,14 @@ class _DeudasHorneadosPageState extends State<DeudasHorneadosPage> {
         padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
         children: [
           ContenidoCentrado(
-            maxAncho: 1440,
+            anchoMaximo: 1440,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 EncabezadoEscritorio(
                       icono: PhosphorIconsDuotone.wallet,
                       titulo: 'Deudas de Horneados',
-                      descripcion:
+                      subtitulo:
                           'Pedidos ya entregados que quedaron por cobrar, '
                           'agrupados por cliente y ordenados por monto.',
                       acento: _rojoDeuda,
@@ -187,19 +187,19 @@ class _DeudasHorneadosPageState extends State<DeudasHorneadosPage> {
                     final kpis = <Widget>[
                       TarjetaKpi(
                         icono: PhosphorIconsDuotone.coins,
-                        etiqueta: 'Total por cobrar',
+                        titulo: 'Total por cobrar',
                         valor: 'S/ ${totalGeneral.toStringAsFixed(2)}',
                         color: _rojoDeuda,
                       ),
                       TarjetaKpi(
                         icono: PhosphorIconsDuotone.users,
-                        etiqueta: 'Clientes con deuda',
+                        titulo: 'Clientes con deuda',
                         valor: '${grupos.length}',
                         color: AppColors.primary,
                       ),
                       TarjetaKpi(
                         icono: PhosphorIconsDuotone.receipt,
-                        etiqueta: 'Pedidos impagos',
+                        titulo: 'Pedidos impagos',
                         valor: '${_deudas.length}',
                         color: AppColors.secondary,
                       ),

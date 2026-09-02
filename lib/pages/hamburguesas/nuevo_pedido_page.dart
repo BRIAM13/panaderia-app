@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
@@ -12,10 +12,11 @@ import '../../services/configuraciones_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../services/pedidos_service.dart';
 import '../../services/tiendas_service.dart';
+import '../../theme/app_theme.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../utils/text_formatters.dart';
 import '../../utils/texto_utils.dart';
-import 'escritorio_hamburguesas.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/premium_button.dart';
@@ -210,6 +211,16 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
     );
   }
 
+  Future<void> _elegirCliente() async {
+    final elegido = await Navigator.of(context).push<Cliente>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _BuscadorClientesPantalla(clientes: _clientes),
+      ),
+    );
+    if (elegido != null) setState(() => _clienteSeleccionado = elegido);
+  }
+
   Future<void> _elegirFecha() async {
     final hoy = DateTime.now();
     final soloHoy = DateTime(hoy.year, hoy.month, hoy.day);
@@ -401,11 +412,21 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
       children: [
         Text('Cliente', style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
-        _SelectorCliente(
-          clientes: _clientes,
-          seleccionado: _clienteSeleccionado,
-          onSeleccionado: (c) => setState(() => _clienteSeleccionado = c),
-        ),
+        // En una pantalla angosta el desplegable del Autocomplete (260 px de
+        // alto) se abre justo donde el teclado ya está tapando: no se ve ni
+        // la lista ni lo que se escribe. Ahí se cambia por un buscador a
+        // pantalla completa, el mismo patrón de la pantalla de Clientes.
+        if (escritorio)
+          _SelectorCliente(
+            clientes: _clientes,
+            seleccionado: _clienteSeleccionado,
+            onSeleccionado: (c) => setState(() => _clienteSeleccionado = c),
+          )
+        else
+          _CampoClienteCompacto(
+            seleccionado: _clienteSeleccionado,
+            onElegir: _elegirCliente,
+          ),
         const SizedBox(height: 24),
         if (_esHamburguesas) ...[
           Text('Tipo de pedido', style: theme.textTheme.titleMedium),
@@ -613,8 +634,14 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               camposFormulario,
-              const SizedBox(height: 24),
-              panelResumen,
+              // En celular/tablet el total y el botón se van a la barra fija
+              // de abajo: al final del scroll, el vendedor no veía cuánto
+              // iba sumando el pedido mientras lo cargaba, que es
+              // exactamente el dato que necesita para negociar el precio.
+              if (escritorio) ...[
+                const SizedBox(height: 24),
+                panelResumen,
+              ],
             ],
           );
 
@@ -624,6 +651,15 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
         titulo: 'Nuevo pedido',
         subtitulo: 'Elige el cliente, la cantidad y cuándo se entrega',
       ),
+      bottomNavigationBar: escritorio || _cargandoDatos || _errorCarga != null
+          ? null
+          : _BarraTotalInferior(
+              total: _total,
+              precioUnitario: _precioEsPorUnidad ? _valorIngresado : null,
+              error: _error,
+              enviando: _enviando,
+              onRegistrar: _registrarPedido,
+            ),
       body: SafeArea(
         child: _cargandoDatos
             ? const Center(child: AppLoadingIndicator())
@@ -631,15 +667,276 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
             ? EstadoError(mensaje: _errorCarga!, onReintentar: _cargarDatos)
             : SingleChildScrollView(
                 padding: EdgeInsets.all(escritorio ? 32 : 20),
-                child: ContenidoCentrado(
-                  // Con dos columnas hace falta más ancho útil que el de un
-                  // formulario simple, pero igual se topa: sin tope, en un
-                  // monitor de 1920px los campos quedan a media pantalla de
-                  // distancia del resumen.
-                  ancho: dosColumnas ? 1180 : 620,
-                  child: Form(key: _formKey, child: cuerpoFormulario),
+                // Con dos columnas hace falta más ancho útil que el de un
+                // formulario simple, pero igual se topa: sin tope, en un
+                // monitor de 1920px los campos quedan a media pantalla de
+                // distancia del resumen. En celular no se topa nada: el
+                // ancho disponible YA es el correcto.
+                child: escritorio
+                    ? ContenidoCentrado(
+                        anchoMaximo: dosColumnas ? 1180 : 620,
+                        child: Form(key: _formKey, child: cuerpoFormulario),
+                      )
+                    : Form(key: _formKey, child: cuerpoFormulario),
+              ),
+      ),
+    );
+  }
+}
+
+/// Barra fija al pie en celular/tablet: el total se recalcula con cada
+/// tecla y el botón de registrar deja de estar al final del scroll.
+class _BarraTotalInferior extends StatelessWidget {
+  const _BarraTotalInferior({
+    required this.total,
+    required this.precioUnitario,
+    required this.error,
+    required this.enviando,
+    required this.onRegistrar,
+  });
+
+  final double total;
+
+  /// null cuando el vendedor escribe el total directamente (Hamburguesas en
+  /// "Unidades"): ahí no hay un "precio unitario" que mostrar.
+  final double? precioUnitario;
+  final String? error;
+  final bool enviando;
+  final VoidCallback onRegistrar;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final precioUnitario = this.precioUnitario;
+    final error = this.error;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: const Border(
+          top: BorderSide(color: AppColors.surfaceMuted, width: 1.2),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (error != null) ...[
+                Text(
+                  error,
+                  style: TextStyle(
+                    color: scheme.error,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Total',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                            'S/ ${total.toStringAsFixed(2)}',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              height: 1.1,
+                            ),
+                          )
+                          .animate(target: 1)
+                          .scaleXY(
+                            begin: 0.92,
+                            end: 1,
+                            duration: 200.ms,
+                            curve: Curves.easeOut,
+                          ),
+                      if (precioUnitario != null)
+                        Text(
+                          'S/ ${precioUnitario.toStringAsFixed(2)} c/u',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontSize: 11.5,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: PremiumButton(
+                      label: 'Registrar pedido',
+                      icono: PhosphorIconsBold.shoppingCartSimple,
+                      cargando: enviando,
+                      onPressed: onRegistrar,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Campo "Cliente" en celular: se ve como un campo de formulario, pero al
+/// tocarlo abre el buscador a pantalla completa en vez de desplegar una
+/// lista debajo del teclado.
+class _CampoClienteCompacto extends StatelessWidget {
+  const _CampoClienteCompacto({
+    required this.seleccionado,
+    required this.onElegir,
+  });
+
+  final Cliente? seleccionado;
+  final VoidCallback onElegir;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cliente = seleccionado;
+
+    return InkWell(
+      onTap: onElegir,
+      borderRadius: BorderRadius.circular(16),
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Cliente del pedido',
+          prefixIcon: PhosphorIcon(PhosphorIconsRegular.userFocus),
+          suffixIcon: Icon(Icons.search_rounded),
+        ),
+        child: Text(
+          cliente?.nombreParaMostrar ?? 'Toca para buscar un cliente',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: cliente == null
+              ? theme.textTheme.bodyMedium
+              : theme.textTheme.titleMedium?.copyWith(fontSize: 15),
+        ),
+      ),
+    );
+  }
+}
+
+/// Buscador de clientes a pantalla completa — mismo criterio de búsqueda
+/// que la lista de Clientes (nombre, nombre comercial y documento).
+class _BuscadorClientesPantalla extends StatefulWidget {
+  const _BuscadorClientesPantalla({required this.clientes});
+
+  final List<Cliente> clientes;
+
+  @override
+  State<_BuscadorClientesPantalla> createState() =>
+      _BuscadorClientesPantallaState();
+}
+
+class _BuscadorClientesPantallaState extends State<_BuscadorClientesPantalla> {
+  final _controller = TextEditingController();
+  String _busqueda = '';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  List<Cliente> get _filtrados {
+    final query = normalizarBusqueda(_busqueda);
+    if (query.isEmpty) return widget.clientes;
+    return widget.clientes.where((c) {
+      final texto = normalizarBusqueda(
+        '${c.nombreCompleto} ${c.nombreComercial ?? ''} ${c.dni ?? ''}',
+      );
+      return texto.contains(query);
+    }).toList();
+  }
+
+  String _documentoDe(Cliente cliente) {
+    final dni = cliente.dni;
+    if (dni == null) return 'Sin documento';
+    return dni.length == 11 ? 'RUC $dni' : 'DNI $dni';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final clientes = _filtrados;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Elegir cliente')),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+              child: TextField(
+                controller: _controller,
+                autofocus: true,
+                onChanged: (v) => setState(() => _busqueda = v),
+                decoration: InputDecoration(
+                  hintText: 'Buscar por nombre, RUC o DNI',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: _busqueda.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () {
+                            _controller.clear();
+                            setState(() => _busqueda = '');
+                          },
+                        ),
                 ),
               ),
+            ),
+            Expanded(
+              child: clientes.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'Ningún cliente coincide con "$_busqueda".',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: clientes.length,
+                      itemBuilder: (context, index) {
+                        final cliente = clientes[index];
+                        return ListTile(
+                          leading: const PhosphorIcon(
+                            PhosphorIconsRegular.user,
+                          ),
+                          title: Text(cliente.nombreParaMostrar),
+                          subtitle: Text(
+                            cliente.nombreComercial ?? _documentoDe(cliente),
+                          ),
+                          onTap: () => Navigator.of(context).pop(cliente),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

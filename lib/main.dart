@@ -119,7 +119,7 @@ class PanaderiaApp extends StatelessWidget {
         const tamanoReferencia = 100.0;
         final factorActual =
             mediaQuery.textScaler.scale(tamanoReferencia) / tamanoReferencia;
-        final factorSeguro = factorActual.clamp(1.0, 1.25);
+        final factorSeguro = factorActual.clamp(0.85, 1.25);
         return MediaQuery(
           data: mediaQuery.copyWith(
             textScaler: TextScaler.linear(factorSeguro),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
@@ -17,7 +17,7 @@ import '../../widgets/estado_error.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/premium_button.dart';
 import '../../widgets/segmented_switch.dart';
-import 'escritorio_horneados.dart';
+import '../../widgets/escritorio.dart';
 
 const _tiposAderezo = ['CRIOLLO', 'ORIENTAL'];
 
@@ -25,7 +25,7 @@ const _tiposAderezo = ['CRIOLLO', 'ORIENTAL'];
 /// autocompletado "que aprende" (ver [CampoConSugerencias]), aderezo
 /// opcional de un solo tipo y total calculado automáticamente.
 ///
-/// En escritorio (>= [anchoEscritorio]) el formulario deja de ser una sola
+/// En escritorio (>= [esEscritorio]) el formulario deja de ser una sola
 /// columna larga: los datos quedan a la izquierda en dos paneles (cliente y
 /// detalle del horneado) y el resumen con el total + el botón de registro se
 /// van a una columna lateral fija a la derecha, siempre visible. Los campos
@@ -477,7 +477,7 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
       child: ContenidoCentrado(
-        maxAncho: 1280,
+        anchoMaximo: 1280,
         child: Form(
           key: _formKey,
           child: Column(
@@ -486,7 +486,7 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
               const EncabezadoEscritorio(
                     icono: PhosphorIconsDuotone.shoppingCartSimple,
                     titulo: 'Nuevo pedido de Horneados',
-                    descripcion:
+                    subtitulo:
                         'Elige el cliente, describe el horneado y el total se '
                         'calcula solo mientras escribes.',
                   )
@@ -505,7 +505,7 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
                         PanelEscritorio(
                               icono: PhosphorIconsRegular.user,
                               titulo: 'Cliente',
-                              descripcion:
+                              subtitulo:
                                   'Busca por nombre, razón social, RUC o DNI.',
                               hijos: [_selectorCliente()],
                             )
@@ -516,7 +516,7 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
                         PanelEscritorio(
                               icono: PhosphorIconsRegular.bowlFood,
                               titulo: 'Detalle del horneado',
-                              descripcion:
+                              subtitulo:
                                   'Carne y presentación aprenden de lo que ya '
                                   'registraste antes.',
                               separacion: 18,
@@ -548,7 +548,7 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
                         PanelEscritorio(
                               icono: PhosphorIconsRegular.drop,
                               titulo: 'Aderezo',
-                              descripcion:
+                              subtitulo:
                                   'Opcional — si lo activas, su precio se suma '
                                   'al precio por unidad.',
                               separacion: 16,

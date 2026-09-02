@@ -244,39 +244,21 @@ class SeccionPedidos extends StatelessWidget {
                 return Column(children: tarjetas.toList());
               }
 
-              // Tablet (600–900): se mantiene tal cual estaba — tarjetas de
-              // ancho fijo, una al lado de la otra.
-              if (!escritorio) {
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 0,
-                  children: tarjetas
-                      .map((t) => SizedBox(width: 380, child: t))
-                      .toList(),
-                );
-              }
-
-              // Escritorio: en vez de tarjetas de 380px fijos (que dejaban
-              // una franja muerta a la derecha en un monitor ancho), se
-              // calcula cuántas columnas entran y se reparte el ancho
-              // sobrante entre ellas, para que la grilla quede justificada
-              // de borde a borde.
-              const separacion = 14.0;
-              const anchoObjetivo = 380.0;
-              final columnas =
-                  ((constraints.maxWidth + separacion) /
-                          (anchoObjetivo + separacion))
-                      .floor()
-                      .clamp(1, 4);
-              final anchoTarjeta =
-                  (constraints.maxWidth - separacion * (columnas - 1)) /
-                  columnas;
-
+              // Desde 600 px la grilla se JUSTIFICA en todos los anchos, no
+              // solo en escritorio: con tarjetas de 380 px fijos, una tablet
+              // de 820 px entraba dos y dejaba ~40 px muertos a la derecha.
+              // Repartir ese sobrante entre las columnas que sí entran es la
+              // misma cuenta que ya hacía la rama de escritorio.
               return Wrap(
-                spacing: separacion,
+                spacing: _separacionGrilla,
                 runSpacing: 0,
                 children: tarjetas
-                    .map((t) => SizedBox(width: anchoTarjeta, child: t))
+                    .map(
+                      (t) => SizedBox(
+                        width: anchoTarjetaPedido(constraints.maxWidth),
+                        child: t,
+                      ),
+                    )
                     .toList(),
               );
             },
@@ -285,6 +267,26 @@ class SeccionPedidos extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Separación entre tarjetas de pedido en la grilla justificada.
+const double _separacionGrilla = 14;
+
+/// Ancho objetivo de una tarjeta de pedido. Es el que se venía usando fijo;
+/// ahora es solo la referencia para decidir CUÁNTAS columnas entran.
+const double _anchoObjetivoTarjeta = 380;
+
+/// Cuánto debe medir cada tarjeta para que [disponible] quede repartido
+/// entero entre las columnas que entran, sin franja muerta al final.
+/// Lo usan la lista por secciones y la cola "Por confirmar" de Pedidos, para
+/// que las dos dibujen exactamente la misma retícula.
+double anchoTarjetaPedido(double disponible) {
+  final columnas =
+      ((disponible + _separacionGrilla) /
+              (_anchoObjetivoTarjeta + _separacionGrilla))
+          .floor()
+          .clamp(1, 4);
+  return (disponible - _separacionGrilla * (columnas - 1)) / columnas;
 }
 
 class _EstadoPedidoInfo {
@@ -534,11 +536,12 @@ class PedidoCard extends StatelessWidget {
                   ],
                 ),
               ],
-              // Entregar y Cancelar: apilados a lo ancho en celular (dedo
-              // grande, pantalla angosta) y en una sola fila en escritorio
-              // — ahí el problema no es el ancho sino el alto, y dos botones
-              // full-width uno debajo del otro estiran cada tarjeta sin
-              // necesidad, dejando menos pedidos a la vista de un golpe.
+              // Entregar y Cancelar: apilados a lo ancho solo en un celular
+              // angosto (dedo grande, pantalla de 390 px). Desde 600 px van
+              // en una sola fila — ahí el problema no es el ancho sino el
+              // alto: dos botones full-width uno debajo del otro estiran
+              // cada tarjeta ~90 px de más y dejan la mitad de pedidos a la
+              // vista de un golpe.
               if (mostrarAccionEntregar || mostrarAccionCancelar) ...[
                 const SizedBox(height: 10),
                 Builder(
@@ -560,11 +563,10 @@ class PedidoCard extends StatelessWidget {
                       label: const Text('Cancelar pedido'),
                     );
 
-                    final enEscritorio =
-                        MediaQuery.sizeOf(context).width >=
-                        Breakpoints.escritorio;
+                    final cabenEnFila =
+                        MediaQuery.sizeOf(context).width >= Breakpoints.tablet;
 
-                    if (enEscritorio &&
+                    if (cabenEnFila &&
                         mostrarAccionEntregar &&
                         mostrarAccionCancelar) {
                       return Row(

@@ -3,9 +3,13 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/cliente_model.dart';
 import '../../models/perfil_cliente_model.dart';
+import '../../models/tienda_model.dart';
 import '../../services/api_client.dart';
 import '../../services/clientes_service.dart';
+import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
+import '../../utils/contacto_utils.dart';
 import '../../utils/segmento_utils.dart';
 import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
@@ -13,6 +17,7 @@ import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/premium_button.dart';
 import 'cliente_form_page.dart';
+import 'nuevo_pedido_page.dart';
 
 /// Perfil de cliente del CRM: historial agregado, segmento automático,
 /// puntos de fidelidad (con canje) y notas internas del personal — todo lo
@@ -189,6 +194,150 @@ class ClientePerfilVistaState extends State<ClientePerfilVista> {
     }
   }
 
+  /// En celular el campo de nota queda al final de un scroll largo: para
+  /// dejar una nota había que bajar toda la ficha. Con la hoja, el botón
+  /// está donde termina la lista de notas y el teclado se abre sobre un
+  /// campo que ya está a la vista.
+  Future<void> _abrirHojaNota() async {
+    final guardar = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: SafeArea(
+          top: false,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 18),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                Text(
+                  'Nueva nota interna',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Solo la ve el personal, nunca el cliente.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _notaController,
+                  autofocus: true,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    hintText: 'Escribe una nota sobre este cliente...',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: PremiumButton(
+                    label: 'Guardar nota',
+                    icono: Icons.note_add_outlined,
+                    onPressed: () => Navigator.of(context).pop(true),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (guardar == true) await _agregarNota();
+  }
+
+  Future<void> _llamar() async {
+    await llamarPorTelefono(_perfil?.cliente.telefono ?? '');
+  }
+
+  Future<void> _whatsapp() async {
+    final cliente = _perfil?.cliente;
+    if (cliente == null) return;
+    await abrirWhatsApp(
+      cliente.telefono ?? '',
+      mensaje:
+          'Hola ${cliente.nombreParaMostrar}, te contactamos de Panadería '
+          'Ronceros.',
+    );
+  }
+
+  /// Registrar un pedido para ESTE cliente sin volver atrás y buscarlo de
+  /// nuevo. Las tiendas se piden recién al tocar el botón (el perfil no las
+  /// necesita para nada más) y, si hay varias, se elige cuál.
+  Future<void> _nuevoPedido() async {
+    List<Tienda> tiendas;
+    try {
+      tiendas = await TiendasService().misTiendas();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudieron cargar tus tiendas.')),
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    if (tiendas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No tienes tiendas asignadas.')),
+      );
+      return;
+    }
+
+    var tienda = tiendas.first;
+    if (tiendas.length > 1) {
+      final elegida = await showModalBottomSheet<Tienda>(
+        context: context,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(title: Text('¿En qué tienda?')),
+              for (final t in tiendas)
+                ListTile(
+                  leading: const Icon(Icons.storefront_rounded),
+                  title: Text(t.nombre),
+                  onTap: () => Navigator.of(context).pop(t),
+                ),
+            ],
+          ),
+        ),
+      );
+      if (elegida == null || !mounted) return;
+      tienda = elegida;
+    }
+
+    final registrado = await pushSlideUpFade<bool>(
+      context,
+      (_) => NuevoPedidoPage(tienda: tienda),
+    );
+    if (registrado == true) await _cargar();
+  }
+
   Future<void> _abrirCanjePuntos() async {
     final perfil = _perfil;
     if (perfil == null) return;
@@ -228,9 +377,16 @@ class ClientePerfilVistaState extends State<ClientePerfilVista> {
     }
 
     final perfil = _perfil!;
-    // Embebido en el panel de detalle hay más ancho: el historial pasa a una
-    // sola fila de 4 métricas (en vez de 2x2) y el bloque respira más.
+    // Embebido en el panel de detalle hay más ancho: el bloque respira más y
+    // se dibuja la barra de acciones con Editar/Actualizar (no hay AppBar
+    // que las aloje).
     final embebido = widget.embebido;
+    // Las 4 métricas del historial entran en UNA fila desde 600 px. Antes la
+    // condición era "estoy embebido", no "tengo ancho": abierta como ruta
+    // completa en una tablet de 820 px, la ficha seguía dibujando la grilla
+    // 2x2 pensada para 375 px.
+    final historialEnFila =
+        embebido || MediaQuery.sizeOf(context).width >= Breakpoints.tablet;
 
     return RefreshIndicator(
       onRefresh: _cargar,
@@ -239,19 +395,28 @@ class ClientePerfilVistaState extends State<ClientePerfilVista> {
             ? const EdgeInsets.fromLTRB(24, 20, 24, 40)
             : const EdgeInsets.fromLTRB(20, 16, 20, 40),
         children: [
-          if (embebido) ...[
-            _BarraAccionesPerfil(
-              onEditar: editar,
-              onRecargar: _cargar,
-            ).animate().fadeIn(duration: 200.ms),
-            const SizedBox(height: 16),
-          ],
           _EncabezadoCliente(perfil: perfil)
               .animate()
               .fadeIn(duration: 250.ms)
               .moveY(begin: 8, end: 0),
+          const SizedBox(height: 12),
+          // Llamar / WhatsApp / Nuevo pedido: es lo que el personal hace
+          // JUSTO después de mirar un perfil, y hasta ahora no existía en
+          // ningún ancho (había que volver a la lista y abrir el menú de
+          // acciones del cliente para poder marcarle).
+          _BarraAccionesPerfil(
+            telefono: perfil.cliente.telefono,
+            onLlamar: _llamar,
+            onWhatsApp: _whatsapp,
+            onNuevoPedido: _nuevoPedido,
+            onEditar: embebido ? editar : null,
+            onRecargar: embebido ? _cargar : null,
+          ).animate(delay: 40.ms).fadeIn(duration: 200.ms),
           const SizedBox(height: 16),
-          _TarjetaHistorial(historial: perfil.historial, enFila: embebido)
+          _TarjetaHistorial(
+                historial: perfil.historial,
+                enFila: historialEnFila,
+              )
               .animate(delay: 60.ms)
               .fadeIn(duration: 250.ms)
               .moveY(begin: 8, end: 0),
@@ -269,6 +434,11 @@ class ClientePerfilVistaState extends State<ClientePerfilVista> {
                 controller: _notaController,
                 guardando: _guardandoNota,
                 onAgregar: _agregarNota,
+                // Con teclado en pantalla, un campo al fondo de un scroll
+                // largo es la peor posición posible: en celular se cambia
+                // por un botón que abre la hoja con el campo ya enfocado.
+                enHoja: !embebido,
+                onAbrirHoja: _abrirHojaNota,
               )
               .animate(delay: 140.ms)
               .fadeIn(duration: 250.ms)
@@ -279,40 +449,85 @@ class ClientePerfilVistaState extends State<ClientePerfilVista> {
   }
 }
 
-/// Barra de acciones del perfil cuando se muestra embebido (sin AppBar que
-/// las aloje).
+/// Barra de acciones del perfil. Llamar / WhatsApp / Nuevo pedido están en
+/// TODOS los anchos; Actualizar y Editar solo cuando la ficha va embebida en
+/// el panel de escritorio (como ruta completa esas dos ya viven en el
+/// AppBar).
 class _BarraAccionesPerfil extends StatelessWidget {
-  const _BarraAccionesPerfil({required this.onEditar, required this.onRecargar});
+  const _BarraAccionesPerfil({
+    required this.telefono,
+    required this.onLlamar,
+    required this.onWhatsApp,
+    required this.onNuevoPedido,
+    this.onEditar,
+    this.onRecargar,
+  });
 
-  final VoidCallback onEditar;
-  final VoidCallback onRecargar;
+  final String? telefono;
+  final VoidCallback onLlamar;
+  final VoidCallback onWhatsApp;
+  final VoidCallback onNuevoPedido;
+  final VoidCallback? onEditar;
+  final VoidCallback? onRecargar;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
+    final contactable = tieneTelefonoUtil(telefono);
+    final onEditar = this.onEditar;
+    final onRecargar = this.onRecargar;
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      alignment: onEditar == null ? WrapAlignment.start : WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        TextButton.icon(
-          onPressed: onRecargar,
-          icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text('Actualizar'),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.textSecondary,
+        OutlinedButton.icon(
+          onPressed: contactable ? onLlamar : null,
+          icon: const Icon(Icons.call_rounded, size: 18),
+          label: const Text('Llamar'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF2563EB),
           ),
         ),
-        const SizedBox(width: 8),
-        FilledButton.icon(
-          onPressed: onEditar,
-          icon: const Icon(Icons.edit_rounded, size: 18),
-          label: const Text('Editar cliente'),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+        OutlinedButton.icon(
+          onPressed: contactable ? onWhatsApp : null,
+          icon: const Icon(Icons.chat_rounded, size: 18),
+          label: const Text('WhatsApp'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF2E7D32),
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: onNuevoPedido,
+          icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+          label: const Text('Nuevo pedido'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+          ),
+        ),
+        if (onRecargar != null)
+          TextButton.icon(
+            onPressed: onRecargar,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Actualizar'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
             ),
           ),
-        ),
+        if (onEditar != null)
+          FilledButton.icon(
+            onPressed: onEditar,
+            icon: const Icon(Icons.edit_rounded, size: 18),
+            label: const Text('Editar cliente'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -736,12 +951,19 @@ class _SeccionNotas extends StatelessWidget {
     required this.controller,
     required this.guardando,
     required this.onAgregar,
+    required this.enHoja,
+    required this.onAbrirHoja,
   });
 
   final List<NotaCliente> notas;
   final TextEditingController controller;
   final bool guardando;
   final VoidCallback onAgregar;
+
+  /// true en celular/tablet: en vez del campo inline al final del scroll, un
+  /// botón que abre la hoja inferior con el campo ya enfocado.
+  final bool enHoja;
+  final VoidCallback onAbrirHoja;
 
   @override
   Widget build(BuildContext context) {
@@ -806,15 +1028,17 @@ class _SeccionNotas extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 4),
-          TextField(
-            controller: controller,
-            minLines: 1,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              hintText: 'Escribe una nota sobre este cliente...',
+          if (!enHoja) ...[
+            TextField(
+              controller: controller,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Escribe una nota sobre este cliente...',
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
+            const SizedBox(height: 10),
+          ],
           SizedBox(
             width: double.infinity,
             child: PremiumButton(
@@ -822,7 +1046,7 @@ class _SeccionNotas extends StatelessWidget {
               icono: Icons.note_add_outlined,
               relleno: false,
               cargando: guardando,
-              onPressed: onAgregar,
+              onPressed: enHoja ? onAbrirHoja : onAgregar,
             ),
           ),
         ],

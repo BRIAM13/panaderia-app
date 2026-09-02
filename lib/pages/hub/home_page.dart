@@ -106,6 +106,47 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  /// Pedidos desde la navegación permanente: el personal puede tener acceso
+  /// a varias tiendas, así que si hay más de una se pregunta cuál — no se
+  /// asume "hamburguesas" como hacen los accesos del drawer, que son
+  /// entradas específicas de esa tienda.
+  Future<void> _abrirPedidosDeMiTienda() async {
+    final tienda = await _elegirTiendaDeGestion();
+    if (tienda == null || !mounted) return;
+    pushSlideUpFade(context, (context) => PedidosPage(tienda: tienda));
+  }
+
+  Future<Tienda?> _elegirTiendaDeGestion() async {
+    // Horneados tiene sus propias pantallas (campos custom): no entra en la
+    // navegación genérica de Pedidos, se llega por su propia entrada.
+    final candidatas = _misTiendas.where((t) => t.slug != 'horneados').toList();
+    if (candidatas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No tienes tiendas asignadas todavía.')),
+      );
+      return null;
+    }
+    if (candidatas.length == 1) return candidatas.first;
+
+    return showModalBottomSheet<Tienda>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(title: Text('¿Qué tienda?')),
+            for (final t in candidatas)
+              ListTile(
+                leading: const PhosphorIcon(PhosphorIconsRegular.storefront),
+                title: Text(t.nombre),
+                onTap: () => Navigator.of(context).pop(t),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _abrirPedidosHamburguesas() {
     final tienda = _buscarMiTienda('hamburguesas');
     if (tienda == null) return;
@@ -257,8 +298,12 @@ class _HomePageState extends State<HomePage> {
     // ventana de escritorio ancha, un menú que hay que "abrir" con un
     // ícono se ve fuera de lugar cuando sobra espacio de sobra para
     // tenerlo siempre ahí.
-    final esEscritorio =
-        MediaQuery.sizeOf(context).width >= Breakpoints.escritorio;
+    final ancho = MediaQuery.sizeOf(context).width;
+    final esEscritorio = ancho >= Breakpoints.escritorio;
+    // Tablet (600–900): el panel fijo de 300 px se comería un tercio del
+    // ancho útil, pero el drawer como overlay tampoco corresponde con este
+    // espacio. En el medio queda el riel de iconos: siempre visible, ~76 px.
+    final esTablet = !esEscritorio && ancho >= Breakpoints.tablet;
 
     final contenidoMenu = AppDrawerContenido(
       usuario: usuario,
@@ -321,6 +366,10 @@ class _HomePageState extends State<HomePage> {
         appBar: esEscritorio
             ? _barraEscritorio(vistaTrabajador: vistaTrabajador)
             : AppBar(title: const Text('Panadería Ronceros')),
+        // El riel de tablet no reemplaza al drawer: ahí siguen viviendo
+        // todas las entradas (ajustes, medios de pago, mi perfil…). El riel
+        // es el atajo a las 4 que se usan todo el día, y su último botón
+        // abre justamente el drawer completo.
         drawer: esEscritorio ? null : Drawer(child: contenidoMenu),
         floatingActionButton: vistaTrabajador
             ? null
@@ -336,11 +385,23 @@ class _HomePageState extends State<HomePage> {
                     end: const Offset(1, 1),
                     curve: Curves.easeOutBack,
                   ),
-        // El banner va en bottomNavigationBar (no dentro del body) para que
-        // el Scaffold acomode el FAB automáticamente encima de él — antes,
-        // al estar dentro del body, el FAB flotaba sin saber cuánto espacio
-        // ocupaba el banner abajo y terminaba sobreponiéndosele.
-        bottomNavigationBar: vistaTrabajador ? null : const AdBanner(),
+        // Cliente: el banner va en bottomNavigationBar (no dentro del body)
+        // para que el Scaffold acomode el FAB automáticamente encima de él.
+        // Personal: hasta ahora no tenía NINGUNA navegación permanente —
+        // todo pasaba por el drawer, así que llegar a Clientes desde el
+        // tablero eran tres toques. Con el riel de tablet o el panel fijo de
+        // escritorio esa navegación ya está a la vista, así que la barra
+        // inferior es solo para celular.
+        bottomNavigationBar: vistaTrabajador
+            ? (esEscritorio || esTablet
+                  ? null
+                  : _BarraInferiorPersonal(
+                      onInicio: _irAInicio,
+                      onPedidos: _abrirPedidosDeMiTienda,
+                      onClientes: _abrirClientesHamburguesas,
+                      onMas: () => _scaffoldKey.currentState?.openDrawer(),
+                    ))
+            : const AdBanner(),
         // En escritorio, el mismo drawer (mismo diseño que en celular) se
         // muestra siempre visible como panel lateral en vez de un overlay
         // que hay que abrir con un ícono — el resto del contenido usa
@@ -379,6 +440,19 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                     child: contenidoMenu,
+                  ),
+                  Expanded(child: cuerpo),
+                ],
+              )
+            : esTablet && vistaTrabajador
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _RielPersonal(
+                    onInicio: _irAInicio,
+                    onPedidos: _abrirPedidosDeMiTienda,
+                    onClientes: _abrirClientesHamburguesas,
+                    onMas: () => _scaffoldKey.currentState?.openDrawer(),
                   ),
                   Expanded(child: cuerpo),
                 ],
@@ -451,6 +525,113 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ).animate().fadeIn(duration: 300.ms).moveX(begin: -8, end: 0),
+    );
+  }
+}
+
+/// Los cuatro destinos que el personal usa todo el día. Se definen una sola
+/// vez y los consumen tanto la barra inferior de celular como el riel de
+/// tablet, para que la navegación sea la misma en los dos anchos.
+const _destinosPersonal = <({IconData icono, IconData iconoLleno, String etiqueta})>[
+  (
+    icono: PhosphorIconsRegular.house,
+    iconoLleno: PhosphorIconsFill.house,
+    etiqueta: 'Inicio',
+  ),
+  (
+    icono: PhosphorIconsRegular.receipt,
+    iconoLleno: PhosphorIconsFill.receipt,
+    etiqueta: 'Pedidos',
+  ),
+  (
+    icono: PhosphorIconsRegular.users,
+    iconoLleno: PhosphorIconsFill.users,
+    etiqueta: 'Clientes',
+  ),
+  (
+    icono: PhosphorIconsRegular.dotsThreeCircle,
+    iconoLleno: PhosphorIconsFill.dotsThreeCircle,
+    etiqueta: 'Más',
+  ),
+];
+
+/// Navegación permanente del personal en celular. No mantiene un índice
+/// "seleccionado" porque no son pestañas de una misma pantalla: cada destino
+/// abre su ruta y el Hub queda debajo. Inicio siempre vuelve al tablero.
+class _BarraInferiorPersonal extends StatelessWidget {
+  const _BarraInferiorPersonal({
+    required this.onInicio,
+    required this.onPedidos,
+    required this.onClientes,
+    required this.onMas,
+  });
+
+  final VoidCallback onInicio;
+  final VoidCallback onPedidos;
+  final VoidCallback onClientes;
+  final VoidCallback onMas;
+
+  @override
+  Widget build(BuildContext context) {
+    final acciones = [onInicio, onPedidos, onClientes, onMas];
+
+    return NavigationBar(
+      // El Hub (Inicio) es lo que hay debajo de cualquier ruta que se abra
+      // desde acá, así que es el destino que corresponde marcar siempre.
+      selectedIndex: 0,
+      onDestinationSelected: (i) => acciones[i](),
+      destinations: [
+        for (final d in _destinosPersonal)
+          NavigationDestination(
+            icon: PhosphorIcon(d.icono),
+            selectedIcon: PhosphorIcon(d.iconoLleno),
+            label: d.etiqueta,
+          ),
+      ],
+    );
+  }
+}
+
+/// La misma navegación en tablet, como riel de iconos siempre visible. Ocupa
+/// ~76 px en vez de los 300 del panel fijo de escritorio, que a 820 px se
+/// comería más de un tercio de la pantalla.
+class _RielPersonal extends StatelessWidget {
+  const _RielPersonal({
+    required this.onInicio,
+    required this.onPedidos,
+    required this.onClientes,
+    required this.onMas,
+  });
+
+  final VoidCallback onInicio;
+  final VoidCallback onPedidos;
+  final VoidCallback onClientes;
+  final VoidCallback onMas;
+
+  @override
+  Widget build(BuildContext context) {
+    final acciones = [onInicio, onPedidos, onClientes, onMas];
+
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(
+          right: BorderSide(color: AppColors.surfaceMuted, width: 1.2),
+        ),
+      ),
+      child: NavigationRail(
+        selectedIndex: 0,
+        onDestinationSelected: (i) => acciones[i](),
+        labelType: NavigationRailLabelType.none,
+        backgroundColor: AppColors.surface,
+        destinations: [
+          for (final d in _destinosPersonal)
+            NavigationRailDestination(
+              icon: PhosphorIcon(d.icono),
+              selectedIcon: PhosphorIcon(d.iconoLleno),
+              label: Text(d.etiqueta),
+            ),
+        ],
+      ),
     );
   }
 }

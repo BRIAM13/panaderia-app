@@ -1,18 +1,15 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-
-import '../theme/app_theme.dart';
-import '../theme/breakpoints.dart';
-import 'contador_animado.dart';
-
-/// Kit de piezas compartidas para las ramas de ESCRITORIO de las pantallas
-/// de gestión (Dashboard, Analítica, Clientes, Trabajadores…).
+/// Kit ÚNICO de piezas compartidas para las ramas de ESCRITORIO de todas las
+/// pantallas de gestión (Dashboard, Analítica, Clientes, Trabajadores,
+/// Pedidos, Horneados, Panadería…).
+///
+/// Durante un tiempo hubo cuatro copias casi idénticas de este archivo (una
+/// en `lib/widgets/` y una por tienda) porque cada frente avanzaba en
+/// paralelo. El resultado fue que `appBarGestion` tenía dos alturas y dos
+/// bordes distintos y el encabezado saltaba al navegar entre pantallas. Este
+/// archivo es la unificación: **no se vuelve a copiar**, se extiende acá.
 ///
 /// Todo lo de acá se usa SOLO dentro de un `if (esEscritorio(context))`:
-/// el árbol de widgets de celular/tablet queda exactamente como estaba. La
-/// idea es que las tres tiendas (Hamburguesas, Horneados, Panadería)
-/// compartan el mismo lenguaje visual en pantalla grande sin copiar y pegar
-/// el mismo `Container` decorado en cada archivo.
+/// el árbol de widgets de celular/tablet queda exactamente como estaba.
 ///
 /// Convenciones que respeta este kit:
 /// - Superficie: `AppColors.surface` con borde suave y sombra baja; el color
@@ -21,11 +18,36 @@ import 'contador_animado.dart';
 /// - Hover: la web SÍ tiene mouse — cada elemento accionable se levanta, se
 ///   le enciende el borde y cambia el cursor. En celular no hay puntero, así
 ///   que estos estados nunca se disparan ahí.
+library;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+
+import '../theme/app_theme.dart';
+import '../theme/breakpoints.dart';
+import 'contador_animado.dart';
 
 /// Ventana lo bastante ancha como para un layout de 2 columnas o un panel
 /// lateral fijo.
 bool esEscritorio(BuildContext context) =>
     MediaQuery.sizeOf(context).width >= Breakpoints.escritorio;
+
+/// Franja de TABLET (600–900): ya no es un celular — entran grillas de 2–3
+/// columnas, dos controles en la misma fila y dos listas lado a lado — pero
+/// todavía no hay ancho para un panel lateral fijo ni para las densidades
+/// de escritorio. Hasta que existió este helper, todo lo de menos de 900 px
+/// renderizaba el MISMO árbol pensado para 375 px, así que una tablet de
+/// 820 px mostraba tarjetas de 780 px de ancho con un número adentro.
+bool esTablet(BuildContext context) {
+  final ancho = MediaQuery.sizeOf(context).width;
+  return ancho >= Breakpoints.tablet && ancho < Breakpoints.escritorio;
+}
+
+/// Ancho de la ventana. Atajo para las pantallas que necesitan comparar
+/// contra un umbral propio (720 para partir dos gráficos, 760 para abrir el
+/// maestro-detalle…) y no contra uno de los puntos de quiebre del kit.
+double anchoVentana(BuildContext context) => MediaQuery.sizeOf(context).width;
 
 /// Ventana donde además caben densidades altas (fila de 4 KPIs, tablas)
 /// incluso descontando el panel lateral fijo del Hub.
@@ -45,8 +67,22 @@ const double anchoMaximoTablero = 1560;
 /// Separación estándar entre columnas/paneles en escritorio.
 const double espacioEscritorio = 24;
 
+/// Ancho de cada ítem para repartir [disponible] en [columnas] con
+/// [espacio] de separación — evita repetir la misma cuentita en cada grilla.
+double anchoColumna(double disponible, int columnas, [double espacio = 20]) {
+  if (columnas <= 1) return disponible;
+  return (disponible - espacio * (columnas - 1)) / columnas;
+}
+
+/// Cuántas columnas usar para una grilla de tarjetas según el ancho
+/// disponible del contenedor (no de la ventana).
+int columnasGrilla(double disponible, {int maximo = 3, double minimo = 340}) {
+  final cabe = (disponible / minimo).floor();
+  return cabe.clamp(1, maximo);
+}
+
 /// Barra superior de una pantalla de gestión abierta como ruta completa
-/// (Clientes, Analítica, Trabajadores…).
+/// (Clientes, Analítica, Trabajadores, Pedidos de Horneados…).
 ///
 /// En celular devuelve EXACTAMENTE el `AppBar` de siempre (título centrado
 /// por tema, sin decoración extra). En escritorio el título se alinea a la
@@ -102,10 +138,16 @@ class ContenidoCentrado extends StatelessWidget {
     super.key,
     required this.child,
     this.anchoMaximo = anchoMaximoTablero,
+    this.padding,
   });
 
   final Widget child;
+
+  /// Único nombre para este concepto en toda la app (antes convivían
+  /// `ancho`, `anchoMaximo` y `maxAncho` con tres valores por defecto
+  /// distintos, según de qué copia del kit venía la pantalla).
   final double anchoMaximo;
+  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +155,9 @@ class ContenidoCentrado extends StatelessWidget {
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: anchoMaximo),
-        child: child,
+        child: padding == null
+            ? child
+            : Padding(padding: padding!, child: child),
       ),
     );
   }
@@ -239,30 +283,101 @@ class TarjetaEscritorio extends StatelessWidget {
   }
 }
 
+/// Chip cuadrado con degradado de marca + ícono — la insignia que abre
+/// encabezados, paneles y tarjetas de acción.
+class ChipIcono extends StatelessWidget {
+  const ChipIcono({
+    super.key,
+    required this.icono,
+    this.tamano = 44,
+    this.tamanoIcono = 20,
+    this.color,
+    this.apagado = false,
+  });
+
+  final IconData icono;
+  final double tamano;
+  final double tamanoIcono;
+  final Color? color;
+  final bool apagado;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = apagado
+        ? Theme.of(context).colorScheme.outline
+        : (color ?? AppColors.primary);
+
+    return Container(
+      width: tamano,
+      height: tamano,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(tamano / 2.6),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            base.withValues(alpha: apagado ? 0.18 : 0.20),
+            base.withValues(alpha: apagado ? 0.06 : 0.08),
+          ],
+        ),
+        border: Border.all(
+          color: base.withValues(alpha: apagado ? 0.30 : 0.35),
+          width: 1.4,
+        ),
+      ),
+      // PhosphorIcon (y no Icon) para que las variantes duotone dibujen sus
+      // dos capas — con un IconData plano se comporta igual que Icon.
+      child: PhosphorIcon(icono, color: base, size: tamanoIcono),
+    );
+  }
+}
+
 /// Contenedor de sección con encabezado propio (ícono + título + subtítulo +
 /// acción opcional). Le da a cada bloque del tablero un marco explícito, en
 /// vez de dejar títulos sueltos flotando sobre el fondo.
+///
+/// El contenido se pasa como [child] (un solo widget) o como [hijos] (varios
+/// widgets separados por [separacion]); las dos formas existían en las
+/// copias viejas del kit y las dos se siguen aceptando acá.
 class PanelEscritorio extends StatelessWidget {
   const PanelEscritorio({
     super.key,
-    required this.child,
+    this.child,
+    this.hijos,
+    this.separacion = 12,
     this.titulo,
     this.subtitulo,
     this.icono,
     this.accion,
+    this.acento,
     this.padding = const EdgeInsets.all(24),
-  });
+  }) : assert(
+         child != null || hijos != null,
+         'PanelEscritorio necesita child o hijos',
+       );
 
-  final Widget child;
+  final Widget? child;
+
+  /// Alternativa a [child]: varios bloques apilados con [separacion] entre
+  /// uno y otro (formularios de escritorio, listas de ajustes…).
+  final List<Widget>? hijos;
+  final double separacion;
+
   final String? titulo;
   final String? subtitulo;
   final IconData? icono;
   final Widget? accion;
+
+  /// Tiñe la insignia del encabezado (por defecto, el color de marca).
+  final Color? acento;
+
   final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final color = acento ?? AppColors.primary;
+    final hijos = this.hijos;
 
     return Container(
       decoration: BoxDecoration(
@@ -290,10 +405,10 @@ class PanelEscritorio extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.10),
+                      color: color.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(icono, size: 19, color: AppColors.primary),
+                    child: PhosphorIcon(icono!, size: 19, color: color),
                   ),
                   const SizedBox(width: 12),
                 ],
@@ -319,9 +434,43 @@ class PanelEscritorio extends StatelessWidget {
             ),
             const SizedBox(height: 18),
           ],
-          child,
+          if (hijos != null)
+            for (var i = 0; i < hijos.length; i++) ...[
+              if (i > 0) SizedBox(height: separacion),
+              hijos[i],
+            ]
+          else
+            child!,
         ],
       ),
+    );
+  }
+}
+
+/// Envoltura estándar de un FORMULARIO. En escritorio topa el ancho, lo
+/// centra y lo mete en un panel con borde y sombra — se lee como un
+/// panel/modal de captura, no como una pantalla vacía con un campo estirado
+/// de 1600px. En celular devuelve el hijo tal cual: el árbol de widgets
+/// queda idéntico al de siempre.
+class FormularioEscritorio extends StatelessWidget {
+  const FormularioEscritorio({
+    super.key,
+    required this.child,
+    this.ancho = 620,
+    this.padding = const EdgeInsets.all(32),
+  });
+
+  final Widget child;
+  final double ancho;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!esEscritorio(context)) return child;
+
+    return ContenidoCentrado(
+      anchoMaximo: ancho,
+      child: PanelEscritorio(padding: padding, child: child),
     );
   }
 }
@@ -336,6 +485,8 @@ class EncabezadoEscritorio extends StatelessWidget {
     required this.titulo,
     this.anteTitulo,
     this.subtitulo,
+    this.icono,
+    this.acento,
     this.acciones = const [],
   });
 
@@ -344,15 +495,27 @@ class EncabezadoEscritorio extends StatelessWidget {
   /// Línea chica arriba del título (ej. "Bienvenido, Briam").
   final String? anteTitulo;
   final String? subtitulo;
+
+  /// Insignia grande a la izquierda del título. Opcional: las pantallas que
+  /// no la pasan renderizan exactamente el mismo árbol de siempre.
+  final IconData? icono;
+  final Color? acento;
   final List<Widget> acciones;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final icono = this.icono;
 
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: icono == null
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.center,
       children: [
+        if (icono != null) ...[
+          ChipIcono(icono: icono, tamano: 60, tamanoIcono: 28, color: acento),
+          const SizedBox(width: 18),
+        ],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -631,6 +794,40 @@ class FilaTabla extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Marco con borde que agrupa un [EncabezadoTabla] + varias [FilaTabla] en
+/// una sola superficie (data-grid completo).
+class TablaEscritorio extends StatelessWidget {
+  const TablaEscritorio({
+    super.key,
+    required this.encabezado,
+    required this.filas,
+  });
+
+  final Widget encabezado;
+  final List<Widget> filas;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.surfaceMuted, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(children: [encabezado, ...filas]),
     );
   }
 }

@@ -1,108 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../models/usuario_sesion.dart';
 import '../theme/app_theme.dart';
 import 'escritorio.dart';
-
-/// Drawer de perfil: sección "MENÚ" para el personal (trabajador/admin/
-/// superadmin) — con "Inicio" y, directo debajo, las acciones de su tienda
-/// (o de sus tiendas, si tiene más de una) — y sección "MI CUENTA" con los
-/// apartados propios de cliente (pedidos, deudas, perfil). Un usuario
-/// híbrido (a la vez trabajador y cliente, ej. porque todo trabajador nuevo
-/// también se registra como cliente) ve AMBAS secciones a la vez, sin que
-/// eso le cambie su pantalla principal: su vista de inicio sigue siendo
-/// siempre la de gestión (Dashboard/tiendas), y el apartado de cliente
-/// queda aquí, a un toque de distancia, en vez de intercambiar toda la
-/// pantalla.
-class AppDrawer extends StatelessWidget {
-  const AppDrawer({
-    super.key,
-    required this.usuario,
-    required this.onIrAInicio,
-    required this.onAbrirGestion,
-    required this.onAbrirClientesHamburguesas,
-    required this.onAbrirPedidosHamburguesas,
-    required this.onAbrirNuevoPedidoHamburguesas,
-    required this.onAbrirDeudasHamburguesas,
-    required this.onAbrirMediosPagoHamburguesas,
-    required this.onAbrirAjusteCostosHamburguesas,
-    required this.onAbrirPedidosPanaderia,
-    required this.onAbrirNuevoPedidoPanaderia,
-    required this.onAbrirDeudasPanaderia,
-    required this.onAbrirAjustePreciosPanaderia,
-    required this.onAbrirHorariosPanaderia,
-    required this.onAbrirMiPerfil,
-    required this.onAbrirMisPedidos,
-    required this.onAbrirMisDeudas,
-    required this.onAbrirAnalitica,
-    required this.onAbrirTrabajadores,
-    required this.onAbrirTokenApiPeru,
-    required this.onAbrirVersionApp,
-    required this.onCerrarSesion,
-    this.misSlugsTiendas = const {},
-  });
-
-  final UsuarioSesion usuario;
-  final VoidCallback onIrAInicio;
-  final void Function(String nombre, IconData icono) onAbrirGestion;
-  final VoidCallback onAbrirClientesHamburguesas;
-  final VoidCallback onAbrirPedidosHamburguesas;
-  final VoidCallback onAbrirNuevoPedidoHamburguesas;
-  final VoidCallback onAbrirDeudasHamburguesas;
-  final VoidCallback onAbrirMediosPagoHamburguesas;
-  final VoidCallback onAbrirAjusteCostosHamburguesas;
-  final VoidCallback onAbrirPedidosPanaderia;
-  final VoidCallback onAbrirNuevoPedidoPanaderia;
-  final VoidCallback onAbrirDeudasPanaderia;
-  final VoidCallback onAbrirAjustePreciosPanaderia;
-  final VoidCallback onAbrirHorariosPanaderia;
-  final VoidCallback onAbrirMiPerfil;
-  final VoidCallback onAbrirMisPedidos;
-  final VoidCallback onAbrirMisDeudas;
-  final VoidCallback onAbrirAnalitica;
-  final VoidCallback onAbrirTrabajadores;
-  final VoidCallback onAbrirTokenApiPeru;
-  final VoidCallback onAbrirVersionApp;
-  final VoidCallback onCerrarSesion;
-
-  /// Slugs de tiendas donde este trabajador/admin tiene acceso vigente.
-  /// SUPERADMIN las recibe todas.
-  final Set<String> misSlugsTiendas;
-
-  @override
-  Widget build(BuildContext context) {
-    return Drawer(
-      backgroundColor: AppColors.background,
-      child: AppDrawerContenido(
-        usuario: usuario,
-        misSlugsTiendas: misSlugsTiendas,
-        onIrAInicio: onIrAInicio,
-        onAbrirGestion: onAbrirGestion,
-        onAbrirClientesHamburguesas: onAbrirClientesHamburguesas,
-        onAbrirPedidosHamburguesas: onAbrirPedidosHamburguesas,
-        onAbrirNuevoPedidoHamburguesas: onAbrirNuevoPedidoHamburguesas,
-        onAbrirDeudasHamburguesas: onAbrirDeudasHamburguesas,
-        onAbrirMediosPagoHamburguesas: onAbrirMediosPagoHamburguesas,
-        onAbrirAjusteCostosHamburguesas: onAbrirAjusteCostosHamburguesas,
-        onAbrirPedidosPanaderia: onAbrirPedidosPanaderia,
-        onAbrirNuevoPedidoPanaderia: onAbrirNuevoPedidoPanaderia,
-        onAbrirDeudasPanaderia: onAbrirDeudasPanaderia,
-        onAbrirAjustePreciosPanaderia: onAbrirAjustePreciosPanaderia,
-        onAbrirHorariosPanaderia: onAbrirHorariosPanaderia,
-        onAbrirMiPerfil: onAbrirMiPerfil,
-        onAbrirMisPedidos: onAbrirMisPedidos,
-        onAbrirMisDeudas: onAbrirMisDeudas,
-        onAbrirAnalitica: onAbrirAnalitica,
-        onAbrirTrabajadores: onAbrirTrabajadores,
-        onAbrirTokenApiPeru: onAbrirTokenApiPeru,
-        onAbrirVersionApp: onAbrirVersionApp,
-        onCerrarSesion: onCerrarSesion,
-      ),
-    );
-  }
-}
 
 /// El contenido del drawer, sin el `Drawer` (overlay deslizante) que lo
 /// envuelve — separado para poder reusarlo tal cual como panel lateral fijo

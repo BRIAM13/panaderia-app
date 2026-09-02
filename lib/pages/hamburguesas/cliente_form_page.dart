@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +11,7 @@ import '../../services/clientes_service.dart';
 import '../../services/external_lookup_service.dart';
 import '../../services/geolocation_service.dart';
 import '../../utils/text_formatters.dart';
-import 'escritorio_hamburguesas.dart';
+import '../../widgets/escritorio.dart';
 import '../../widgets/premium_button.dart';
 import '../../widgets/segmented_switch.dart';
 
