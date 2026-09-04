@@ -44,7 +44,7 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
   final _pedidosService = PedidosService();
   StreamSubscription<void>? _suscripcionPush;
 
-  List<PedidoHorneado> _pedidos = [];
+  List<Pedido> _pedidos = [];
   bool _cargando = true;
   String? _error;
 
@@ -217,7 +217,7 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
     // Hay pedidos, pero todos ya se resolvieron — sin este chequeo la
     // lista de secciones quedaba en blanco (cada una se oculta sola si no
     // tiene pedidos activos) en vez de avisar que no hay nada pendiente.
-    if (_pedidos.every((p) => p.pedido.esFinalizado)) {
+    if (_pedidos.every((p) => p.esFinalizado)) {
       return EstadoVacio(
         icono: PhosphorIconsLight.checks,
         titulo: 'No hay pedidos pendientes',
@@ -227,11 +227,11 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
     }
 
     final escritorio = esEscritorio(context);
-    final activos = _pedidos.where((p) => !p.pedido.esFinalizado).toList();
-    final agrupados = agruparPedidosPorFecha(
-      activos.map((p) => p.pedido).toList(),
-    );
-    final porId = {for (final p in _pedidos) p.pedido.idPedido: p};
+    // Horneados ya usa el mismo tipo `Pedido` que el resto de las tiendas —
+    // su detalle (carne, presentación, aderezo) viaja dentro de cada línea,
+    // así que no hay que cruzar dos listas por IdPedido como antes.
+    final activos = _pedidos.where((p) => !p.esFinalizado).toList();
+    final agrupados = agruparPedidosPorFecha(activos);
 
     Widget seccion(String titulo, String subtitulo, IconData icono, Color color, List<dynamic> pedidosSeccion) {
       final lista = pedidosSeccion.cast<Pedido>();
@@ -240,9 +240,8 @@ class _PedidosHorneadosPageState extends State<PedidosHorneadosPage> {
       final esGrilla = MediaQuery.sizeOf(context).width >= Breakpoints.tablet;
 
       final tarjetas = lista.asMap().entries.map((entry) {
-        final horneado = porId[entry.value.idPedido]!;
         return _PedidoHorneadoCard(
-          horneado: horneado,
+          pedido: entry.value,
           colorSeccion: color,
           onEntregar: entry.value.estado == 'PENDIENTE'
               ? () => _entregar(entry.value)
@@ -405,13 +404,13 @@ _EstadoInfo _infoEstado(Pedido pedido) {
 
 class _PedidoHorneadoCard extends StatelessWidget {
   const _PedidoHorneadoCard({
-    required this.horneado,
+    required this.pedido,
     required this.colorSeccion,
     this.onEntregar,
     this.onCancelar,
   });
 
-  final PedidoHorneado horneado;
+  final Pedido pedido;
   final Color colorSeccion;
   final VoidCallback? onEntregar;
   final VoidCallback? onCancelar;
@@ -419,7 +418,6 @@ class _PedidoHorneadoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final pedido = horneado.pedido;
     final cliente = pedido.cliente;
     final nombreComercial = cliente.nombreComercial;
     final estadoInfo = _infoEstado(pedido);
@@ -468,18 +466,25 @@ class _PedidoHorneadoCard extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 4),
-                  Text(
-                    '${horneado.carne ?? '—'} · ${horneado.presentacion ?? '—'} · ${pedido.cantidad}',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  if (horneado.aplicaAderezo) ...[
-                    const SizedBox(height: 2),
+                  // Una entrada por línea: un mismo pedido puede llevar dos
+                  // carnes distintas, cada una con su presentación y su
+                  // aderezo. Es la pantalla con la que se prepara el pedido,
+                  // así que se listan todas.
+                  for (final item in pedido.items) ...[
                     Text(
-                      'Aderezo ${horneado.tipoAderezo ?? ''} · S/ ${(horneado.precioAderezo ?? 0).toStringAsFixed(2)}',
-                      style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                      '${item.carne ?? '—'} · ${item.presentacion ?? '—'} · ${item.cantidad}'
+                      '${pedido.items.length > 1 ? ' · S/ ${item.subtotal.toStringAsFixed(2)}' : ''}',
+                      style: theme.textTheme.bodyMedium,
                     ),
+                    if (item.aplicaAderezo == true) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Aderezo ${item.tipoAderezo ?? ''} · S/ ${(item.precioAderezo ?? 0).toStringAsFixed(2)}',
+                        style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                      ),
+                    ],
+                    const SizedBox(height: 2),
                   ],
-                  const SizedBox(height: 2),
                   Text(
                     'Total S/ ${pedido.total.toStringAsFixed(2)}',
                     style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),

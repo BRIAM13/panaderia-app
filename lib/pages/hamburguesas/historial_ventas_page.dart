@@ -93,14 +93,12 @@ class _HistorialVentasPageState extends State<HistorialVentasPage> {
   }
 
   /// El endpoint de listado es distinto por tienda: Horneados tiene su
-  /// propio servicio dedicado (campos propios — carne, presentación,
-  /// aderezo); el resto (Hamburguesas, Panadería) comparte `/pedidos`,
-  /// filtrado por `idTienda`.
+  /// propio servicio dedicado (sus campos propios — carne, presentación,
+  /// aderezo — viajan dentro de cada línea del pedido); el resto
+  /// (Hamburguesas, Panadería) comparte `/pedidos`, filtrado por
+  /// `idTienda`. Los dos devuelven el mismo tipo [Pedido].
   Future<List<Pedido>> _cargarPedidosDeTienda() async {
-    if (_esHorneados) {
-      final horneados = await _horneadosService.listarPedidos();
-      return horneados.map((h) => h.pedido).toList();
-    }
+    if (_esHorneados) return _horneadosService.listarPedidos();
     return _pedidosService.listar(idTienda: widget.tienda.idTienda);
   }
 
@@ -790,7 +788,7 @@ class _TarjetaVentaHistorial extends StatelessWidget {
                       ),
                     ),
                     child: Icon(
-                      pedido.tipoPedido == 'PAQUETES'
+                      pedido.items.any((i) => i.esPaquete)
                           ? Icons.inventory_2_rounded
                           : Icons.local_dining_rounded,
                       color: colorSeccion,
@@ -832,9 +830,16 @@ class _TarjetaVentaHistorial extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         const SizedBox(height: 2),
+                        // Qué se vendió, producto por producto. En una venta
+                        // ya cerrada esto es lo que permite reconstruir de
+                        // dónde salió el monto.
                         Text(
-                          '${pedido.tipoPedido == 'PAQUETES' ? 'Paquetes' : 'Unidades'} · '
-                          '${pedido.cantidad} · S/ ${pedido.total.toStringAsFixed(2)}',
+                          pedido.items.length == 1
+                              ? '${pedido.items.first.descripcion} · '
+                                    '${pedido.items.first.cantidad} · '
+                                    'S/ ${pedido.total.toStringAsFixed(2)}'
+                              : '${pedido.productoResumen} · '
+                                    'S/ ${pedido.total.toStringAsFixed(2)}',
                           style: theme.textTheme.bodyMedium,
                         ),
                         Text(

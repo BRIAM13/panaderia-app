@@ -434,6 +434,10 @@ class _TarjetaDeuda extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // `Deuda` viene de /solicitudes-pago (su propia consulta
+                    // en solicitudesPagoController.js, que nunca trajo
+                    // producto), no de /pedidos: acá no hay líneas que
+                    // mostrar, solo el monto adeudado por tienda.
                     Text(
                       '${deuda.tienda ?? 'Pedido'} · S/ ${deuda.total.toStringAsFixed(2)}',
                       style: theme.textTheme.titleMedium,

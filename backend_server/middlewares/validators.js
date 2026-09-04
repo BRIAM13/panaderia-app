@@ -331,25 +331,76 @@ function validateCambiarPasswordSeguro(req, res, next) {
   next();
 }
 
+/**
+ * Un pedido es un CARRITO: `items` es una lista de líneas
+ * ({idProducto, cantidad, ...}), no un producto suelto. Esta función es la
+ * parte común de las tres vías que crean pedidos de catálogo (personal,
+ * autoservicio del cliente y página web pública), que solo se diferencian
+ * en qué campos manda el cliente y cuáles deriva el controller:
+ *
+ * - `requierePrecio`: solo el personal manda `precioUnitario` (negocia el
+ *   precio en el momento). En autoservicio/web el precio SIEMPRE sale del
+ *   catálogo, así que mandarlo no tendría efecto y no se exige.
+ * - `requiereTipoPedido`: ídem — UNIDADES/PAQUETES lo elige el personal;
+ *   en las otras dos vías se deriva de la tienda del producto.
+ * - `cantidadMaxima`: tope por línea, solo para la web pública (sin JWT
+ *   detrás, es la única barrera antes de tocar la base).
+ *
+ * Devuelve la lista de errores (vacía si está todo bien) en vez de
+ * responder, para que cada validador arme su propio mensaje.
+ */
+const MAXIMO_ITEMS_POR_PEDIDO = 30;
+
+function validarItemsPedido(items, { requierePrecio = false, requiereTipoPedido = false, cantidadMaxima = null } = {}) {
+  const errores = [];
+
+  if (!Array.isArray(items) || items.length === 0) {
+    errores.push('El pedido debe tener al menos un producto.');
+    return errores;
+  }
+  if (items.length > MAXIMO_ITEMS_POR_PEDIDO) {
+    errores.push(`Un pedido no puede tener más de ${MAXIMO_ITEMS_POR_PEDIDO} productos distintos.`);
+    return errores;
+  }
+
+  items.forEach((item, indice) => {
+    // La posición va en el mensaje para que la app pueda señalar CUÁL de
+    // las líneas del carrito está mal, no solo "hay un error".
+    const posicion = `Producto ${indice + 1}:`;
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      errores.push(`${posicion} línea inválida.`);
+      return;
+    }
+    if (!Number.isInteger(item.idProducto) || item.idProducto <= 0) {
+      errores.push(`${posicion} debe seleccionar un producto válido.`);
+    }
+    if (requiereTipoPedido && item.tipoPedido !== 'UNIDADES' && item.tipoPedido !== 'PAQUETES') {
+      errores.push(`${posicion} el tipo de pedido debe ser UNIDADES o PAQUETES.`);
+    }
+    if (!Number.isInteger(item.cantidad) || item.cantidad <= 0) {
+      errores.push(`${posicion} la cantidad debe ser un número entero mayor a 0.`);
+    } else if (cantidadMaxima !== null && item.cantidad > cantidadMaxima) {
+      errores.push(`${posicion} ingresa una cantidad válida.`);
+    }
+    if (
+      requierePrecio &&
+      (typeof item.precioUnitario !== 'number' || !Number.isFinite(item.precioUnitario) || item.precioUnitario <= 0)
+    ) {
+      errores.push(`${posicion} el precio a cobrar debe ser un número mayor a 0.`);
+    }
+  });
+
+  return errores;
+}
+
 function validatePedido(req, res, next) {
-  const { idCliente, idProducto, tipoPedido, cantidad, precioUnitario, fechaEntrega } = req.body;
+  const { idCliente, items, fechaEntrega } = req.body;
   const errores = [];
 
   if (!Number.isInteger(idCliente) || idCliente <= 0) {
     errores.push('Debe seleccionar un cliente válido.');
   }
-  if (!Number.isInteger(idProducto) || idProducto <= 0) {
-    errores.push('Debe seleccionar un producto válido.');
-  }
-  if (tipoPedido !== 'UNIDADES' && tipoPedido !== 'PAQUETES') {
-    errores.push('El tipo de pedido debe ser UNIDADES o PAQUETES.');
-  }
-  if (!Number.isInteger(cantidad) || cantidad <= 0) {
-    errores.push('La cantidad debe ser un número entero mayor a 0.');
-  }
-  if (typeof precioUnitario !== 'number' || !Number.isFinite(precioUnitario) || precioUnitario <= 0) {
-    errores.push('El precio a cobrar debe ser un número mayor a 0.');
-  }
+  errores.push(...validarItemsPedido(items, { requierePrecio: true, requiereTipoPedido: true }));
   // La fecha/hora de entrega es opcional: si no se indica, el pedido queda
   // "sin fecha programada". Si SÍ se indica, debe ser una fecha válida y su
   // DÍA (hora de Perú) no puede ser anterior a hoy — la hora exacta no
@@ -370,45 +421,59 @@ function validatePedido(req, res, next) {
   next();
 }
 
+/**
+ * Horneados también es un carrito, pero sus líneas no eligen producto de un
+ * catálogo: todas usan el mismo producto placeholder de la tienda y lo que
+ * cambia por línea son sus atributos propios (carne, presentación, aderezo)
+ * y el precio, que el vendedor negocia. Por eso no reusa
+ * [validarItemsPedido] — no tienen ni un solo campo en común más que
+ * `cantidad`.
+ */
 function validateCrearPedidoHorneado(req, res, next) {
-  const {
-    idCliente,
-    carne,
-    presentacion,
-    cantidad,
-    aplicaAderezo,
-    tipoAderezo,
-    precioHorneado,
-    precioAderezo,
-    fechaEntrega,
-  } = req.body;
+  const { idCliente, items, fechaEntrega } = req.body;
   const errores = [];
 
   if (!Number.isInteger(idCliente) || idCliente <= 0) {
     errores.push('Debe seleccionar un cliente válido.');
   }
-  if (!isNonEmptyString(carne)) {
-    errores.push('Indica el tipo de carne.');
+
+  if (!Array.isArray(items) || items.length === 0) {
+    errores.push('El pedido debe tener al menos una línea.');
+  } else if (items.length > MAXIMO_ITEMS_POR_PEDIDO) {
+    errores.push(`Un pedido no puede tener más de ${MAXIMO_ITEMS_POR_PEDIDO} líneas.`);
+  } else {
+    items.forEach((item, indice) => {
+      const posicion = `Línea ${indice + 1}:`;
+      if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+        errores.push(`${posicion} línea inválida.`);
+        return;
+      }
+      const { carne, presentacion, cantidad, aplicaAderezo, tipoAderezo, precioHorneado, precioAderezo } = item;
+      if (!isNonEmptyString(carne)) {
+        errores.push(`${posicion} indica el tipo de carne.`);
+      }
+      if (!isNonEmptyString(presentacion)) {
+        errores.push(`${posicion} indica la presentación.`);
+      }
+      if (!Number.isInteger(cantidad) || cantidad <= 0) {
+        errores.push(`${posicion} la cantidad debe ser un número entero mayor a 0.`);
+      }
+      if (typeof precioHorneado !== 'number' || !Number.isFinite(precioHorneado) || precioHorneado <= 0) {
+        errores.push(`${posicion} el precio del horneado debe ser un número mayor a 0.`);
+      }
+      if (aplicaAderezo === true) {
+        if (tipoAderezo !== 'CRIOLLO' && tipoAderezo !== 'ORIENTAL') {
+          errores.push(`${posicion} elige el tipo de aderezo (criollo u oriental).`);
+        }
+        if (typeof precioAderezo !== 'number' || !Number.isFinite(precioAderezo) || precioAderezo <= 0) {
+          errores.push(`${posicion} el precio del aderezo debe ser un número mayor a 0.`);
+        }
+      } else if (aplicaAderezo !== false) {
+        errores.push(`${posicion} indica si aplica aderezo.`);
+      }
+    });
   }
-  if (!isNonEmptyString(presentacion)) {
-    errores.push('Indica la presentación.');
-  }
-  if (!Number.isInteger(cantidad) || cantidad <= 0) {
-    errores.push('La cantidad debe ser un número entero mayor a 0.');
-  }
-  if (typeof precioHorneado !== 'number' || !Number.isFinite(precioHorneado) || precioHorneado <= 0) {
-    errores.push('El precio del horneado debe ser un número mayor a 0.');
-  }
-  if (aplicaAderezo === true) {
-    if (tipoAderezo !== 'CRIOLLO' && tipoAderezo !== 'ORIENTAL') {
-      errores.push('Elige el tipo de aderezo (criollo u oriental).');
-    }
-    if (typeof precioAderezo !== 'number' || !Number.isFinite(precioAderezo) || precioAderezo <= 0) {
-      errores.push('El precio del aderezo debe ser un número mayor a 0.');
-    }
-  } else if (aplicaAderezo !== false) {
-    errores.push('Indica si aplica aderezo.');
-  }
+
   if (fechaEntrega !== undefined && fechaEntrega !== null && fechaEntrega !== '') {
     if (Number.isNaN(Date.parse(fechaEntrega))) {
       errores.push('La fecha y hora de entrega no es válida.');
@@ -431,7 +496,7 @@ function validateCrearPedidoHorneado(req, res, next) {
  * datos y (potencialmente) gastar una consulta paga a apiperu.dev.
  */
 function validateCrearPedidoPublico(req, res, next) {
-  const { documento, telefono, idProducto, cantidad, notas } = req.body;
+  const { documento, telefono, items, notas } = req.body;
   const errores = [];
 
   if (!isNonEmptyString(documento) || (!DNI_PERU_REGEX.test(documento.trim()) && !RUC_PERU_REGEX.test(documento.trim()))) {
@@ -442,12 +507,11 @@ function validateCrearPedidoPublico(req, res, next) {
   if (!isNonEmptyString(telefono) || !CELULAR_PERU_REGEX.test(telefono.trim())) {
     errores.push('Ingresa un número de celular válido de 9 dígitos.');
   }
-  if (!Number.isInteger(idProducto) || idProducto <= 0) {
-    errores.push('Selecciona un producto válido.');
-  }
-  if (!Number.isInteger(cantidad) || cantidad <= 0 || cantidad > 500) {
-    errores.push('Ingresa una cantidad válida.');
-  }
+  // Tope de 500 por línea: sin JWT detrás, esta validación es la única
+  // barrera antes de tocar la base (y de gastar una consulta paga a
+  // apiperu.dev). El precio y el tipo de pedido los deriva el controller
+  // del catálogo, no vienen del body.
+  errores.push(...validarItemsPedido(items, { cantidadMaxima: 500 }));
   if (notas !== undefined && notas !== null && String(notas).trim().length > 200) {
     errores.push('La nota es demasiado larga.');
   }
@@ -462,20 +526,15 @@ function validateCrearPedidoPublico(req, res, next) {
 /**
  * Autoservicio (rol CLIENTE): a diferencia de validatePedido, aquí no hay
  * `idCliente` (siempre es el del propio JWT) ni `precioUnitario` (siempre
- * sale del catálogo) — el cliente solo elige un producto y una cantidad; la
- * tienda y el tipo de pedido (PAQUETES/UNIDADES) se derivan del producto en
- * el controller, no vienen del body (ver crearMiPedido).
+ * sale del catálogo) — el cliente solo arma su carrito de productos y
+ * cantidades; la tienda y el tipo de pedido (PAQUETES/UNIDADES) se derivan
+ * de cada producto en el controller, no vienen del body (ver crearMiPedido).
  */
 function validateMiPedido(req, res, next) {
-  const { idProducto, cantidad, fechaEntrega } = req.body;
+  const { items, fechaEntrega } = req.body;
   const errores = [];
 
-  if (!Number.isInteger(idProducto) || idProducto <= 0) {
-    errores.push('Selecciona un producto válido.');
-  }
-  if (!Number.isInteger(cantidad) || cantidad <= 0) {
-    errores.push('La cantidad debe ser un número entero mayor a 0.');
-  }
+  errores.push(...validarItemsPedido(items));
   if (fechaEntrega !== undefined && fechaEntrega !== null && fechaEntrega !== '') {
     if (Number.isNaN(Date.parse(fechaEntrega))) {
       errores.push('La fecha y hora de entrega no es válida.');
@@ -647,4 +706,8 @@ module.exports = {
   validateConfirmarRecuperacion,
   DNI_PERU_REGEX,
   RUC_PERU_REGEX,
+  // Exportada para poder probar las reglas de carrito sueltas (ver
+  // __tests__/validators.test.js) sin armar un req/res falso por caso.
+  validarItemsPedido,
+  MAXIMO_ITEMS_POR_PEDIDO,
 };

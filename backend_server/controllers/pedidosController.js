@@ -4,8 +4,21 @@ const { enviarPush } = require('../services/pushService');
 const { obtenerIdTrabajador, obtenerTiendasAsignadas, tieneAccesoATienda } = require('../utils/tiendaAcceso');
 const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos');
 
+/**
+ * Registra un pedido con UNO O VARIOS productos (carrito). `Pedidos` es la
+ * cabecera (cliente, tienda, estado, fecha) y cada línea vive en
+ * `PedidoItems` — de ahí sale también el `Total`, como suma de subtotales.
+ *
+ * Body: `{ idCliente, fechaEntrega?, notas?, items: [{ idProducto,
+ * tipoPedido, cantidad, precioUnitario }] }`.
+ *
+ * Todas las líneas deben resolver a la MISMA tienda: un pedido pertenece a
+ * una sola tienda (su `IdTienda`, su correlativo del día, su personal), así
+ * que mezclar productos de Panadería y Hamburguesas en un mismo carrito no
+ * tiene a dónde guardarse. Se rechaza con 400 antes de insertar nada.
+ */
 async function crearPedido(req, res, next) {
-  const { idCliente, idProducto, tipoPedido, cantidad, precioUnitario, fechaEntrega, notas } = req.body;
+  const { idCliente, items, fechaEntrega, notas } = req.body;
   const { idPersona, idUsuario, rol } = req.usuario;
 
   const pool = await getPool();
@@ -41,30 +54,53 @@ async function crearPedido(req, res, next) {
     }
     const cliente = clienteResult.recordset[0];
 
-    // El producto solo se usa para categorizar el pedido en reportes (y
+    // Cada producto solo sirve para categorizar el pedido en reportes (y
     // para derivar a qué tienda pertenece); el precio real lo decide el
     // vendedor en pantalla (ver más abajo), no el catálogo — así se pueden
     // negociar descuentos o precios especiales. Restringido a las mismas
     // tiendas de catálogo simple que el autoservicio (ver SLUGS_AUTOSERVICIO
     // en crearMiPedido) — Horneados sigue registrándose por su propio
     // endpoint, con sus campos propios.
-    const productoResult = await new sql.Request(transaction)
-      .input('IdProducto', sql.Int, idProducto)
-      .query(`
-        SELECT p.IdProducto, t.IdTienda
-        FROM Productos p
-        INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
-        INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
-        WHERE p.IdProducto = @IdProducto AND p.Estado = 1 AND t.Estado = 1
-          AND t.Slug IN ('${SLUGS_AUTOSERVICIO.join("','")}')
-      `);
+    const lineas = [];
+    let idTienda = null;
 
-    if (productoResult.recordset.length === 0) {
-      await transaction.rollback();
-      return res.status(400).json({ mensaje: 'Ese producto ya no está disponible para pedir.' });
+    for (const item of items) {
+      const productoResult = await new sql.Request(transaction)
+        .input('IdProducto', sql.Int, item.idProducto)
+        .query(`
+          SELECT p.IdProducto, p.Nombre AS ProductoNombre, t.IdTienda
+          FROM Productos p
+          INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
+          INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
+          WHERE p.IdProducto = @IdProducto AND p.Estado = 1 AND t.Estado = 1
+            AND t.Slug IN ('${SLUGS_AUTOSERVICIO.join("','")}')
+        `);
+
+      if (productoResult.recordset.length === 0) {
+        await transaction.rollback();
+        return res.status(400).json({ mensaje: 'Uno de los productos ya no está disponible para pedir.' });
+      }
+
+      const producto = productoResult.recordset[0];
+      if (idTienda === null) {
+        idTienda = producto.IdTienda;
+      } else if (producto.IdTienda !== idTienda) {
+        await transaction.rollback();
+        return res.status(400).json({
+          mensaje: 'Todos los productos de un pedido deben ser de la misma tienda.',
+        });
+      }
+
+      const precioUnitarioFinal = Number(Number(item.precioUnitario).toFixed(2));
+      lineas.push({
+        idProducto: producto.IdProducto,
+        producto: producto.ProductoNombre,
+        tipoPedido: item.tipoPedido,
+        cantidad: item.cantidad,
+        precioUnitario: precioUnitarioFinal,
+        subtotal: Number((precioUnitarioFinal * item.cantidad).toFixed(2)),
+      });
     }
-
-    const { IdProducto: idProductoValido, IdTienda: idTienda } = productoResult.recordset[0];
 
     const acceso = await tieneAccesoATienda({ rol, idPersona, idTienda });
     if (!acceso) {
@@ -72,8 +108,7 @@ async function crearPedido(req, res, next) {
       return res.status(403).json({ mensaje: 'No tienes acceso a esta tienda.' });
     }
 
-    const precioUnitarioFinal = Number(Number(precioUnitario).toFixed(2));
-    const total = Number((precioUnitarioFinal * cantidad).toFixed(2));
+    const total = Number(lineas.reduce((acc, l) => acc + l.subtotal, 0).toFixed(2));
     // La fecha/hora de entrega es opcional: un pedido puede quedar "sin
     // fecha programada" y coordinarse después. Registrado por el propio
     // personal: nace confirmado (PENDIENTE), no necesita aprobación.
@@ -83,22 +118,20 @@ async function crearPedido(req, res, next) {
     const insertResult = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, idCliente)
       .input('IdTienda', sql.Int, idTienda)
-      .input('IdProducto', sql.Int, idProductoValido)
       .input('IdTrabajador', sql.Int, idTrabajador)
       .input('IdUsuarioRegistro', sql.Int, idUsuario)
-      .input('TipoPedido', sql.VarChar(20), tipoPedido)
-      .input('Cantidad', sql.Int, cantidad)
-      .input('PrecioUnitario', sql.Decimal(10, 2), precioUnitarioFinal)
       .input('Total', sql.Decimal(10, 2), total)
       .input('FechaEntrega', sql.DateTime2, fechaEntregaFinal)
       .input('Notas', sql.NVarChar(300), notas ? notas.trim().toUpperCase() : null)
       .input('NumeroPedidoDia', sql.Int, numeroPedidoDia)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, IdUsuarioRegistro, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, NumeroPedidoDia, Estado)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdTrabajador, IdUsuarioRegistro, Total, FechaEntrega, Notas, NumeroPedidoDia, Estado)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, @IdProducto, @IdTrabajador, @IdUsuarioRegistro, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, @NumeroPedidoDia, 'PENDIENTE')
+        VALUES (@IdCliente, @IdTienda, @IdTrabajador, @IdUsuarioRegistro, @Total, @FechaEntrega, @Notas, @NumeroPedidoDia, 'PENDIENTE')
       `);
     const { IdPedido: idPedido, FechaCreacion: fechaCreacion } = insertResult.recordset[0];
+
+    await insertarItemsPedido(transaction, idPedido, lineas);
 
     await transaction.commit();
 
@@ -107,7 +140,7 @@ async function crearPedido(req, res, next) {
       accion: 'CREAR_PEDIDO',
       tablaAfectada: 'Pedidos',
       registroAfectadoId: String(idPedido),
-      datosNuevos: { idCliente, idProducto: idProductoValido, tipoPedido, cantidad, precioUnitario: precioUnitarioFinal, total, fechaEntrega },
+      datosNuevos: { idCliente, items: lineas, total, fechaEntrega },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -125,7 +158,8 @@ async function crearPedido(req, res, next) {
       mensaje: 'Pedido registrado correctamente',
       idPedido,
       numeroPedidoDia,
-      precioUnitario: precioUnitarioFinal,
+      items: lineas,
+      productoResumen: resumirProductos(lineas),
       total,
       fechaEntrega: fechaEntregaFinal,
       fechaCreacion,
@@ -141,6 +175,48 @@ async function crearPedido(req, res, next) {
     await transaction.rollback();
     return next(err);
   }
+}
+
+/**
+ * Inserta las líneas del carrito de [idPedido] dentro de la transacción ya
+ * abierta. Devuelve las mismas líneas con su `idPedidoItem` recién
+ * asignado — Horneados lo necesita para colgar de cada una su detalle
+ * (carne/presentación/aderezo).
+ */
+async function insertarItemsPedido(transaction, idPedido, lineas) {
+  const insertadas = [];
+  for (const linea of lineas) {
+    const resultado = await new sql.Request(transaction)
+      .input('IdPedido', sql.Int, idPedido)
+      .input('IdProducto', sql.Int, linea.idProducto)
+      .input('TipoPedido', sql.VarChar(20), linea.tipoPedido)
+      .input('Cantidad', sql.Int, linea.cantidad)
+      .input('PrecioUnitario', sql.Decimal(10, 2), linea.precioUnitario)
+      .input('Subtotal', sql.Decimal(10, 2), linea.subtotal)
+      .query(`
+        INSERT INTO PedidoItems (IdPedido, IdProducto, TipoPedido, Cantidad, PrecioUnitario, Subtotal)
+        OUTPUT INSERTED.IdPedidoItem
+        VALUES (@IdPedido, @IdProducto, @TipoPedido, @Cantidad, @PrecioUnitario, @Subtotal)
+      `);
+    insertadas.push({ ...linea, idPedidoItem: resultado.recordset[0].IdPedidoItem });
+  }
+  return insertadas;
+}
+
+/**
+ * "Pan francés x2, Pan de agua x1" — conveniencia visual para subtítulos
+ * compactos y textos de notificación, NUNCA un sustituto de iterar `items`
+ * donde la cantidad o el precio por producto importan (ej. la pantalla con
+ * la que el personal prepara el pedido).
+ *
+ * En Horneados todas las líneas comparten el mismo producto placeholder
+ * ("Horneados x2, Horneados x3" no diría nada), así que se resumen por su
+ * carne, que es lo que de verdad las distingue.
+ */
+function resumirProductos(lineas) {
+  return lineas
+    .map((l) => `${l.carne ? l.carne : l.producto} x${l.cantidad}`)
+    .join(', ');
 }
 
 /**
@@ -237,7 +313,7 @@ const CANTIDAD_MINIMA_UNIDAD = 50;
  * rechazarlo según stock antes de que cuente como confirmado.
  */
 async function crearMiPedido(req, res, next) {
-  const { idProducto, cantidad, fechaEntrega, notas } = req.body;
+  const { items, fechaEntrega, notas } = req.body;
   const { idPersona, idUsuario } = req.usuario;
 
   const pool = await getPool();
@@ -261,66 +337,99 @@ async function crearMiPedido(req, res, next) {
     }
     const cliente = clienteResult.recordset[0];
 
-    const productoResult = await new sql.Request(transaction)
-      .input('IdProducto', sql.Int, idProducto)
-      .query(`
-        SELECT p.IdProducto, p.Nombre AS ProductoNombre, p.PrecioUnitario, t.IdTienda, t.Nombre AS TiendaNombre, t.Slug
-        FROM Productos p
-        INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
-        INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
-        WHERE p.IdProducto = @IdProducto AND p.Estado = 1 AND t.Estado = 1
-          AND t.Slug IN ('${SLUGS_AUTOSERVICIO.join("','")}')
-      `);
+    // El precio de paquete es el mismo para toda la tienda de Hamburguesas
+    // (Configuraciones.PRECIO_PAQUETE), así que se resuelve UNA vez por
+    // request y no por línea — es el precio vigente del paquete de 12, el
+    // mismo que ve el personal.
+    let precioPaquete = null;
+    const configPaquete = await new sql.Request(transaction).query(
+      "SELECT Valor FROM Configuraciones WHERE Clave = 'PRECIO_PAQUETE'",
+    );
+    if (configPaquete.recordset.length > 0) precioPaquete = Number(configPaquete.recordset[0].Valor);
 
-    if (productoResult.recordset.length === 0) {
-      await transaction.rollback();
-      return res.status(400).json({ mensaje: 'Ese producto ya no está disponible para pedir.' });
-    }
-    const { IdProducto: idProductoValido, ProductoNombre: productoNombre, IdTienda: idTienda, TiendaNombre: tiendaNombre, Slug: slugTienda } = productoResult.recordset[0];
+    const lineas = [];
+    let idTienda = null;
+    let tiendaNombre = null;
 
-    // El pan de hamburguesa se vende por paquete de 12 a precio fijo (no por
-    // unidad suelta) — mismo criterio que usa la página web pública (ver
-    // crearPedidoPublico en publicoController.js).
-    const esPaquete = slugTienda === 'hamburguesas';
-    const tipoPedido = esPaquete ? 'PAQUETES' : 'UNIDADES';
+    for (const item of items) {
+      const productoResult = await new sql.Request(transaction)
+        .input('IdProducto', sql.Int, item.idProducto)
+        .query(`
+          SELECT p.IdProducto, p.Nombre AS ProductoNombre, p.PrecioUnitario, t.IdTienda, t.Nombre AS TiendaNombre, t.Slug
+          FROM Productos p
+          INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
+          INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
+          WHERE p.IdProducto = @IdProducto AND p.Estado = 1 AND t.Estado = 1
+            AND t.Slug IN ('${SLUGS_AUTOSERVICIO.join("','")}')
+        `);
 
-    if (!esPaquete && cantidad < CANTIDAD_MINIMA_UNIDAD) {
-      await transaction.rollback();
-      return res.status(400).json({
-        mensaje: `El pedido mínimo de ${productoNombre} es ${CANTIDAD_MINIMA_UNIDAD} unidades.`,
+      if (productoResult.recordset.length === 0) {
+        await transaction.rollback();
+        return res.status(400).json({ mensaje: 'Uno de los productos ya no está disponible para pedir.' });
+      }
+      const producto = productoResult.recordset[0];
+
+      // Un pedido pertenece a una sola tienda (ver crearPedido): mezclar
+      // Panadería y Hamburguesas en un mismo carrito no tiene dónde
+      // guardarse.
+      if (idTienda === null) {
+        idTienda = producto.IdTienda;
+        tiendaNombre = producto.TiendaNombre;
+      } else if (producto.IdTienda !== idTienda) {
+        await transaction.rollback();
+        return res.status(400).json({
+          mensaje: 'Todos los productos de un pedido deben ser de la misma tienda.',
+        });
+      }
+
+      // El pan de hamburguesa se vende por paquete de 12 a precio fijo (no
+      // por unidad suelta) — mismo criterio que usa la página web pública
+      // (ver crearPedidoPublico en publicoController.js).
+      const esPaquete = producto.Slug === 'hamburguesas';
+      const tipoPedido = esPaquete ? 'PAQUETES' : 'UNIDADES';
+
+      // El mínimo se valida POR LÍNEA, no sobre el total del carrito: son
+      // 50 unidades de ESE pan, no 50 panes sumando dos productos
+      // distintos.
+      if (!esPaquete && item.cantidad < CANTIDAD_MINIMA_UNIDAD) {
+        await transaction.rollback();
+        return res.status(400).json({
+          mensaje: `El pedido mínimo de ${producto.ProductoNombre} es ${CANTIDAD_MINIMA_UNIDAD} unidades.`,
+        });
+      }
+
+      const precioUnitarioFinal =
+        esPaquete && precioPaquete != null ? precioPaquete : producto.PrecioUnitario;
+
+      lineas.push({
+        idProducto: producto.IdProducto,
+        producto: producto.ProductoNombre,
+        tipoPedido,
+        cantidad: item.cantidad,
+        precioUnitario: precioUnitarioFinal,
+        subtotal: Number((precioUnitarioFinal * item.cantidad).toFixed(2)),
       });
     }
 
-    let precioUnitarioFinal = productoResult.recordset[0].PrecioUnitario;
-    if (esPaquete) {
-      // Paquetes de Hamburguesas usa el precio de Configuraciones (el mismo
-      // que ve el personal), no Productos.PrecioUnitario — así el cliente
-      // siempre ve el precio vigente real del paquete de 12.
-      const config = await new sql.Request(transaction).query("SELECT Valor FROM Configuraciones WHERE Clave = 'PRECIO_PAQUETE'");
-      if (config.recordset.length > 0) precioUnitarioFinal = Number(config.recordset[0].Valor);
-    }
-
-    const total = Number((precioUnitarioFinal * cantidad).toFixed(2));
+    const total = Number(lineas.reduce((acc, l) => acc + l.subtotal, 0).toFixed(2));
     const fechaEntregaFinal = fechaEntrega ? new Date(fechaEntrega) : null;
     const numeroPedidoDia = await obtenerSiguienteNumeroPedidoDia(transaction, idTienda);
 
     const insertResult = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, cliente.IdCliente)
       .input('IdTienda', sql.Int, idTienda)
-      .input('IdProducto', sql.Int, idProductoValido)
-      .input('TipoPedido', sql.VarChar(20), tipoPedido)
-      .input('Cantidad', sql.Int, cantidad)
-      .input('PrecioUnitario', sql.Decimal(10, 2), precioUnitarioFinal)
       .input('Total', sql.Decimal(10, 2), total)
       .input('FechaEntrega', sql.DateTime2, fechaEntregaFinal)
       .input('Notas', sql.NVarChar(300), notas ? notas.trim().toUpperCase() : null)
       .input('NumeroPedidoDia', sql.Int, numeroPedidoDia)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, NumeroPedidoDia, Estado)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdTrabajador, Total, FechaEntrega, Notas, NumeroPedidoDia, Estado)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, @IdProducto, NULL, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, @NumeroPedidoDia, 'SOLICITADO')
+        VALUES (@IdCliente, @IdTienda, NULL, @Total, @FechaEntrega, @Notas, @NumeroPedidoDia, 'SOLICITADO')
       `);
     const { IdPedido: idPedido, FechaCreacion: fechaCreacion } = insertResult.recordset[0];
+
+    await insertarItemsPedido(transaction, idPedido, lineas);
 
     await transaction.commit();
 
@@ -329,7 +438,7 @@ async function crearMiPedido(req, res, next) {
       accion: 'CREAR_MI_PEDIDO',
       tablaAfectada: 'Pedidos',
       registroAfectadoId: String(idPedido),
-      datosNuevos: { idTienda, idProducto: idProductoValido, tipoPedido, cantidad, precioUnitario: precioUnitarioFinal, total, fechaEntrega },
+      datosNuevos: { idTienda, items: lineas, total, fechaEntrega },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -347,9 +456,8 @@ async function crearMiPedido(req, res, next) {
       idPedido,
       numeroPedidoDia,
       tienda: tiendaNombre,
-      producto: productoNombre,
-      tipoPedido,
-      precioUnitario: precioUnitarioFinal,
+      items: lineas,
+      productoResumen: resumirProductos(lineas),
       total,
       fechaEntrega: fechaEntregaFinal,
       fechaCreacion,
@@ -367,14 +475,16 @@ async function crearMiPedido(req, res, next) {
   }
 }
 
+// Cabecera pura: producto/cantidad/precio/tipo viven en PedidoItems (una
+// fila por línea de carrito) y se traen aparte, de un solo golpe por lote
+// de pedidos — ver obtenerItemsPorPedidos.
 const SELECT_PEDIDOS_BASE = `
-  SELECT pd.IdPedido, pd.NumeroPedidoDia, pd.IdCliente, pd.IdTienda, pd.TipoPedido, pd.Cantidad, pd.PrecioUnitario, pd.Total, pd.FechaEntrega,
+  SELECT pd.IdPedido, pd.NumeroPedidoDia, pd.IdCliente, pd.IdTienda, pd.Total, pd.FechaEntrega,
          pd.Estado, pd.EstadoPago, pd.FechaEntregaReal, pd.Notas, pd.FechaCreacion,
          per.DNI AS ClienteDni, per.Nombres AS ClienteNombres,
          per.ApellidoPaterno AS ClienteApellidoPaterno, per.ApellidoMaterno AS ClienteApellidoMaterno,
          c.DescripcionNegocio AS ClienteDescripcionNegocio,
          t.Nombre AS TiendaNombre,
-         prod.Nombre AS ProductoNombre,
          registroPer.Nombres AS VendedorNombres, registroPer.ApellidoPaterno AS VendedorApellidoPaterno,
          registroRol.NombreRol AS VendedorRol,
          aprobPer.Nombres AS AprobadoNombres, aprobPer.ApellidoPaterno AS AprobadoApellidoPaterno,
@@ -384,7 +494,6 @@ const SELECT_PEDIDOS_BASE = `
   INNER JOIN Clientes c ON c.IdCliente = pd.IdCliente
   INNER JOIN Personas per ON per.IdPersona = c.IdPersona
   LEFT JOIN Tiendas t ON t.IdTienda = pd.IdTienda
-  INNER JOIN Productos prod ON prod.IdProducto = pd.IdProducto
   -- Quién lo registró: por IdUsuarioRegistro, no por IdTrabajador — así
   -- funciona igual sin importar si esa persona tiene o no una ficha de
   -- Trabajador (ej. el SUPERADMIN dueño no tiene una).
@@ -400,20 +509,75 @@ const SELECT_PEDIDOS_BASE = `
 `;
 
 /**
+ * Trae de un solo golpe las líneas de carrito de VARIOS pedidos, indexadas
+ * por IdPedido — una consulta por lote en vez de una por pedido (N+1). El
+ * LEFT JOIN a PedidosHorneadosDetalle agrega, cuando existe, el detalle
+ * propio de Horneados de ESA línea (carne, presentación, aderezo); para
+ * cualquier otra tienda esas columnas llegan null.
+ */
+async function obtenerItemsPorPedidos(pool, idsPedidos) {
+  if (idsPedidos.length === 0) return new Map();
+  // .map(Number) antes de interpolar: mismo criterio anti-inyección que el
+  // resto del archivo (los IDs vienen de un recordset, no del request, pero
+  // no se interpola nada sin convertirlo primero).
+  const resultado = await pool.request().query(`
+    SELECT pi.IdPedidoItem, pi.IdPedido, pi.IdProducto, pi.TipoPedido, pi.Cantidad,
+           pi.PrecioUnitario, pi.Subtotal, prod.Nombre AS ProductoNombre,
+           phd.Carne, phd.Presentacion, phd.AplicaAderezo, phd.TipoAderezo, phd.PrecioAderezo
+    FROM PedidoItems pi
+    INNER JOIN Productos prod ON prod.IdProducto = pi.IdProducto
+    LEFT JOIN PedidosHorneadosDetalle phd ON phd.IdPedidoItem = pi.IdPedidoItem
+    WHERE pi.IdPedido IN (${idsPedidos.map(Number).join(',')})
+    ORDER BY pi.IdPedidoItem ASC
+  `);
+  const mapa = new Map();
+  for (const fila of resultado.recordset) {
+    if (!mapa.has(fila.IdPedido)) mapa.set(fila.IdPedido, []);
+    mapa.get(fila.IdPedido).push(fila);
+  }
+  return mapa;
+}
+
+function mapearFilaItem(fila) {
+  return {
+    idPedidoItem: fila.IdPedidoItem,
+    idProducto: fila.IdProducto,
+    producto: fila.ProductoNombre,
+    tipoPedido: fila.TipoPedido,
+    cantidad: fila.Cantidad,
+    precioUnitario: fila.PrecioUnitario,
+    subtotal: fila.Subtotal,
+    // Solo Horneados: null en cualquier otra tienda. `AplicaAderezo` llega
+    // como 0/1 desde MariaDB (tinyint), no como booleano.
+    carne: fila.Carne ?? null,
+    presentacion: fila.Presentacion ?? null,
+    aplicaAderezo: fila.Carne == null ? null : fila.AplicaAderezo === 1 || fila.AplicaAderezo === true,
+    tipoAderezo: fila.TipoAderezo ?? null,
+    precioAderezo: fila.PrecioAderezo ?? null,
+  };
+}
+
+/**
  * `incluirAuditoria` solo debe venir en true para SUPERADMIN/ADMIN (ver
  * listarPedidos/listarDeudas) — un TRABAJADOR raso o el propio cliente
  * nunca deben ver quién registró/aprobó/canceló/entregó cada pedido.
+ *
+ * `itemsFilas` son las líneas de ESTE pedido, tal como las devolvió
+ * [obtenerItemsPorPedidos].
  */
-function mapearFilaPedido(fila, incluirAuditoria = false) {
+function mapearFilaPedido(fila, itemsFilas = [], incluirAuditoria = false) {
+  const items = itemsFilas.map(mapearFilaItem);
   const base = {
     idPedido: fila.IdPedido,
     numeroPedidoDia: fila.NumeroPedidoDia,
     idCliente: fila.IdCliente,
     idTienda: fila.IdTienda,
     tienda: fila.TiendaNombre,
-    tipoPedido: fila.TipoPedido,
-    cantidad: fila.Cantidad,
-    precioUnitario: fila.PrecioUnitario,
+    items,
+    // Conveniencia visual para subtítulos compactos y notificaciones — NO
+    // reemplaza iterar `items` donde importa la cantidad o el precio por
+    // producto (ver resumirProductos).
+    productoResumen: resumirProductos(items),
     total: fila.Total,
     fechaEntrega: fila.FechaEntrega,
     estado: fila.Estado,
@@ -428,7 +592,6 @@ function mapearFilaPedido(fila, incluirAuditoria = false) {
       apellidoMaterno: fila.ClienteApellidoMaterno,
       descripcionNegocio: fila.ClienteDescripcionNegocio,
     },
-    producto: fila.ProductoNombre,
     // null si lo registró el propio cliente (autoservicio), no el personal.
     vendedor: fila.VendedorNombres ? `${fila.VendedorNombres} ${fila.VendedorApellidoPaterno}` : null,
   };
@@ -466,14 +629,13 @@ async function listarPedidos(req, res, next) {
     // sensible de gestión interna — solo ADMIN/SUPERADMIN la ven, un
     // TRABAJADOR raso no.
     const incluirAuditoria = ['ADMIN', 'SUPERADMIN'].includes(req.usuario.rol);
-    const mapear = (fila) => mapearFilaPedido(fila, incluirAuditoria);
 
     if (req.usuario.rol === 'SUPERADMIN') {
       const result = await pool
         .request()
         .input('IdTienda', sql.Int, idTienda)
         .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdTienda = @IdTienda ORDER BY pd.FechaCreacion DESC`);
-      return res.status(200).json({ pedidos: result.recordset.map(mapear) });
+      return res.status(200).json({ pedidos: await armarPedidosConItems(pool, result.recordset, incluirAuditoria) });
     }
 
     const idTrabajador = await obtenerIdTrabajador(req.usuario.idPersona);
@@ -486,10 +648,21 @@ async function listarPedidos(req, res, next) {
       .request()
       .input('IdTienda', sql.Int, idTienda)
       .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdTienda = @IdTienda ORDER BY pd.FechaCreacion DESC`);
-    return res.status(200).json({ pedidos: result.recordset.map(mapear) });
+    return res.status(200).json({ pedidos: await armarPedidosConItems(pool, result.recordset, incluirAuditoria) });
   } catch (err) {
     return next(err);
   }
+}
+
+/**
+ * Junta las filas de cabecera con sus líneas de carrito: una sola consulta
+ * extra por lote (no una por pedido). Es el paso que toda lectura de
+ * pedidos debe hacer ahora que producto/cantidad viven en PedidoItems —
+ * también lo usan horneadosController.js y publicoController.js.
+ */
+async function armarPedidosConItems(pool, filas, incluirAuditoria = false) {
+  const itemsPorPedido = await obtenerItemsPorPedidos(pool, filas.map((f) => f.IdPedido));
+  return filas.map((fila) => mapearFilaPedido(fila, itemsPorPedido.get(fila.IdPedido) ?? [], incluirAuditoria));
 }
 
 /**
@@ -518,7 +691,7 @@ async function misPedidos(req, res, next) {
         `${SELECT_PEDIDOS_BASE} WHERE pd.IdCliente = @IdCliente AND pd.Estado NOT IN ('RECHAZADO', 'CANCELADO') ORDER BY pd.FechaCreacion DESC`,
       );
 
-    return res.status(200).json({ pedidos: result.recordset.map(mapearFilaPedido) });
+    return res.status(200).json({ pedidos: await armarPedidosConItems(pool, result.recordset) });
   } catch (err) {
     return next(err);
   }
@@ -788,14 +961,13 @@ async function listarDeudas(req, res, next) {
     const pool = await getPool();
     const filtroEstado = "WHERE pd.Estado = 'ENTREGADO' AND pd.EstadoPago = 'DEUDA'";
     const incluirAuditoria = ['ADMIN', 'SUPERADMIN'].includes(req.usuario.rol);
-    const mapear = (fila) => mapearFilaPedido(fila, incluirAuditoria);
 
     if (req.usuario.rol === 'SUPERADMIN') {
       const result = await pool
         .request()
         .input('IdTienda', sql.Int, idTienda)
         .query(`${SELECT_PEDIDOS_BASE} ${filtroEstado} AND pd.IdTienda = @IdTienda ORDER BY pd.FechaEntregaReal ASC`);
-      return res.status(200).json({ pedidos: result.recordset.map(mapear) });
+      return res.status(200).json({ pedidos: await armarPedidosConItems(pool, result.recordset, incluirAuditoria) });
     }
 
     const idTrabajador = await obtenerIdTrabajador(req.usuario.idPersona);
@@ -808,7 +980,7 @@ async function listarDeudas(req, res, next) {
       .request()
       .input('IdTienda', sql.Int, idTienda)
       .query(`${SELECT_PEDIDOS_BASE} ${filtroEstado} AND pd.IdTienda = @IdTienda ORDER BY pd.FechaEntregaReal ASC`);
-    return res.status(200).json({ pedidos: result.recordset.map(mapear) });
+    return res.status(200).json({ pedidos: await armarPedidosConItems(pool, result.recordset, incluirAuditoria) });
   } catch (err) {
     return next(err);
   }
@@ -955,6 +1127,10 @@ module.exports = {
   // consulta — evita que las dos vistas se desincronicen con el tiempo.
   SELECT_PEDIDOS_BASE,
   mapearFilaPedido,
+  obtenerItemsPorPedidos,
+  armarPedidosConItems,
+  insertarItemsPedido,
+  resumirProductos,
   // Reexportado para publicoController.js (avisa al personal de un pedido
   // web nuevo, igual que un pedido solicitado desde la app).
   notificarPersonalTienda,

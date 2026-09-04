@@ -10,6 +10,13 @@
   },
   "license": "UNLICENSED",
   "private": true,
+  "jest": {
+    "testEnvironment": "node",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/__tests__/helpers/"
+    ]
+  },
   "dependencies": {
     "axios": "^1.18.1",
     "bcryptjs": "^2.4.3",

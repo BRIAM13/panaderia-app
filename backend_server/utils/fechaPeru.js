@@ -40,6 +40,30 @@ function inicioDeMesPeru() {
   return new Date(primerDiaMesComoUtc - PERU_OFFSET_MS);
 }
 
+/** Instante UTC real del primer día del MES ANTERIOR, a medianoche hora de
+ * Perú — el par de [inicioDeMesPeru] para comparar "este mes contra el
+ * pasado" (ver comparativoMensual en tiendasController.js). En enero
+ * retrocede a diciembre del año anterior: `Date.UTC` normaliza el mes -1
+ * solo, no hace falta tratar ese caso aparte. */
+function inicioDeMesAnteriorPeru() {
+  const ahora = new Date();
+  const ajustada = new Date(ahora.getTime() + PERU_OFFSET_MS);
+  const primerDia = Date.UTC(ajustada.getUTCFullYear(), ajustada.getUTCMonth() - 1, 1);
+  return new Date(primerDia - PERU_OFFSET_MS);
+}
+
+/** Instante UTC real del LUNES de la semana actual, a medianoche hora de
+ * Perú. La semana empieza el lunes (convención peruana), no el domingo como
+ * `getUTCDay()` — de ahí el ajuste del 0 a 6 días. */
+function inicioDeSemanaPeru() {
+  const ahora = new Date();
+  const ajustada = new Date(ahora.getTime() + PERU_OFFSET_MS);
+  const diaSemana = ajustada.getUTCDay(); // 0=domingo..6=sábado
+  const diasDesdeLunes = diaSemana === 0 ? 6 : diaSemana - 1;
+  const lunes = Date.UTC(ajustada.getUTCFullYear(), ajustada.getUTCMonth(), ajustada.getUTCDate() - diasDesdeLunes);
+  return new Date(lunes - PERU_OFFSET_MS);
+}
+
 /** Instante UTC real que corresponde a la medianoche del día [fechaISO]
  * ("YYYY-MM-DD"), en hora de Perú — misma idea que inicioDeHoyPeru() pero
  * para un día cualquiera, no solo hoy (ej. el selector de fecha del
@@ -84,6 +108,8 @@ module.exports = {
   fechaEntregaEsAnteriorAHoy,
   inicioDeHoyPeru,
   inicioDeMesPeru,
+  inicioDeMesAnteriorPeru,
+  inicioDeSemanaPeru,
   inicioDeDiaPeru,
   fechaLocalPeruISO,
   horaActualPeru,

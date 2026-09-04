@@ -4,7 +4,7 @@ const { obtenerIdTrabajador, obtenerTiendasAsignadas } = require('../utils/tiend
 const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos');
 // Reusa la misma consulta/mapeo que Hamburguesas para no duplicar ~30
 // líneas de JOINs de auditoría — ver la nota en pedidosController.js.
-const { SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
+const { SELECT_PEDIDOS_BASE, armarPedidosConItems, resumirProductos } = require('./pedidosController');
 
 const TIPOS_ADEREZO = ['CRIOLLO', 'ORIENTAL'];
 
@@ -84,25 +84,23 @@ async function obtenerTiendaHorneados(pool) {
 }
 
 /**
- * Registra un pedido de Horneados — mismo espíritu que `crearPedido` en
- * pedidosController.js (personal registra a nombre de un cliente ya
- * existente, precio libre, nace PENDIENTE), pero con los campos propios de
- * este rubro (carne, presentación, aderezo opcional) guardados aparte en
- * `PedidosHorneadosDetalle` — `Pedidos` no tiene dónde ponerlos.
+ * Registra un pedido de Horneados con UNA O VARIAS líneas — mismo espíritu
+ * que `crearPedido` en pedidosController.js (personal registra a nombre de
+ * un cliente ya existente, precio libre, nace PENDIENTE), pero con los
+ * campos propios de este rubro (carne, presentación, aderezo opcional)
+ * guardados aparte en `PedidosHorneadosDetalle`, que cuelga de cada línea
+ * (`PedidoItems.IdPedidoItem`) — así un mismo pedido puede tener dos carnes
+ * distintas, cada una con su propia presentación y aderezo.
+ *
+ * Todas las líneas usan el MISMO producto: Horneados tiene un único
+ * producto placeholder en el catálogo (lo que varía no es el producto sino
+ * sus atributos), resuelto una sola vez por request.
+ *
+ * Body: `{ idCliente, fechaEntrega?, notas?, items: [{ carne, presentacion,
+ * cantidad, aplicaAderezo, tipoAderezo?, precioHorneado, precioAderezo? }] }`.
  */
 async function crearPedidoHorneado(req, res, next) {
-  const {
-    idCliente,
-    carne,
-    presentacion,
-    cantidad,
-    aplicaAderezo,
-    tipoAderezo,
-    precioHorneado,
-    precioAderezo,
-    fechaEntrega,
-    notas,
-  } = req.body;
+  const { idCliente, items, fechaEntrega, notas } = req.body;
   const { idPersona, idUsuario } = req.usuario;
 
   const pool = await getPool();
@@ -131,7 +129,7 @@ async function crearPedidoHorneado(req, res, next) {
     const cliente = clienteResult.recordset[0];
 
     const tiendaResult = await new sql.Request(transaction).query(`
-      SELECT t.IdTienda, p.IdProducto
+      SELECT t.IdTienda, p.IdProducto, p.Nombre AS ProductoNombre
       FROM Tiendas t
       INNER JOIN Categorias c ON c.IdTienda = t.IdTienda AND c.Nombre = 'Horneados'
       INNER JOIN Productos p ON p.IdCategoria = c.IdCategoria AND p.Estado = 1
@@ -144,62 +142,97 @@ async function crearPedidoHorneado(req, res, next) {
       return res.status(500).json({ mensaje: 'La tienda Horneados no está configurada.' });
     }
     const { IdTienda: idTienda, IdProducto: idProducto } = tiendaResult.recordset[0];
+    const productoNombre = tiendaResult.recordset[0].ProductoNombre;
 
-    const aplicaAderezoFinal = aplicaAderezo === true;
-    const precioHorneadoFinal = Number(Number(precioHorneado).toFixed(2));
-    const precioAderezoFinal = aplicaAderezoFinal ? Number(Number(precioAderezo).toFixed(2)) : null;
-    const precioUnitarioFinal = Number(
-      (precioHorneadoFinal + (precioAderezoFinal ?? 0)).toFixed(2),
-    );
-    const total = Number((precioUnitarioFinal * cantidad).toFixed(2));
+    // Una línea del carrito por cada combinación carne/presentación/aderezo
+    // que pidió el vendedor. El precio unitario de la línea es el del
+    // horneado más el del aderezo (si aplica), igual que antes — solo que
+    // ahora se calcula por línea en vez de una vez por pedido.
+    const lineas = items.map((item) => {
+      const aplicaAderezoFinal = item.aplicaAderezo === true;
+      const precioHorneadoFinal = Number(Number(item.precioHorneado).toFixed(2));
+      const precioAderezoFinal = aplicaAderezoFinal ? Number(Number(item.precioAderezo).toFixed(2)) : null;
+      const precioUnitario = Number((precioHorneadoFinal + (precioAderezoFinal ?? 0)).toFixed(2));
+      return {
+        idProducto,
+        producto: productoNombre,
+        tipoPedido: 'UNIDADES',
+        cantidad: item.cantidad,
+        precioUnitario,
+        subtotal: Number((precioUnitario * item.cantidad).toFixed(2)),
+        carne: String(item.carne).trim().toUpperCase(),
+        presentacion: String(item.presentacion).trim().toUpperCase(),
+        aplicaAderezo: aplicaAderezoFinal,
+        tipoAderezo: aplicaAderezoFinal ? item.tipoAderezo : null,
+        precioHorneado: precioHorneadoFinal,
+        precioAderezo: precioAderezoFinal,
+      };
+    });
+
+    const total = Number(lineas.reduce((acc, l) => acc + l.subtotal, 0).toFixed(2));
     const fechaEntregaFinal = fechaEntrega ? new Date(fechaEntrega) : null;
     const numeroPedidoDia = await obtenerSiguienteNumeroPedidoDia(transaction, idTienda);
 
     const insertPedido = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, idCliente)
       .input('IdTienda', sql.Int, idTienda)
-      .input('IdProducto', sql.Int, idProducto)
       .input('IdTrabajador', sql.Int, idTrabajador)
       .input('IdUsuarioRegistro', sql.Int, idUsuario)
-      .input('TipoPedido', sql.VarChar(20), 'UNIDADES')
-      .input('Cantidad', sql.Int, cantidad)
-      .input('PrecioUnitario', sql.Decimal(10, 2), precioUnitarioFinal)
       .input('Total', sql.Decimal(10, 2), total)
       .input('FechaEntrega', sql.DateTime2, fechaEntregaFinal)
       .input('Notas', sql.NVarChar(300), notas ? notas.trim().toUpperCase() : null)
       .input('NumeroPedidoDia', sql.Int, numeroPedidoDia)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, IdUsuarioRegistro, TipoPedido, Cantidad, PrecioUnitario, Total, FechaEntrega, Notas, NumeroPedidoDia, Estado)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdTrabajador, IdUsuarioRegistro, Total, FechaEntrega, Notas, NumeroPedidoDia, Estado)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, @IdProducto, @IdTrabajador, @IdUsuarioRegistro, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @FechaEntrega, @Notas, @NumeroPedidoDia, 'PENDIENTE')
+        VALUES (@IdCliente, @IdTienda, @IdTrabajador, @IdUsuarioRegistro, @Total, @FechaEntrega, @Notas, @NumeroPedidoDia, 'PENDIENTE')
       `);
     const { IdPedido: idPedido, FechaCreacion: fechaCreacion } = insertPedido.recordset[0];
 
-    const carneNormalizada = String(carne).trim().toUpperCase();
-    const presentacionNormalizada = String(presentacion).trim().toUpperCase();
+    for (const linea of lineas) {
+      const insertItem = await new sql.Request(transaction)
+        .input('IdPedido', sql.Int, idPedido)
+        .input('IdProducto', sql.Int, linea.idProducto)
+        .input('TipoPedido', sql.VarChar(20), linea.tipoPedido)
+        .input('Cantidad', sql.Int, linea.cantidad)
+        .input('PrecioUnitario', sql.Decimal(10, 2), linea.precioUnitario)
+        .input('Subtotal', sql.Decimal(10, 2), linea.subtotal)
+        .query(`
+          INSERT INTO PedidoItems (IdPedido, IdProducto, TipoPedido, Cantidad, PrecioUnitario, Subtotal)
+          OUTPUT INSERTED.IdPedidoItem
+          VALUES (@IdPedido, @IdProducto, @TipoPedido, @Cantidad, @PrecioUnitario, @Subtotal)
+        `);
+      const idPedidoItem = insertItem.recordset[0].IdPedidoItem;
+      linea.idPedidoItem = idPedidoItem;
 
-    await new sql.Request(transaction)
-      .input('IdPedido', sql.Int, idPedido)
-      .input('Carne', sql.VarChar(100), carneNormalizada)
-      .input('Presentacion', sql.VarChar(100), presentacionNormalizada)
-      .input('AplicaAderezo', sql.Bit, aplicaAderezoFinal)
-      .input('TipoAderezo', sql.VarChar(20), aplicaAderezoFinal ? tipoAderezo : null)
-      .input('PrecioAderezo', sql.Decimal(10, 2), precioAderezoFinal)
-      .query(`
-        INSERT INTO PedidosHorneadosDetalle (IdPedido, Carne, Presentacion, AplicaAderezo, TipoAderezo, PrecioAderezo)
-        VALUES (@IdPedido, @Carne, @Presentacion, @AplicaAderezo, @TipoAderezo, @PrecioAderezo)
-      `);
+      // El detalle cuelga de la LÍNEA, no del pedido: cada una conserva su
+      // propia carne/presentación/aderezo.
+      await new sql.Request(transaction)
+        .input('IdPedidoItem', sql.Int, idPedidoItem)
+        .input('Carne', sql.VarChar(100), linea.carne)
+        .input('Presentacion', sql.VarChar(100), linea.presentacion)
+        .input('AplicaAderezo', sql.Bit, linea.aplicaAderezo)
+        .input('TipoAderezo', sql.VarChar(20), linea.tipoAderezo)
+        .input('PrecioAderezo', sql.Decimal(10, 2), linea.precioAderezo)
+        .query(`
+          INSERT INTO PedidosHorneadosDetalle (IdPedidoItem, Carne, Presentacion, AplicaAderezo, TipoAderezo, PrecioAderezo)
+          VALUES (@IdPedidoItem, @Carne, @Presentacion, @AplicaAderezo, @TipoAderezo, @PrecioAderezo)
+        `);
+    }
 
-    await guardarSugerenciaSiEsNueva(new sql.Request(transaction), {
-      idTienda,
-      campo: 'CARNE',
-      valor: carneNormalizada,
-    });
-    await guardarSugerenciaSiEsNueva(new sql.Request(transaction), {
-      idTienda,
-      campo: 'PRESENTACION',
-      valor: presentacionNormalizada,
-    });
+    // Las sugerencias se guardan una sola vez por valor ÚNICO del carrito:
+    // dos líneas con la misma carne no tienen por qué generar dos INSERT
+    // (el INSERT IGNORE los absorbería igual, pero es un viaje de más).
+    for (const carne of new Set(lineas.map((l) => l.carne))) {
+      await guardarSugerenciaSiEsNueva(new sql.Request(transaction), { idTienda, campo: 'CARNE', valor: carne });
+    }
+    for (const presentacion of new Set(lineas.map((l) => l.presentacion))) {
+      await guardarSugerenciaSiEsNueva(new sql.Request(transaction), {
+        idTienda,
+        campo: 'PRESENTACION',
+        valor: presentacion,
+      });
+    }
 
     await transaction.commit();
 
@@ -208,11 +241,7 @@ async function crearPedidoHorneado(req, res, next) {
       accion: 'CREAR_PEDIDO_HORNEADO',
       tablaAfectada: 'Pedidos',
       registroAfectadoId: String(idPedido),
-      datosNuevos: {
-        idCliente, carne: carneNormalizada, presentacion: presentacionNormalizada, cantidad,
-        aplicaAderezo: aplicaAderezoFinal, tipoAderezo, precioHorneado: precioHorneadoFinal,
-        precioAderezo: precioAderezoFinal, total, fechaEntrega,
-      },
+      datosNuevos: { idCliente, items: lineas, total, fechaEntrega },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -221,14 +250,8 @@ async function crearPedidoHorneado(req, res, next) {
       mensaje: 'Pedido de horneados registrado correctamente',
       idPedido,
       numeroPedidoDia,
-      carne: carneNormalizada,
-      presentacion: presentacionNormalizada,
-      cantidad,
-      aplicaAderezo: aplicaAderezoFinal,
-      tipoAderezo: aplicaAderezoFinal ? tipoAderezo : null,
-      precioHorneado: precioHorneadoFinal,
-      precioAderezo: precioAderezoFinal,
-      precioUnitario: precioUnitarioFinal,
+      items: lineas,
+      productoResumen: resumirProductos(lineas),
       total,
       fechaEntrega: fechaEntregaFinal,
       fechaCreacion,
@@ -246,29 +269,10 @@ async function crearPedidoHorneado(req, res, next) {
   }
 }
 
-/** Trae de un solo golpe el detalle (Carne/Presentación/Aderezo) de varios
- * pedidos, indexado por IdPedido — para fusionarlo con las filas que ya
- * trajo SELECT_PEDIDOS_BASE sin hacer una consulta por pedido. */
-async function obtenerDetalleHorneadosPorPedidos(pool, idsPedidos) {
-  if (idsPedidos.length === 0) return new Map();
-  const resultado = await pool.request().query(`
-    SELECT IdPedido, Carne, Presentacion, AplicaAderezo, TipoAderezo, PrecioAderezo
-    FROM PedidosHorneadosDetalle
-    WHERE IdPedido IN (${idsPedidos.map(Number).join(',')})
-  `);
-  return new Map(resultado.recordset.map((fila) => [fila.IdPedido, fila]));
-}
-
-function fusionarDetalleHorneado(pedidoMapeado, detalle) {
-  return {
-    ...pedidoMapeado,
-    carne: detalle?.Carne ?? null,
-    presentacion: detalle?.Presentacion ?? null,
-    aplicaAderezo: detalle?.AplicaAderezo === 1,
-    tipoAderezo: detalle?.TipoAderezo ?? null,
-    precioAderezo: detalle?.PrecioAderezo ?? null,
-  };
-}
+// `obtenerDetalleHorneadosPorPedidos`/`fusionarDetalleHorneado` ya no
+// existen: el detalle de Horneados ahora cuelga de cada línea de carrito y
+// lo trae `obtenerItemsPorPedidos` (pedidosController.js) con el mismo
+// LEFT JOIN, para todas las tiendas por igual.
 
 /** true si el usuario tiene permitido ver los pedidos de Horneados —
  * SUPERADMIN siempre; TRABAJADOR/ADMIN solo si tienen esa tienda asignada. */
@@ -300,10 +304,7 @@ async function listarPedidosHorneados(req, res, next) {
       .input('IdTienda', sql.Int, tienda.IdTienda)
       .query(`${SELECT_PEDIDOS_BASE} WHERE pd.IdTienda = @IdTienda ORDER BY pd.FechaCreacion DESC`);
 
-    const detalles = await obtenerDetalleHorneadosPorPedidos(pool, result.recordset.map((f) => f.IdPedido));
-    const pedidos = result.recordset.map((fila) =>
-      fusionarDetalleHorneado(mapearFilaPedido(fila, incluirAuditoria), detalles.get(fila.IdPedido)),
-    );
+    const pedidos = await armarPedidosConItems(pool, result.recordset, incluirAuditoria);
 
     return res.status(200).json({ pedidos });
   } catch (err) {
@@ -334,10 +335,7 @@ async function listarDeudasHorneados(req, res, next) {
         ORDER BY pd.FechaEntregaReal ASC
       `);
 
-    const detalles = await obtenerDetalleHorneadosPorPedidos(pool, result.recordset.map((f) => f.IdPedido));
-    const pedidos = result.recordset.map((fila) =>
-      fusionarDetalleHorneado(mapearFilaPedido(fila, incluirAuditoria), detalles.get(fila.IdPedido)),
-    );
+    const pedidos = await armarPedidosConItems(pool, result.recordset, incluirAuditoria);
 
     return res.status(200).json({ pedidos });
   } catch (err) {

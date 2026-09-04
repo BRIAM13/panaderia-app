@@ -11,6 +11,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../utils/text_formatters.dart';
 import '../../widgets/ad_banner.dart';
+import '../../widgets/carrito_pedido_widget.dart';
 import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/estado_vacio.dart';
@@ -73,6 +74,11 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
   List<ProductoAutoservicio> _productos = [];
   ProductoAutoservicio? _productoSeleccionado;
 
+  /// Los productos que el cliente ya agregó a este pedido. Todos deben ser
+  /// de la misma tienda — el backend lo rechaza si no, así que acá se avisa
+  /// antes de dejar agregar (ver [_agregarAlCarrito]).
+  final List<NuevoItemAutoservicio> _carrito = [];
+
   DateTime? _fechaEntrega = DateTime.now();
   TimeOfDay? _horaEntrega;
 
@@ -120,8 +126,13 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
 
   bool get _esPaquete => _productoSeleccionado?.esPaquete ?? false;
 
-  double get _total =>
+  /// Lo que suma el producto que se está eligiendo ahora — todavía no está
+  /// en el pedido.
+  double get _totalLineaActual =>
       (_productoSeleccionado?.precioUnitario ?? 0) * _cantidad;
+
+  /// Total del pedido: la suma de lo ya agregado al carrito.
+  double get _total => _carrito.fold<double>(0, (acc, i) => acc + i.subtotal);
 
   /// Paquete de hamburguesa arranca en 1 (precio fijo por paquete, sin
   /// mínimo); pan de agua/francés arranca directo en el mínimo de venta
@@ -176,11 +187,88 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
     if (hora != null) setState(() => _horaEntrega = hora);
   }
 
-  Future<void> _registrarPedido() async {
+  /// Valida el producto elegido y lo agrega al pedido, dejando el
+  /// formulario listo para el siguiente. La fecha y las notas son del
+  /// pedido completo, así que no se tocan.
+  void _agregarAlCarrito() {
     if (!_formKey.currentState!.validate()) return;
     final producto = _productoSeleccionado;
     if (producto == null) {
       setState(() => _error = 'Selecciona un producto.');
+      return;
+    }
+
+    // Un pedido pertenece a una sola tienda. En este catálogo el pan de
+    // hamburguesa (esPaquete) es lo único que viene de Hamburguesas y el
+    // resto de Panadería, así que esa bandera alcanza para detectar la
+    // mezcla acá y no dejar que el cliente arme un pedido que el backend va
+    // a rechazar recién al confirmar.
+    if (_carrito.isNotEmpty && _carrito.first.esPaquete != producto.esPaquete) {
+      setState(
+        () => _error =
+            'El pan de hamburguesa y el pan de panadería se piden por separado. '
+            'Confirma este pedido y luego haz otro.',
+      );
+      return;
+    }
+
+    setState(() {
+      _error = null;
+      final indiceExistente = _carrito.indexWhere(
+        (i) => i.idProducto == producto.idProducto,
+      );
+      if (indiceExistente >= 0) {
+        // El mismo producto agregado dos veces suma cantidades en vez de
+        // repetir la línea: el precio es de catálogo, siempre el mismo.
+        final actual = _carrito[indiceExistente];
+        _carrito[indiceExistente] = NuevoItemAutoservicio(
+          idProducto: actual.idProducto,
+          producto: actual.producto,
+          cantidad: actual.cantidad + _cantidad,
+          precioUnitario: actual.precioUnitario,
+          esPaquete: actual.esPaquete,
+        );
+      } else {
+        _carrito.add(
+          NuevoItemAutoservicio(
+            idProducto: producto.idProducto,
+            producto: producto.nombre,
+            cantidad: _cantidad,
+            precioUnitario: producto.precioUnitario,
+            esPaquete: producto.esPaquete,
+          ),
+        );
+      }
+    });
+
+    _aplicarCantidadPorDefecto();
+  }
+
+  void _quitarDelCarrito(int indice) {
+    setState(() {
+      _carrito.removeAt(indice);
+      _error = null;
+    });
+  }
+
+  /// Las líneas del carrito, en el formato que muestra [CarritoPedido].
+  List<LineaCarrito> get _lineasCarrito => _carrito
+      .map(
+        (i) => LineaCarrito(
+          titulo: i.producto,
+          cantidad: i.cantidad,
+          precioUnitario: i.precioUnitario,
+          subtotal: i.subtotal,
+          etiquetaUnidad: i.esPaquete ? 'paquetes' : 'unidades',
+        ),
+      )
+      .toList();
+
+  Future<void> _registrarPedido() async {
+    if (_carrito.isEmpty) {
+      setState(
+        () => _error = 'Agrega al menos un producto antes de confirmar.',
+      );
       return;
     }
 
@@ -202,8 +290,7 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
 
     try {
       final resultado = await _pedidosService.crearComoCliente(
-        idProducto: producto.idProducto,
-        cantidad: _cantidad,
+        items: List.of(_carrito),
         fechaEntrega: fechaHora,
         notas: _notasController.text.trim().isEmpty
             ? null
@@ -284,6 +371,26 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
               ],
             ),
             const SizedBox(height: 14),
+            // Una fila por producto: con varios en el pedido, el total solo
+            // no alcanza para confirmar que se pidió lo correcto.
+            for (final item in resultado.items) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${item.descripcion} × ${item.cantidad}',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('S/ ${item.subtotal.toStringAsFixed(2)}'),
+                ],
+              ),
+              const SizedBox(height: 4),
+            ],
+            const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -357,6 +464,19 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
                       const SizedBox(height: 20),
                       _campoCantidad(),
                       const SizedBox(height: 16),
+                      _botonAgregar(),
+                      const SizedBox(height: 20),
+                      CarritoPedido(
+                        lineas: _lineasCarrito,
+                        onEliminar: _quitarDelCarrito,
+                        habilitado: !_enviando,
+                        mensajeVacio:
+                            'Todavía no agregaste nada. Elige un producto y una '
+                            'cantidad, y toca "Agregar al pedido".',
+                      ),
+                      const SizedBox(height: 24),
+                      Text('¿Cuándo lo recoges?', style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           Expanded(child: _botonFecha()),
@@ -366,57 +486,6 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
                       ),
                       const SizedBox(height: 16),
                       _campoNotas(),
-                      if (_productoSeleccionado != null && _cantidad > 0) ...[
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: scheme.secondaryContainer,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    _esPaquete
-                                        ? 'Precio del paquete'
-                                        : 'Precio por unidad',
-                                  ),
-                                  Text(
-                                    'S/ ${_productoSeleccionado!.precioUnitario.toStringAsFixed(2)}',
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Total',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  Text(
-                                    'S/ ${_total.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
                       if (_error != null) ...[
                         const SizedBox(height: 12),
                         Text(
@@ -429,10 +498,10 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
                       ],
                       const SizedBox(height: 24),
                       PremiumButton(
-                        label: 'Registrar pedido',
+                        label: 'Confirmar pedido',
                         icono: PhosphorIconsRegular.shoppingCartSimple,
                         cargando: _enviando,
-                        onPressed: _registrarPedido,
+                        onPressed: _carrito.isEmpty ? null : _registrarPedido,
                       ),
                     ],
                   ),
@@ -510,6 +579,19 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
     );
   }
 
+  /// Cierra el bloque "producto actual" y lo manda al pedido.
+  Widget _botonAgregar() {
+    return OutlinedButton.icon(
+      onPressed: _enviando ? null : _agregarAlCarrito,
+      icon: const PhosphorIcon(PhosphorIconsRegular.plusCircle, size: 18),
+      label: Text(
+        _totalLineaActual > 0
+            ? 'Agregar al pedido · S/ ${_totalLineaActual.toStringAsFixed(2)}'
+            : 'Agregar al pedido',
+      ),
+    );
+  }
+
   Widget _campoNotas() {
     return TextFormField(
       controller: _notasController,
@@ -571,6 +653,17 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
               const SizedBox(height: 20),
               _campoCantidad(),
               const SizedBox(height: 16),
+              _botonAgregar(),
+              const SizedBox(height: 20),
+              CarritoPedido(
+                lineas: _lineasCarrito,
+                onEliminar: _quitarDelCarrito,
+                habilitado: !_enviando,
+                mensajeVacio:
+                    'Todavía no agregaste nada. Elige un producto y una '
+                    'cantidad, y toca "Agregar al pedido".',
+              ),
+              const SizedBox(height: 24),
               Row(
                 children: [
                   Expanded(child: _botonFecha()),
@@ -591,8 +684,9 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
   /// Resumen "de carrito": el total y el botón de confirmar quedan a la
   /// vista mientras se completan los campos de la izquierda.
   Widget _panelResumen(ThemeData theme, ColorScheme scheme) {
-    final producto = _productoSeleccionado;
-    final hayResumen = producto != null && _cantidad > 0;
+    // El detalle producto por producto vive en el carrito, a la izquierda:
+    // acá quedan las cifras del pedido completo y el botón de confirmar.
+    final hayResumen = _carrito.isNotEmpty;
 
     return TarjetaEscritorio(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
@@ -622,25 +716,21 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
               const SizedBox(height: 20),
               if (!hayResumen)
                 Text(
-                  'Elige un producto y una cantidad para ver el total.',
+                  'Agrega al menos un producto para ver el total.',
                   style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
                 )
               else ...[
                 _FilaResumen(
-                  etiqueta: 'Producto',
-                  valor: producto.nombre,
+                  etiqueta: 'Productos',
+                  valor: _carrito.length == 1
+                      ? '1 producto'
+                      : '${_carrito.length} productos',
                 ),
                 const SizedBox(height: 8),
                 _FilaResumen(
-                  etiqueta: _esPaquete
-                      ? 'Precio del paquete'
-                      : 'Precio por unidad',
-                  valor: 'S/ ${producto.precioUnitario.toStringAsFixed(2)}',
-                ),
-                const SizedBox(height: 8),
-                _FilaResumen(
-                  etiqueta: _esPaquete ? 'Paquetes' : 'Unidades',
-                  valor: '$_cantidad',
+                  etiqueta: 'Unidades en total',
+                  valor:
+                      '${_carrito.fold<int>(0, (acc, i) => acc + i.cantidad)}',
                 ),
                 const SizedBox(height: 8),
                 _FilaResumen(
@@ -702,10 +792,10 @@ class _HacerPedidoPageState extends State<HacerPedidoPage> {
               ],
               const SizedBox(height: 20),
               PremiumButton(
-                label: 'Registrar pedido',
+                label: 'Confirmar pedido',
                 icono: PhosphorIconsRegular.shoppingCartSimple,
                 cargando: _enviando,
-                onPressed: _registrarPedido,
+                onPressed: _carrito.isEmpty ? null : _registrarPedido,
               ),
             ],
           ),

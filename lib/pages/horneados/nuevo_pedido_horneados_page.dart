@@ -13,6 +13,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/text_formatters.dart';
 import '../../utils/texto_utils.dart';
 import '../../widgets/campo_con_sugerencias.dart';
+import '../../widgets/carrito_pedido_widget.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/premium_button.dart';
@@ -24,6 +25,11 @@ const _tiposAderezo = ['CRIOLLO', 'ORIENTAL'];
 /// Registro de un nuevo pedido de Horneados: carne y presentación con
 /// autocompletado "que aprende" (ver [CampoConSugerencias]), aderezo
 /// opcional de un solo tipo y total calculado automáticamente.
+///
+/// Un pedido puede llevar VARIAS líneas, cada una con su propia carne,
+/// presentación y aderezo: los campos de abajo arman "la línea actual" y
+/// "Agregar al pedido" la manda al carrito. El cliente es de la cabecera y
+/// se elige una sola vez.
 ///
 /// En escritorio (>= [esEscritorio]) el formulario deja de ser una sola
 /// columna larga: los datos quedan a la izquierda en dos paneles (cliente y
@@ -56,6 +62,10 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
   Cliente? _clienteSeleccionado;
   bool _aplicaAderezo = false;
   int _tipoAderezoIndex = 0; // 0 = CRIOLLO, 1 = ORIENTAL
+
+  /// Las líneas ya agregadas al pedido — cada una conserva su carne,
+  /// presentación y aderezo propios.
+  final List<NuevoItemHorneado> _carrito = [];
 
   bool _enviando = false;
   String? _error;
@@ -123,13 +133,82 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
   double get _precioUnitario =>
       _precioHorneado + (_aplicaAderezo ? _precioAderezo : 0);
 
-  double get _total => _precioUnitario * _cantidad;
+  /// Lo que suma la línea que se está armando ahora — todavía no está en el
+  /// pedido. El total real es [_total].
+  double get _totalLineaActual => _precioUnitario * _cantidad;
 
-  Future<void> _registrarPedido() async {
+  /// Total del pedido: la suma de las líneas ya agregadas.
+  double get _total => _carrito.fold<double>(0, (acc, i) => acc + i.subtotal);
+
+  /// Valida la línea en pantalla y la manda al carrito, dejando los campos
+  /// del horneado listos para la siguiente. El cliente no se toca: es de la
+  /// cabecera del pedido.
+  void _agregarAlCarrito() {
     if (!_formKey.currentState!.validate()) return;
 
+    final carne = _carneController.text.trim();
+    final presentacion = _presentacionController.text.trim();
+    if (carne.isEmpty || presentacion.isEmpty) {
+      setState(() => _error = 'Indica la carne y la presentación.');
+      return;
+    }
+
+    setState(() {
+      _error = null;
+      _carrito.add(
+        NuevoItemHorneado(
+          carne: carne,
+          presentacion: presentacion,
+          cantidad: _cantidad,
+          aplicaAderezo: _aplicaAderezo,
+          tipoAderezo: _aplicaAderezo ? _tiposAderezo[_tipoAderezoIndex] : null,
+          precioHorneado: _precioHorneado,
+          precioAderezo: _aplicaAderezo ? _precioAderezo : null,
+        ),
+      );
+      // Se limpia TODO el bloque del horneado: dos líneas del mismo pedido
+      // suelen ser carnes distintas, no la misma repetida.
+      _carneController.clear();
+      _presentacionController.clear();
+      _cantidadController.clear();
+      _precioHorneadoController.clear();
+      _precioAderezoController.clear();
+      _aplicaAderezo = false;
+      _tipoAderezoIndex = 0;
+    });
+  }
+
+  void _quitarDelCarrito(int indice) {
+    setState(() {
+      _carrito.removeAt(indice);
+      _error = null;
+    });
+  }
+
+  /// Las líneas del carrito, en el formato que muestra [CarritoPedido]. Acá
+  /// el "título" es la carne y la presentación — el producto de catálogo es
+  /// siempre el mismo y no distinguiría una línea de otra.
+  List<LineaCarrito> get _lineasCarrito => _carrito
+      .map(
+        (i) => LineaCarrito(
+          titulo: '${i.carne} · ${i.presentacion}',
+          subtitulo: i.aplicaAderezo
+              ? 'Aderezo ${i.tipoAderezo?.toLowerCase()} · S/ ${(i.precioAderezo ?? 0).toStringAsFixed(2)}'
+              : null,
+          cantidad: i.cantidad,
+          precioUnitario: i.precioUnitario,
+          subtotal: i.subtotal,
+        ),
+      )
+      .toList();
+
+  Future<void> _registrarPedido() async {
     if (_clienteSeleccionado == null) {
       setState(() => _error = 'Selecciona un cliente para el pedido.');
+      return;
+    }
+    if (_carrito.isEmpty) {
+      setState(() => _error = 'Agrega al menos una línea antes de confirmar.');
       return;
     }
 
@@ -141,13 +220,7 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
     try {
       final resultado = await _horneadosService.crearPedido(
         idCliente: _clienteSeleccionado!.idCliente,
-        carne: _carneController.text.trim(),
-        presentacion: _presentacionController.text.trim(),
-        cantidad: _cantidad,
-        aplicaAderezo: _aplicaAderezo,
-        tipoAderezo: _aplicaAderezo ? _tiposAderezo[_tipoAderezoIndex] : null,
-        precioHorneado: _precioHorneado,
-        precioAderezo: _aplicaAderezo ? _precioAderezo : null,
+        items: List.of(_carrito),
       );
 
       NotificacionesService.avisarCambioPedido();
@@ -166,7 +239,7 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
     }
   }
 
-  Future<void> _mostrarResumenPedido(PedidoHorneadoResultado resultado) {
+  Future<void> _mostrarResumenPedido(PedidoResultado resultado) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final cliente = resultado.cliente;
@@ -201,23 +274,23 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
                 ),
               ],
               const SizedBox(height: 10),
-              _FilaResumen(
-                icono: PhosphorIconsRegular.bowlFood,
-                texto: '${resultado.carne} · ${resultado.presentacion}',
-              ),
-              const SizedBox(height: 4),
-              _FilaResumen(
-                icono: PhosphorIconsRegular.hash,
-                texto: 'Cantidad: ${resultado.cantidad}',
-              ),
-              if (resultado.aplicaAderezo) ...[
-                const SizedBox(height: 4),
+              // Una entrada por línea: cada una tiene su propia carne,
+              // presentación y aderezo, así que un solo bloque no alcanza.
+              for (final item in resultado.items) ...[
                 _FilaResumen(
-                  icono: PhosphorIconsRegular.drop,
-                  texto: 'Aderezo: ${resultado.tipoAderezo}',
+                  icono: PhosphorIconsRegular.bowlFood,
+                  texto:
+                      '${item.descripcion} × ${item.cantidad} — S/ ${item.subtotal.toStringAsFixed(2)}',
                 ),
+                if (item.aplicaAderezo == true) ...[
+                  const SizedBox(height: 2),
+                  _FilaResumen(
+                    icono: PhosphorIconsRegular.drop,
+                    texto: 'Aderezo: ${item.tipoAderezo}',
+                  ),
+                ],
+                const SizedBox(height: 6),
               ],
-              const SizedBox(height: 4),
               _FilaResumen(
                 icono: PhosphorIconsRegular.clockCounterClockwise,
                 texto:
@@ -381,11 +454,33 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
     ),
   );
 
+  /// Cierra el bloque "línea actual" y la manda al pedido.
+  Widget _botonAgregar() => OutlinedButton.icon(
+    onPressed: _enviando ? null : _agregarAlCarrito,
+    icon: const PhosphorIcon(PhosphorIconsRegular.plusCircle, size: 18),
+    label: Text(
+      _totalLineaActual > 0
+          ? 'Agregar al pedido · S/ ${_totalLineaActual.toStringAsFixed(2)}'
+          : 'Agregar al pedido',
+    ),
+  );
+
+  Widget _carritoPedido() => CarritoPedido(
+    lineas: _lineasCarrito,
+    onEliminar: _quitarDelCarrito,
+    habilitado: !_enviando,
+    titulo: 'Líneas del pedido',
+    mensajeVacio:
+        'Todavía no agregaste ninguna línea. Completa la carne, la '
+        'presentación y el precio, y toca "Agregar al pedido".',
+  );
+
   Widget _botonRegistrar() => PremiumButton(
-    label: 'Registrar pedido',
+    label: 'Confirmar pedido',
     icono: PhosphorIconsBold.shoppingCartSimple,
     cargando: _enviando,
-    onPressed: _registrarPedido,
+    // Sin líneas no hay pedido que confirmar.
+    onPressed: _carrito.isEmpty ? null : _registrarPedido,
   );
 
   @override
@@ -447,8 +542,10 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
                 ],
               ],
             ),
+            const SizedBox(height: 20),
+            _botonAgregar(),
             const SizedBox(height: 24),
-            _cajaTotal(theme, scheme),
+            _carritoPedido(),
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(
@@ -558,9 +655,15 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
                                   _selectorTipoAderezo(),
                                   _campoPrecioAderezo(),
                                 ],
+                                _botonAgregar(),
                               ],
                             )
                             .animate(delay: 160.ms)
+                            .fadeIn(duration: 280.ms)
+                            .moveY(begin: 10, end: 0),
+                        const SizedBox(height: 20),
+                        _carritoPedido()
+                            .animate(delay: 200.ms)
                             .fadeIn(duration: 280.ms)
                             .moveY(begin: 10, end: 0),
                       ],
@@ -585,23 +688,22 @@ class _NuevoPedidoHorneadosPageState extends State<NuevoPedidoHorneadosPage> {
                                       ? AppColors.textSecondary
                                       : null,
                                 ),
+                                // El detalle línea por línea vive en el
+                                // carrito, a la izquierda: acá quedan las
+                                // cifras del pedido completo.
+                                _FilaResumen(
+                                  icono: PhosphorIconsRegular.listBullets,
+                                  texto: _carrito.isEmpty
+                                      ? 'Sin líneas todavía'
+                                      : _carrito.length == 1
+                                      ? '1 línea'
+                                      : '${_carrito.length} líneas',
+                                ),
                                 _FilaResumen(
                                   icono: PhosphorIconsRegular.hash,
-                                  texto: _cantidad > 0
-                                      ? 'Cantidad: $_cantidad'
-                                      : 'Cantidad pendiente',
-                                ),
-                                _FilaResumen(
-                                  icono: PhosphorIconsRegular.tag,
                                   texto:
-                                      'Precio por unidad: S/ ${_precioUnitario.toStringAsFixed(2)}',
+                                      'Unidades en total: ${_carrito.fold<int>(0, (acc, i) => acc + i.cantidad)}',
                                 ),
-                                if (_aplicaAderezo)
-                                  _FilaResumen(
-                                    icono: PhosphorIconsRegular.drop,
-                                    texto:
-                                        'Aderezo ${_tiposAderezo[_tipoAderezoIndex]} · S/ ${_precioAderezo.toStringAsFixed(2)}',
-                                  ),
                                 _cajaTotal(theme, scheme),
                                 if (_error != null)
                                   Text(

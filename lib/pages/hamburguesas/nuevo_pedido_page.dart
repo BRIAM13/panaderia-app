@@ -16,6 +16,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/fecha_pedido_utils.dart';
 import '../../utils/text_formatters.dart';
 import '../../utils/texto_utils.dart';
+import '../../widgets/carrito_pedido_widget.dart';
 import '../../widgets/escritorio.dart';
 import '../../widgets/estado_error.dart';
 import '../../widgets/loading_indicator.dart';
@@ -35,6 +36,10 @@ const _precioPaqueteRespaldo =
 /// Configuraciones); el resto (Panadería) elige un producto de su catálogo,
 /// con el precio precargado desde ahí. En ambos casos la cantidad y el
 /// precio quedan editables — el vendedor puede negociar un precio especial.
+///
+/// Un pedido puede llevar VARIOS productos: los controles de arriba arman
+/// "la línea actual" y "Agregar al pedido" la manda al carrito; el cliente,
+/// la fecha y las notas son de la cabecera y se eligen una sola vez.
 class NuevoPedidoPage extends StatefulWidget {
   const NuevoPedidoPage({super.key, required this.tienda});
 
@@ -68,6 +73,11 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
   bool get _esHamburguesas => widget.tienda.slug == 'hamburguesas';
 
   Cliente? _clienteSeleccionado;
+
+  /// Las líneas ya agregadas al pedido. El botón de confirmar solo se
+  /// habilita cuando hay al menos una.
+  final List<NuevoItemPedido> _carrito = [];
+
   int _tipoPedidoIndex = 1; // 0 = UNIDADES, 1 = PAQUETES (por defecto)
   // Por defecto el día de hoy — el vendedor la cambia si el pedido es para
   // otro día; la hora queda vacía porque no hay un valor por defecto obvio.
@@ -175,8 +185,13 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
   double get _valorIngresado =>
       double.tryParse(_precioController.text.replaceAll(',', '.')) ?? 0;
 
-  double get _total =>
+  /// Lo que suma la línea que se está armando ahora — todavía no está en el
+  /// pedido. El total real del pedido es [_total].
+  double get _totalLineaActual =>
       _precioEsPorUnidad ? _valorIngresado * _cantidad : _valorIngresado;
+
+  /// Total del pedido: la suma de las líneas YA agregadas al carrito.
+  double get _total => _carrito.fold<double>(0, (acc, i) => acc + i.subtotal);
 
   /// Precio por unidad que se envía al backend (que siempre calcula
   /// total = precioUnitario × cantidad). En Hamburguesas "Unidades" el
@@ -251,16 +266,95 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
     if (hora != null) setState(() => _horaEntrega = hora);
   }
 
-  Future<void> _registrarPedido() async {
+  /// Nombre del producto de la línea actual — solo para mostrarlo en el
+  /// carrito; el backend resuelve el nombre real por `idProducto`.
+  String get _nombreProductoActual {
+    if (!_esHamburguesas) return _productoSeleccionado?.nombre ?? 'Producto';
+    return _productos.isNotEmpty ? _productos.first.nombre : 'Producto';
+  }
+
+  /// Valida la línea que está en pantalla y la manda al carrito, dejando
+  /// los campos de línea listos para la siguiente. Cliente, fecha y notas
+  /// NO se tocan: son de la cabecera del pedido, se eligen una sola vez.
+  void _agregarAlCarrito() {
     if (!_formKey.currentState!.validate()) return;
 
+    final idProducto = _idProductoParaEnviar;
+    if (idProducto == null) {
+      setState(() => _error = 'Selecciona un producto para el pedido.');
+      return;
+    }
+
+    final tipoPedido = _esHamburguesas
+        ? _tiposPedido[_tipoPedidoIndex]
+        : 'UNIDADES';
+    final precioUnitario = _precioUnitarioParaEnviar;
+
+    setState(() {
+      _error = null;
+      // Misma combinación exacta de producto, tipo y precio: se suma a la
+      // línea que ya existe en vez de repetirla. Con OTRO precio sí se deja
+      // aparte — es un precio negociado distinto, no un duplicado.
+      final indiceExistente = _carrito.indexWhere(
+        (i) =>
+            i.idProducto == idProducto &&
+            i.tipoPedido == tipoPedido &&
+            i.precioUnitario == precioUnitario,
+      );
+      if (indiceExistente >= 0) {
+        final actual = _carrito[indiceExistente];
+        _carrito[indiceExistente] = NuevoItemPedido(
+          idProducto: actual.idProducto,
+          producto: actual.producto,
+          tipoPedido: actual.tipoPedido,
+          cantidad: actual.cantidad + _cantidad,
+          precioUnitario: actual.precioUnitario,
+        );
+      } else {
+        _carrito.add(
+          NuevoItemPedido(
+            idProducto: idProducto,
+            producto: _nombreProductoActual,
+            tipoPedido: tipoPedido,
+            cantidad: _cantidad,
+            precioUnitario: precioUnitario,
+          ),
+        );
+      }
+    });
+
+    _aplicarValoresPorDefecto();
+  }
+
+  void _quitarDelCarrito(int indice) {
+    setState(() {
+      _carrito.removeAt(indice);
+      _error = null;
+    });
+  }
+
+  /// Las líneas del carrito, en el formato que muestra [CarritoPedido].
+  List<LineaCarrito> get _lineasCarrito => _carrito
+      .map(
+        (i) => LineaCarrito(
+          titulo: i.producto,
+          cantidad: i.cantidad,
+          precioUnitario: i.precioUnitario,
+          subtotal: i.subtotal,
+          etiquetaUnidad: i.tipoPedido == 'PAQUETES' ? 'paquetes' : 'unidades',
+        ),
+      )
+      .toList();
+
+  Future<void> _registrarPedido() async {
     if (_clienteSeleccionado == null) {
       setState(() => _error = 'Selecciona un cliente para el pedido.');
       return;
     }
-    final idProducto = _idProductoParaEnviar;
-    if (idProducto == null) {
-      setState(() => _error = 'Selecciona un producto para el pedido.');
+    if (_carrito.isEmpty) {
+      setState(
+        () => _error = 'Agrega al menos un producto antes de confirmar.',
+      );
       return;
     }
     // La fecha ya viene precargada con hoy, y por sí sola ya cuenta como
@@ -287,12 +381,7 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
     try {
       final resultado = await _pedidosService.crear(
         idCliente: _clienteSeleccionado!.idCliente,
-        idProducto: idProducto,
-        tipoPedido: _esHamburguesas
-            ? _tiposPedido[_tipoPedidoIndex]
-            : 'UNIDADES',
-        cantidad: _cantidad,
-        precioUnitario: _precioUnitarioParaEnviar,
+        items: List.of(_carrito),
         fechaEntrega: fechaHora,
         notas: _notasController.text.trim().isEmpty
             ? null
@@ -365,6 +454,26 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
                   'Registrado el ${formatoFechaHoraCreacion.format(resultado.fechaCreacion)}',
             ),
             const SizedBox(height: 14),
+            // Una fila por producto: con varios en el mismo pedido, un solo
+            // total no alcanza para confirmar que se registró lo correcto.
+            for (final item in resultado.items) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${item.descripcion} × ${item.cantidad}',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('S/ ${item.subtotal.toStringAsFixed(2)}'),
+                ],
+              ),
+              const SizedBox(height: 4),
+            ],
+            const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -508,6 +617,27 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
           ],
         ),
         const SizedBox(height: 16),
+        // Cierra el bloque "línea actual": lo de arriba arma un producto,
+        // esto lo manda al pedido y deja los campos listos para el
+        // siguiente.
+        OutlinedButton.icon(
+          onPressed: _enviando ? null : _agregarAlCarrito,
+          icon: const PhosphorIcon(PhosphorIconsRegular.plusCircle, size: 18),
+          label: Text(
+            _totalLineaActual > 0
+                ? 'Agregar al pedido · S/ ${_totalLineaActual.toStringAsFixed(2)}'
+                : 'Agregar al pedido',
+          ),
+        ),
+        const SizedBox(height: 20),
+        CarritoPedido(
+          lineas: _lineasCarrito,
+          onEliminar: _quitarDelCarrito,
+          habilitado: !_enviando,
+        ),
+        const SizedBox(height: 24),
+        Text('Entrega', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
@@ -565,16 +695,14 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_precioEsPorUnidad) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Precio unitario'),
-                    Text('S/ ${_valorIngresado.toStringAsFixed(2)}'),
-                  ],
-                ),
-                const SizedBox(height: 6),
-              ],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Productos'),
+                  Text('${_carrito.length}'),
+                ],
+              ),
+              const SizedBox(height: 6),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -606,10 +734,11 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
         ],
         const SizedBox(height: 20),
         PremiumButton(
-          label: 'Registrar pedido',
+          label: 'Confirmar pedido',
           icono: PhosphorIconsBold.shoppingCartSimple,
           cargando: _enviando,
-          onPressed: _registrarPedido,
+          // Sin productos no hay pedido que confirmar.
+          onPressed: _carrito.isEmpty ? null : _registrarPedido,
         ),
       ],
     );
@@ -655,10 +784,10 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
           ? null
           : _BarraTotalInferior(
               total: _total,
-              precioUnitario: _precioEsPorUnidad ? _valorIngresado : null,
+              cantidadProductos: _carrito.length,
               error: _error,
               enviando: _enviando,
-              onRegistrar: _registrarPedido,
+              onRegistrar: _carrito.isEmpty ? null : _registrarPedido,
             ),
       body: SafeArea(
         child: _cargandoDatos
@@ -684,12 +813,13 @@ class _NuevoPedidoPageState extends State<NuevoPedidoPage> {
   }
 }
 
-/// Barra fija al pie en celular/tablet: el total se recalcula con cada
-/// tecla y el botón de registrar deja de estar al final del scroll.
+/// Barra fija al pie en celular/tablet: el total del carrito se recalcula
+/// con cada producto agregado y el botón de confirmar deja de estar al
+/// final del scroll.
 class _BarraTotalInferior extends StatelessWidget {
   const _BarraTotalInferior({
     required this.total,
-    required this.precioUnitario,
+    required this.cantidadProductos,
     required this.error,
     required this.enviando,
     required this.onRegistrar,
@@ -697,18 +827,18 @@ class _BarraTotalInferior extends StatelessWidget {
 
   final double total;
 
-  /// null cuando el vendedor escribe el total directamente (Hamburguesas en
-  /// "Unidades"): ahí no hay un "precio unitario" que mostrar.
-  final double? precioUnitario;
+  /// Cuántas líneas lleva el pedido — con 0 el botón va deshabilitado.
+  final int cantidadProductos;
   final String? error;
   final bool enviando;
-  final VoidCallback onRegistrar;
+
+  /// null cuando el carrito está vacío: no hay pedido que confirmar.
+  final VoidCallback? onRegistrar;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final precioUnitario = this.precioUnitario;
     final error = this.error;
 
     return Container(
@@ -770,19 +900,20 @@ class _BarraTotalInferior extends StatelessWidget {
                             duration: 200.ms,
                             curve: Curves.easeOut,
                           ),
-                      if (precioUnitario != null)
-                        Text(
-                          'S/ ${precioUnitario.toStringAsFixed(2)} c/u',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 11.5,
-                          ),
+                      Text(
+                        cantidadProductos == 1
+                            ? '1 producto'
+                            : '$cantidadProductos productos',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 11.5,
                         ),
+                      ),
                     ],
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: PremiumButton(
-                      label: 'Registrar pedido',
+                      label: 'Confirmar pedido',
                       icono: PhosphorIconsBold.shoppingCartSimple,
                       cargando: enviando,
                       onPressed: onRegistrar,

@@ -1,5 +1,49 @@
 const { sql, getPool } = require('../config/db');
-const { inicioDeHoyPeru, inicioDeDiaPeru, PERU_OFFSET_MS } = require('../utils/fechaPeru');
+const {
+  inicioDeHoyPeru,
+  inicioDeDiaPeru,
+  inicioDeMesPeru,
+  inicioDeMesAnteriorPeru,
+  inicioDeSemanaPeru,
+  PERU_OFFSET_MS,
+} = require('../utils/fechaPeru');
+
+/**
+ * Las 24 horas del día, con `{ hora, cantidad, total }` en cada una — las
+ * horas sin ninguna venta quedan en 0 en vez de faltar, para que el gráfico
+ * siempre dibuje el día completo y no una silueta con huecos (mismo criterio
+ * que el relleno de los 7 días en `resumenTienda`).
+ *
+ * Función pura a propósito: es la única parte de la métrica "ventas por
+ * hora" que tiene lógica real, así que se puede probar sin base de datos
+ * (ver __tests__/tiendasController.test.js).
+ */
+function rellenarVentasPorHora(filas) {
+  const porHora = new Map(
+    (filas ?? []).map((f) => [Number(f.Hora), { cantidad: Number(f.Cantidad) || 0, total: Number(f.Total) || 0 }]),
+  );
+  const serie = [];
+  for (let hora = 0; hora < 24; hora += 1) {
+    const datos = porHora.get(hora) ?? { cantidad: 0, total: 0 };
+    serie.push({ hora, cantidad: datos.cantidad, total: datos.total });
+  }
+  return serie;
+}
+
+/**
+ * Variación porcentual del mes actual contra el MISMO TRAMO del mes anterior
+ * (los mismos días transcurridos), no contra el mes anterior completo —
+ * comparar 5 días de setiembre contra los 30 de agosto siempre daría una
+ * caída inventada.
+ *
+ * `null` (no 0, ni -100%) cuando el tramo anterior no vendió nada: no hay
+ * contra qué comparar, y la UI lo muestra como "sin datos" en vez de fingir
+ * una cifra.
+ */
+function calcularVariacionMensual({ totalMesActual, totalMesAnteriorMismoTramo }) {
+  if (!totalMesAnteriorMismoTramo || totalMesAnteriorMismoTramo <= 0) return null;
+  return ((totalMesActual - totalMesAnteriorMismoTramo) / totalMesAnteriorMismoTramo) * 100;
+}
 
 function mapearTienda(fila) {
   return {
@@ -173,6 +217,71 @@ async function resumenTienda(req, res, next) {
         WHERE pd.IdTienda = @IdTienda AND s.Estado IN ('GENERADO', 'REPORTADO')
       `);
 
+    // ---- Ventas por hora del día navegado ----------------------------
+    // Sigue el mismo día que las tarjetas de arriba (?fecha=YYYY-MM-DD, hoy
+    // por defecto): es el detalle de ESE día, no del hoy real. La hora se
+    // agrupa en hora de Perú (DATEADD -5), no UTC — si no, un pedido
+    // entregado a las 8pm de Perú caería en la 1am del día siguiente.
+    const ventasPorHoraResult = await pool
+      .request()
+      .input('IdTienda', sql.Int, idTienda)
+      .input('InicioDia', sql.DateTime2, inicioDia)
+      .input('FinDia', sql.DateTime2, finDia)
+      .query(`
+        SELECT HOUR(DATEADD(HOUR, -5, FechaEntregaReal)) AS Hora, COUNT(*) AS Cantidad, SUM(Total) AS Total
+        FROM Pedidos
+        WHERE IdTienda = @IdTienda AND Estado = 'ENTREGADO'
+          AND FechaEntregaReal >= @InicioDia AND FechaEntregaReal < @FinDia
+        GROUP BY HOUR(DATEADD(HOUR, -5, FechaEntregaReal))
+      `);
+    const ventasPorHora = rellenarVentasPorHora(ventasPorHoraResult.recordset);
+
+    // ---- Comparativo mes a mes ---------------------------------------
+    // SIEMPRE el mes calendario real actual, sin importar qué día se esté
+    // navegando arriba: es una métrica de tendencia del negocio, no del día
+    // mostrado — si saltara con el selector de fecha, "este mes" querría
+    // decir una cosa distinta en cada pantallazo.
+    const inicioMesActual = inicioDeMesPeru();
+    const inicioMesAnterior = inicioDeMesAnteriorPeru();
+    // El mismo número de días/horas transcurridos, aplicado al mes anterior
+    // — así se compara "lo que va del mes" contra "lo que iba del mes
+    // pasado a esta misma altura".
+    const finTramoMesAnterior = new Date(inicioMesAnterior.getTime() + (Date.now() - inicioMesActual.getTime()));
+
+    const comparativoResult = await pool
+      .request()
+      .input('IdTienda', sql.Int, idTienda)
+      .input('InicioMesActual', sql.DateTime2, inicioMesActual)
+      .input('InicioMesAnterior', sql.DateTime2, inicioMesAnterior)
+      .input('FinTramoMesAnterior', sql.DateTime2, finTramoMesAnterior)
+      .query(`
+        SELECT
+          ISNULL(SUM(CASE WHEN FechaEntregaReal >= @InicioMesActual THEN Total ELSE 0 END), 0) AS TotalMesActual,
+          ISNULL(SUM(CASE WHEN FechaEntregaReal >= @InicioMesActual THEN 1 ELSE 0 END), 0) AS PedidosMesActual,
+          ISNULL(SUM(CASE WHEN FechaEntregaReal >= @InicioMesAnterior AND FechaEntregaReal < @InicioMesActual THEN Total ELSE 0 END), 0) AS TotalMesAnteriorCompleto,
+          ISNULL(SUM(CASE WHEN FechaEntregaReal >= @InicioMesAnterior AND FechaEntregaReal < @InicioMesActual THEN 1 ELSE 0 END), 0) AS PedidosMesAnteriorCompleto,
+          ISNULL(SUM(CASE WHEN FechaEntregaReal >= @InicioMesAnterior AND FechaEntregaReal < @FinTramoMesAnterior THEN Total ELSE 0 END), 0) AS TotalMesAnteriorMismoTramo,
+          ISNULL(SUM(CASE WHEN FechaEntregaReal >= @InicioMesAnterior AND FechaEntregaReal < @FinTramoMesAnterior THEN 1 ELSE 0 END), 0) AS PedidosMesAnteriorMismoTramo
+        FROM Pedidos
+        WHERE IdTienda = @IdTienda AND Estado = 'ENTREGADO' AND FechaEntregaReal >= @InicioMesAnterior
+      `);
+    const comparativo = comparativoResult.recordset[0];
+
+    // ---- Clientes nuevos de la semana (GLOBAL, no por tienda) ---------
+    // `Clientes` no tiene IdTienda — un cliente compra en cualquiera de las
+    // tiendas del negocio, así que este número es de todo el negocio. La UI
+    // lo rotula explícitamente para que nadie lo lea como "clientes nuevos
+    // de ESTA tienda".
+    const inicioSemana = inicioDeSemanaPeru();
+    const clientesNuevosResult = await pool
+      .request()
+      .input('InicioSemana', sql.DateTime2, inicioSemana)
+      .query(`
+        SELECT COUNT(*) AS Cantidad
+        FROM Clientes
+        WHERE Estado = 1 AND FechaRegistroCliente >= @InicioSemana
+      `);
+
     const pendientes = pendientesResult.recordset[0];
     const ventasDia = ventasDiaResult.recordset[0];
     const fechaDia = fechaQuery ?? new Date(inicioDia.getTime() + PERU_OFFSET_MS).toISOString().slice(0, 10);
@@ -201,6 +310,32 @@ async function resumenTienda(req, res, next) {
       },
       pagosReportados: pagosReportadosResult.recordset[0].Cantidad,
       ventasUltimos7Dias,
+      ventasPorHora,
+      comparativoMensual: {
+        mesActual: {
+          total: Number(comparativo.TotalMesActual),
+          pedidos: Number(comparativo.PedidosMesActual),
+        },
+        mesAnteriorCompleto: {
+          total: Number(comparativo.TotalMesAnteriorCompleto),
+          pedidos: Number(comparativo.PedidosMesAnteriorCompleto),
+        },
+        mesAnteriorMismoTramo: {
+          total: Number(comparativo.TotalMesAnteriorMismoTramo),
+          pedidos: Number(comparativo.PedidosMesAnteriorMismoTramo),
+        },
+        variacionPorcentual: calcularVariacionMensual({
+          totalMesActual: Number(comparativo.TotalMesActual),
+          totalMesAnteriorMismoTramo: Number(comparativo.TotalMesAnteriorMismoTramo),
+        }),
+      },
+      clientesNuevosSemana: {
+        cantidad: clientesNuevosResult.recordset[0].Cantidad,
+        inicioSemana: new Date(inicioSemana.getTime() + PERU_OFFSET_MS).toISOString().slice(0, 10),
+        // Siempre true: `Clientes` no tiene tienda. Va explícito en la
+        // respuesta para que la UI lo rotule sin tener que "saberlo".
+        esGlobal: true,
+      },
     });
   } catch (err) {
     return next(err);
@@ -371,4 +506,8 @@ module.exports = {
   fechasConVentas,
   listarProductosTienda,
   actualizarPrecioProducto,
+  // Exportadas para poder probarlas como funciones puras, sin base de datos
+  // (mismo criterio que resumirSegmentosClientes en clientesController.js).
+  rellenarVentasPorHora,
+  calcularVariacionMensual,
 };
