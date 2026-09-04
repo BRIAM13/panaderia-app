@@ -61,8 +61,11 @@ export interface PedidoPublicoInput {
    * largo, mismo criterio que el registro manual de clientes en la app. */
   documento: string;
   telefono: string;
-  idProducto: number;
-  cantidad: number;
+  /** El backend acepta un carrito (`items`) desde que se agregó soporte a
+   * pedidos con varios productos — este formulario público solo arma UNO,
+   * pero igual hay que mandarlo envuelto en el array o el backend lo
+   * rechaza con "El pedido debe tener al menos un producto". */
+  items: { idProducto: number; cantidad: number }[];
   notas?: string;
   /** "YYYY-MM-DDTHH:mm" en hora de Perú (sin zona horaria) — obligatorio
    * solo para productos que no sean paquete (Pan de Agua/Francés); el
@@ -114,8 +117,13 @@ export interface PedidoPublicoConsultaItem {
   idPedido: number;
   numeroPedidoDia: number;
   tienda: string | null;
-  producto: string;
-  cantidad: number;
+  /** Cada línea del carrito (acá siempre habrá una sola, este formulario
+   * no arma pedidos de varios productos, pero el backend siempre manda un
+   * array desde que se agregó soporte a pedidos con varios productos). */
+  items: { producto: string; cantidad: number; precioUnitario: number; subtotal: number }[];
+  /** "Pan francés x50" — ya armado por el backend a partir de `items`,
+   * conveniencia para no reconstruirlo acá. */
+  productoResumen: string;
   total: number;
   estado: "SOLICITADO" | "PENDIENTE" | "RECHAZADO" | "ENTREGADO" | "CANCELADO";
   fechaCreacion: string;

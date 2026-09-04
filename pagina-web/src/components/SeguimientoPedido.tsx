@@ -323,7 +323,7 @@ export function SeguimientoPedido() {
                                     <p className="truncate text-sm font-semibold text-pan-carbon">
                                       Pedido #{pedido.numeroPedidoDia}
                                     </p>
-                                    <p className="truncate text-xs text-pan-carbon-suave">{pedido.producto}</p>
+                                    <p className="truncate text-xs text-pan-carbon-suave">{pedido.productoResumen}</p>
                                   </div>
                                   <span
                                     className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${info.clases}`}
@@ -399,7 +399,7 @@ export function SeguimientoPedido() {
                                                   {formatearFechaCorta(pedido.fechaCreacion)}
                                                 </p>
                                               </div>
-                                              <p className="mt-0.5 text-sm text-pan-carbon-suave">{pedido.producto}</p>
+                                              <p className="mt-0.5 text-sm text-pan-carbon-suave">{pedido.productoResumen}</p>
                                               {/* `auto` + `1fr` en vez de dos
                                                   mitades iguales: partidas al
                                                   medio, la columna del valor
@@ -423,7 +423,7 @@ export function SeguimientoPedido() {
                                                 )}
                                                 <span className="text-pan-carbon-suave">Cantidad</span>
                                                 <span className="text-right font-medium text-pan-carbon">
-                                                  {pedido.cantidad}
+                                                  {pedido.items.reduce((acc, item) => acc + item.cantidad, 0)}
                                                 </span>
                                                 <span className="text-pan-carbon-suave">Total</span>
                                                 <span className="text-right font-semibold text-pan-terracota">

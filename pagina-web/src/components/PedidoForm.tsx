@@ -253,6 +253,10 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
     }
 
     let fechaEntrega: string | undefined;
+    // Hora que de verdad se manda al servidor: arranca igual a la que
+    // eligió el cliente, pero puede corregirse más abajo si el reloj avanzó
+    // mientras completaba el resto del formulario.
+    let horaRecojoFinal = horaRecojo;
     if (!esPaquete) {
       if (!fechaRecojo || !horaRecojo) {
         setError("Elige una fecha y hora de recojo.");
@@ -267,17 +271,25 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
         );
         return;
       }
-      if (horarios && esMuyProntoHoy(fechaRecojo, horaRecojo, horarios)) {
-        setError(`Para pedidos de hoy necesitamos al menos ${horarios.minutosTolerancia} minutos de anticipación.`);
-        return;
+      // El reloj vivo de arriba (cada 15s) ya adelanta la hora elegida sola
+      // mientras el formulario sigue abierto, pero entre el último tick y
+      // este submit pueden pasar unos segundos más (verificar el documento
+      // contra RENIEC/SUNAT toma su tiempo) — suficiente para que la hora
+      // elegida deje de cumplir la tolerancia justo al enviar. En vez de
+      // rechazar el pedido con un error y obligar al cliente a volver a
+      // elegir, se aplica la misma corrección acá, con 1 minuto extra de
+      // colchón para lo que tarde en llegar la petición al servidor.
+      if (horarios && esMuyProntoHoy(fechaRecojo, horaRecojoFinal, horarios)) {
+        horaRecojoFinal = horaMinimaHoy(horarios, new Date(Date.now() + 60_000));
+        setHoraRecojo(horaRecojoFinal);
       }
-      if (horarios && esMuyTardeHoy(fechaRecojo, horaRecojo, horarios)) {
+      if (horarios && esMuyTardeHoy(fechaRecojo, horaRecojoFinal, horarios)) {
         setError(
           `Ya no se puede recoger hoy después de las ${formatearHora12(horarios.horaTopeRecojo)}. Elige otro horario.`,
         );
         return;
       }
-      fechaEntrega = `${fechaRecojo}T${horaRecojo}`;
+      fechaEntrega = `${fechaRecojo}T${horaRecojoFinal}`;
     }
 
     // La verificación del documento sigue siendo un requisito duro para
@@ -309,8 +321,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
       const respuesta = await crearPedidoPublico({
         documento: numeroDocumentoLimpio,
         telefono: telefono.trim(),
-        idProducto: Number(idProducto),
-        cantidad: cantidadNum,
+        items: [{ idProducto: Number(idProducto), cantidad: cantidadNum }],
         notas: notas.trim() || undefined,
         fechaEntrega,
       });
@@ -324,7 +335,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
         documento: `${tipoDocumento} ${numeroDocumento}`,
         telefono,
         fechaRecojo,
-        horaRecojo,
+        horaRecojo: horaRecojoFinal,
         notas: notas.trim(),
       });
       setFueraDeVentanaAlEnviar(!esPaquete && fueraDeVentanaActual);
