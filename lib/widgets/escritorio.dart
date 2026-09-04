@@ -277,12 +277,16 @@ class TarjetaEscritorio extends StatelessWidget {
                   )
                 : null,
             boxShadow: [
+              // Sombra en reposo más marcada que antes (7% → 15%, blur 14 →
+              // 20, desplazamiento 6 → 10): sin eso las tarjetas quedaban
+              // casi al ras del fondo crema y se perdía la sensación de
+              // profundidad — pedido explícito tras ver la versión web.
               BoxShadow(
                 color: (gradiente != null ? acento : Colors.black).withValues(
-                  alpha: activo ? 0.18 : 0.07,
+                  alpha: activo ? 0.24 : 0.15,
                 ),
-                blurRadius: activo ? 26 : 14,
-                offset: Offset(0, activo ? 12 : 6),
+                blurRadius: activo ? 30 : 20,
+                offset: Offset(0, activo ? 14 : 10),
               ),
             ],
           ),
@@ -622,6 +626,23 @@ class TarjetaKpi extends StatelessWidget {
           onTap: onTap,
           acento: color,
           alto: alto,
+          // Mismo criterio que la versión de celular: un lavado del color
+          // propio en el fondo (9 % arriba, 3 % abajo) para que la fila de
+          // KPIs deje de ser cuatro rectángulos crema idénticos.
+          gradiente: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.alphaBlend(
+                color.withValues(alpha: 0.11),
+                AppColors.surface,
+              ),
+              Color.alphaBlend(
+                color.withValues(alpha: 0.05),
+                AppColors.surface,
+              ),
+            ],
+          ),
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -633,10 +654,17 @@ class TarjetaKpi extends StatelessWidget {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
+                      color: color,
                       borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Icon(icono, color: color, size: 20),
+                    child: Icon(icono, color: Colors.white, size: 20),
                   ),
                   const Spacer(),
                   if (onTap != null)

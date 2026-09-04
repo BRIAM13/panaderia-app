@@ -576,7 +576,7 @@ class _CampoSelectorState<T> extends State<_CampoSelector<T>>
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
                                     color: AppColors.primary.withValues(
-                                      alpha: 0.10,
+                                      alpha: 0.16,
                                     ),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
@@ -652,7 +652,9 @@ class _CampoSelectorState<T> extends State<_CampoSelector<T>>
     if (hayError) return (_colorError, 1.6);
     if (activo) return (AppColors.primary, 1.8);
     if (hover) return (AppColors.primary.withValues(alpha: 0.35), 1.4);
-    return (AppColors.surfaceMuted, 1.4);
+    // `surfaceMuted` es una superficie, no un borde: contra el fondo crema
+    // del tablero el contorno del campo cerrado directamente no se veía.
+    return (AppColors.borderSoft, 1.4);
   }
 }
 
@@ -783,7 +785,7 @@ class _MenuDesplegableState<T> extends State<_MenuDesplegable<T>> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(_radioMenu),
-        border: Border.all(color: AppColors.surfaceMuted, width: 1.2),
+        border: Border.all(color: AppColors.borderSoft, width: 1.2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.12),

@@ -93,13 +93,17 @@ class _Tarjeta3DState extends State<Tarjeta3D>
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(widget.borderRadius),
+                  // Reposo más marcado (16% → 24%, blur 18 → 24, offset 8 →
+                  // 11) — mismo criterio que TarjetaEscritorio, para que el
+                  // efecto de profundidad sea consistente en toda la app,
+                  // no solo en las tarjetas KPI del dashboard.
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(
-                        alpha: (_hover ? 0.22 : 0.16) + (0.10 * t),
+                        alpha: (_hover ? 0.30 : 0.24) + (0.10 * t),
                       ),
-                      blurRadius: (_hover ? 26 : 18) - (10 * t),
-                      offset: Offset(0, (_hover ? 12 : 8) - (6 * t)),
+                      blurRadius: (_hover ? 32 : 24) - (10 * t),
+                      offset: Offset(0, (_hover ? 15 : 11) - (6 * t)),
                     ),
                   ],
                 ),

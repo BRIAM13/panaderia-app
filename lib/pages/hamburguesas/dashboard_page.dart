@@ -329,9 +329,7 @@ class _DashboardPageState extends State<DashboardPage> {
       // esqueleto es el mismo, con la grilla de 2 o 3 columnas que
       // corresponda a ese ancho.
       if (esEscritorio(context)) return const _EsqueletoTableroEscritorio();
-      return _EsqueletoTableroCompacto(
-        columnas: esTablet(context) ? 3 : 2,
-      );
+      return _EsqueletoTableroCompacto(columnas: esTablet(context) ? 3 : 2);
     }
 
     if (_error != null && _resumen == null) {
@@ -641,7 +639,10 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       _TarjetaEstadistica(
         icono: Icons.qr_code_2_rounded,
-        color: const Color(0xFF6D4C41),
+        // Era un marrón apagado, indistinguible de las otras tres tarjetas
+        // cálidas de la grilla. Verde: es plata que ENTRA (el cliente
+        // reportó el pago), y separa la tarjeta del bloque de deudas.
+        color: const Color(0xFF17805A),
         titulo: 'Pagos reportados',
         valor: '${resumen.pagosReportados}',
         delay: 260,
@@ -702,16 +703,14 @@ class _DashboardPageState extends State<DashboardPage> {
                               const SizedBox(height: 2),
                               Text(
                                 'Su fecha de entrega ya pasó. Tócalo para resolverlos.',
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(fontSize: 12),
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.bodyMedium?.copyWith(fontSize: 12),
                               ),
                             ],
                           ),
                         ),
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          color: rojo,
-                        ),
+                        const Icon(Icons.chevron_right_rounded, color: rojo),
                       ],
                     ),
                   ),
@@ -819,78 +818,81 @@ class _DashboardPageState extends State<DashboardPage> {
       padding: const EdgeInsets.only(bottom: 24),
       child:
           Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: ambar.withValues(alpha: 0.30)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: ambar.withValues(alpha: 0.30)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: ambar,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Clientes en riesgo',
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: ambar.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${enRiesgo.length}',
-                        style: const TextStyle(
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
                           color: ambar,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Clientes en riesgo',
+                            style: theme.textTheme.titleMedium,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: ambar.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '${enRiesgo.length}',
+                            style: const TextStyle(
+                              color: ambar,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Compraban seguido y dejaron de hacerlo. Llámalos hoy.',
+                      style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    for (final cliente in primeros)
+                      _FilaClienteEnRiesgo(cliente: cliente),
+                    if (_esGestorDeVentas) ...[
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _abrirAnalitica,
+                          icon: const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 16,
+                          ),
+                          label: Text(
+                            enRiesgo.length <= 3
+                                ? 'Ver en Analítica'
+                                : 'Ver los ${enRiesgo.length}',
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Compraban seguido y dejaron de hacerlo. Llámalos hoy.',
-                  style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
-                ),
-                const SizedBox(height: 12),
-                for (final cliente in primeros)
-                  _FilaClienteEnRiesgo(cliente: cliente),
-                if (_esGestorDeVentas) ...[
-                  const SizedBox(height: 4),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: _abrirAnalitica,
-                      icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-                      label: Text(
-                        enRiesgo.length <= 3
-                            ? 'Ver en Analítica'
-                            : 'Ver los ${enRiesgo.length}',
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ).animate().fadeIn(delay: 240.ms, duration: 320.ms).moveY(
-            begin: 10,
-            end: 0,
-          ),
+              )
+              .animate()
+              .fadeIn(delay: 240.ms, duration: 320.ms)
+              .moveY(begin: 10, end: 0),
     );
   }
 
@@ -962,10 +964,7 @@ class _DashboardPageState extends State<DashboardPage> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _ChipVariacion(
-                etiqueta: 'vs. ayer',
-                variacion: m.variacionAyer,
-              ),
+              _ChipVariacion(etiqueta: 'vs. ayer', variacion: m.variacionAyer),
               _ChipVariacion(
                 etiqueta: 'vs. promedio de la semana',
                 variacion: m.variacionPromedio,
@@ -1023,7 +1022,7 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       TarjetaKpi(
         icono: Icons.qr_code_2_rounded,
-        color: const Color(0xFF6D4C41),
+        color: const Color(0xFF17805A),
         titulo: 'Pagos reportados',
         valor: '${resumen.pagosReportados}',
         delay: 260,
@@ -1141,7 +1140,8 @@ class _DashboardPageState extends State<DashboardPage> {
                         icono: Icons.receipt_long_rounded,
                         color: AppColors.secondary,
                         titulo: 'Ticket promedio',
-                        valor: 'S/ ${metricas.ticketPromedio.toStringAsFixed(2)}',
+                        valor:
+                            'S/ ${metricas.ticketPromedio.toStringAsFixed(2)}',
                         subtitulo: '${resumen.cobradoDiaCantidad} cobro(s)',
                         delay: 280,
                         onTap: _esGestorDeVentas ? _abrirHistorialVentas : null,
@@ -1294,9 +1294,9 @@ class _TarjetaCobradoHoyEscritorio extends StatelessWidget {
                       'Cobrado $etiqueta',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleMedium?.copyWith(color: Colors.white),
                     ),
                   ),
                   if (onTap != null)
@@ -1559,7 +1559,9 @@ class _MetricasDerivadas {
       variacionAyer: ayer == null || ayer <= 0
           ? null
           : (hoy - ayer) / ayer * 100,
-      variacionPromedio: promedio <= 0 ? null : (hoy - promedio) / promedio * 100,
+      variacionPromedio: promedio <= 0
+          ? null
+          : (hoy - promedio) / promedio * 100,
     );
   }
 
@@ -1590,12 +1592,20 @@ class _BotonFecha extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hoy = fecha == null;
+    // Antes esto era un borde gris sobre nada: la pastilla de fecha, que es
+    // uno de los dos controles del tablero, se leía como texto suelto. Los
+    // dos estados pasan a ser pastillas LLENAS de la paleta — miel para
+    // "Hoy" (el estado por defecto) y durazno/terracota cuando hay una fecha
+    // elegida, que es justamente el estado que conviene que salte a la vista.
+    final relleno = hoy ? AppColors.secondarySoft : AppColors.primaryContainer;
+    final tinta = hoy ? AppColors.secondaryDeep : AppColors.primaryDeep;
+
     return OutlinedButton.icon(
       onPressed: onElegir,
       icon: Icon(
         hoy ? Icons.today_rounded : Icons.event_rounded,
         size: 18,
-        color: hoy ? AppColors.textSecondary : AppColors.primary,
+        color: tinta,
       ),
       label: Text(
         hoy ? 'Hoy' : DateFormat('d MMM yyyy', 'es').format(fecha!),
@@ -1603,15 +1613,15 @@ class _BotonFecha extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       style: OutlinedButton.styleFrom(
-        foregroundColor: hoy ? AppColors.textSecondary : AppColors.primary,
+        foregroundColor: tinta,
+        backgroundColor: relleno,
+        textStyle: const TextStyle(fontWeight: FontWeight.w700),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         side: BorderSide(
-          color: hoy
-              ? AppColors.surfaceMuted
-              : AppColors.primary.withValues(alpha: 0.5),
+          color: (hoy ? AppColors.secondary : AppColors.primary).withValues(
+            alpha: 0.45,
+          ),
           width: 1.4,
         ),
       ),
@@ -1652,10 +1662,7 @@ class _AccesoRapido extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 11,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1719,9 +1726,7 @@ class _FilaClienteEnRiesgo extends StatelessWidget {
             ),
           ),
           IconButton(
-            onPressed: contactable
-                ? () => llamarPorTelefono(telefono!)
-                : null,
+            onPressed: contactable ? () => llamarPorTelefono(telefono!) : null,
             icon: const Icon(Icons.call_rounded, size: 19),
             tooltip: contactable ? 'Llamar' : 'Sin teléfono registrado',
             visualDensity: VisualDensity.compact,
@@ -1856,17 +1861,16 @@ class _EsqueletoTableroCompacto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget marco({double? alto, Widget? child}) =>
-        Container(
-          height: alto,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.surfaceMuted, width: 1.2),
-          ),
-          child: child,
-        );
+    Widget marco({double? alto, Widget? child}) => Container(
+      height: alto,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.surfaceMuted, width: 1.2),
+      ),
+      child: child,
+    );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -1936,17 +1940,35 @@ class _TarjetaEstadistica extends StatelessWidget {
     final theme = Theme.of(context);
     final esNumero = double.tryParse(valor.replaceAll(RegExp('[^0-9.]'), ''));
 
+    // Las cuatro tarjetas eran crema sobre crema, con un círculo pastel al
+    // 12 % de opacidad: contra el fondo del tablero no contrastaban con
+    // nada y las cuatro se leían como una sola mancha. Ahora cada una lleva
+    // su color en tres lugares — un lavado del 9 % de fondo, el borde al
+    // 30 % y la placa del ícono LLENA — así se distinguen de un vistazo sin
+    // que ninguna grite: el color fuerte ocupa apenas los 32 px de la placa.
+    final fondo = Color.alphaBlend(
+      color.withValues(alpha: 0.11),
+      AppColors.surface,
+    );
+
     return Tarjeta3D(
           onTap: onTap,
           borderRadius: 20,
           child: Material(
-            color: AppColors.surface,
+            color: fondo,
             child: InkWell(
               onTap: onTap,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.50),
+                    width: 1.4,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1956,10 +1978,17 @@ class _TarjetaEstadistica extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
+                        color: color,
                         borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                       ),
-                      child: Icon(icono, color: color, size: 18),
+                      child: Icon(icono, color: Colors.white, size: 18),
                     ),
                     const SizedBox(height: 8),
                     esNumero != null
@@ -1980,7 +2009,10 @@ class _TarjetaEstadistica extends StatelessWidget {
                           ),
                     Text(
                       titulo,
-                      style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -2051,16 +2083,15 @@ class _GraficoVentas7Dias extends StatelessWidget {
           alignment: BarChartAlignment.spaceAround,
           barTouchData: BarTouchData(
             touchTooltipData: BarTouchTooltipData(
-              getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                  BarTooltipItem(
-                    detallado
-                        ? '${formatoDia.format(serie[group.x].fecha)}\nS/ ${rod.toY.toStringAsFixed(2)}'
-                        : 'S/ ${rod.toY.toStringAsFixed(2)}',
-                    const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+              getTooltipItem: (group, groupIndex, rod, rodIndex) => BarTooltipItem(
+                detallado
+                    ? '${formatoDia.format(serie[group.x].fecha)}\nS/ ${rod.toY.toStringAsFixed(2)}'
+                    : 'S/ ${rod.toY.toStringAsFixed(2)}',
+                const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
           titlesData: FlTitlesData(
@@ -2193,16 +2224,15 @@ class _GraficoPendientesPorUrgencia extends StatelessWidget {
           alignment: BarChartAlignment.spaceAround,
           barTouchData: BarTouchData(
             touchTooltipData: BarTouchTooltipData(
-              getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                  BarTooltipItem(
-                    detallado
-                        ? '${categorias[group.x].$1}\n${rod.toY.toInt()} pedido(s)'
-                        : '${rod.toY.toInt()} pedido(s)',
-                    const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+              getTooltipItem: (group, groupIndex, rod, rodIndex) => BarTooltipItem(
+                detallado
+                    ? '${categorias[group.x].$1}\n${rod.toY.toInt()} pedido(s)'
+                    : '${rod.toY.toInt()} pedido(s)',
+                const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
           titlesData: FlTitlesData(

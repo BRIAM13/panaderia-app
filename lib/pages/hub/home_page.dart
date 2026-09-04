@@ -57,8 +57,7 @@ class _HomePageState extends State<HomePage> {
   /// SUPERADMIN las recibe todas desde el backend sin necesitar asignación.
   List<Tienda> _misTiendas = [];
 
-  Set<String> get _misSlugsTiendas =>
-      _misTiendas.map((t) => t.slug).toSet();
+  Set<String> get _misSlugsTiendas => _misTiendas.map((t) => t.slug).toSet();
 
   Tienda? _buscarMiTienda(String slug) {
     for (final t in _misTiendas) {
@@ -476,10 +475,11 @@ class _HomePageState extends State<HomePage> {
       title: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 48,
+            height: 48,
+            padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(15),
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -493,10 +493,12 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
-            child: const Icon(
-              PhosphorIconsFill.bread,
-              color: Colors.white,
-              size: 22,
+            // El panadero 3D — mismo PNG que el ícono de la app móvil
+            // (assets/icon/app_icon_foreground.png, ya sin fondo propio),
+            // reemplaza el ícono genérico de pan de antes.
+            child: Image.asset(
+              'assets/icon/app_icon_foreground.png',
+              fit: BoxFit.contain,
             ),
           ),
           const SizedBox(width: 14),
@@ -532,28 +534,29 @@ class _HomePageState extends State<HomePage> {
 /// Los cuatro destinos que el personal usa todo el día. Se definen una sola
 /// vez y los consumen tanto la barra inferior de celular como el riel de
 /// tablet, para que la navegación sea la misma en los dos anchos.
-const _destinosPersonal = <({IconData icono, IconData iconoLleno, String etiqueta})>[
-  (
-    icono: PhosphorIconsRegular.house,
-    iconoLleno: PhosphorIconsFill.house,
-    etiqueta: 'Inicio',
-  ),
-  (
-    icono: PhosphorIconsRegular.receipt,
-    iconoLleno: PhosphorIconsFill.receipt,
-    etiqueta: 'Pedidos',
-  ),
-  (
-    icono: PhosphorIconsRegular.users,
-    iconoLleno: PhosphorIconsFill.users,
-    etiqueta: 'Clientes',
-  ),
-  (
-    icono: PhosphorIconsRegular.dotsThreeCircle,
-    iconoLleno: PhosphorIconsFill.dotsThreeCircle,
-    etiqueta: 'Más',
-  ),
-];
+const _destinosPersonal =
+    <({IconData icono, IconData iconoLleno, String etiqueta})>[
+      (
+        icono: PhosphorIconsRegular.house,
+        iconoLleno: PhosphorIconsFill.house,
+        etiqueta: 'Inicio',
+      ),
+      (
+        icono: PhosphorIconsRegular.receipt,
+        iconoLleno: PhosphorIconsFill.receipt,
+        etiqueta: 'Pedidos',
+      ),
+      (
+        icono: PhosphorIconsRegular.users,
+        iconoLleno: PhosphorIconsFill.users,
+        etiqueta: 'Clientes',
+      ),
+      (
+        icono: PhosphorIconsRegular.dotsThreeCircle,
+        iconoLleno: PhosphorIconsFill.dotsThreeCircle,
+        etiqueta: 'Más',
+      ),
+    ];
 
 /// Navegación permanente del personal en celular. No mantiene un índice
 /// "seleccionado" porque no son pestañas de una misma pantalla: cada destino
@@ -575,19 +578,37 @@ class _BarraInferiorPersonal extends StatelessWidget {
   Widget build(BuildContext context) {
     final acciones = [onInicio, onPedidos, onClientes, onMas];
 
-    return NavigationBar(
-      // El Hub (Inicio) es lo que hay debajo de cualquier ruta que se abra
-      // desde acá, así que es el destino que corresponde marcar siempre.
-      selectedIndex: 0,
-      onDestinationSelected: (i) => acciones[i](),
-      destinations: [
-        for (final d in _destinosPersonal)
-          NavigationDestination(
-            icon: PhosphorIcon(d.icono),
-            selectedIcon: PhosphorIcon(d.iconoLleno),
-            label: d.etiqueta,
+    // El color de la barra sale del `navigationBarTheme` (superficie arena +
+    // pastilla terracota). Lo único que no se puede declarar desde el theme
+    // es el filo superior: sin él la barra y el contenido, siendo los dos
+    // cálidos, se funden justo en la línea donde uno termina y otra empieza.
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: AppColors.borderSoft, width: 1.2),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x1A2B2118),
+            blurRadius: 18,
+            offset: Offset(0, -6),
           ),
-      ],
+        ],
+      ),
+      child: NavigationBar(
+        // El Hub (Inicio) es lo que hay debajo de cualquier ruta que se abra
+        // desde acá, así que es el destino que corresponde marcar siempre.
+        selectedIndex: 0,
+        onDestinationSelected: (i) => acciones[i](),
+        destinations: [
+          for (final d in _destinosPersonal)
+            NavigationDestination(
+              icon: PhosphorIcon(d.icono),
+              selectedIcon: PhosphorIcon(d.iconoLleno),
+              label: d.etiqueta,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -615,14 +636,14 @@ class _RielPersonal extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         border: Border(
-          right: BorderSide(color: AppColors.surfaceMuted, width: 1.2),
+          right: BorderSide(color: AppColors.borderSoft, width: 1.2),
         ),
       ),
       child: NavigationRail(
         selectedIndex: 0,
         onDestinationSelected: (i) => acciones[i](),
         labelType: NavigationRailLabelType.none,
-        backgroundColor: AppColors.surface,
+        backgroundColor: AppColors.navSurface,
         destinations: [
           for (final d in _destinosPersonal)
             NavigationRailDestination(
