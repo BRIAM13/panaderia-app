@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.0+10
+version: 1.2.1+11
 
 environment:
   sdk: ^3.11.5
@@ -101,6 +101,17 @@ dependencies:
   # al registrar un método de pago.
   image_picker: ^1.1.2
 
+  # Reproduce los clips cortos en loop de la mascota (panadero 3D animado)
+  # en el splash y el login — assets/mascota/, ver MascotaVideo.
+  video_player: ^2.9.5
+
+  # `AnimatedSampler`: aplica un fragment shader al contenido de un widget
+  # que se redibuja en cada frame (la textura del video de la mascota). Es
+  # lo que permite recomponer el canal alfa empaquetado en el MP4 y que el
+  # panadero salga con transparencia real en vez de con un rectángulo de
+  # fondo. Ver MascotaVideo y shaders/mascota_alfa.frag.
+  flutter_shaders: ^0.1.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -126,6 +137,12 @@ flutter_launcher_icons:
   image_path: "assets/icon/app_icon.png"
   adaptive_icon_background: "#FFE7CD"
   adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  # El maestro ya viene compuesto respetando la zona segura del ícono
+  # adaptativo (el panadero ocupa el 76% del alto, con la cabeza y los panes
+  # dentro del 66% central). El inset del 16% que aplica el paquete por
+  # defecto se sumaba a ese margen y dejaba al personaje chico dentro del
+  # ícono, así que acá se anula.
+  adaptive_icon_foreground_inset: 0
   # Antes solo se generaba para Android/iOS — la versión Web se quedó con
   # el favicon y los íconos de PWA por defecto de Flutter (se notaba en la
   # pestaña del navegador).
@@ -152,6 +169,18 @@ flutter:
   assets:
     - assets/icon/app_icon.png
     - assets/icon/app_icon_foreground.png
+    - assets/mascota/panadero_reposo.mp4
+    - assets/mascota/panadero_saludo.mp4
+    # Silueta desenfocada del personaje: se pinta detrás del video para
+    # darle separación del fondo crema (el uniforme blanco casi no
+    # contrastaba). Generada desde el mismo matte alfa de los clips.
+    - assets/mascota/sombra_panadero.png
+    - assets/mascota/sombra_panadero_saludo.png
+
+  # Recompone el canal alfa que viene empaquetado dentro del MP4 de la
+  # mascota, para que el panadero se dibuje con transparencia real.
+  shaders:
+    - shaders/mascota_alfa.frag
 
   # Sin esto, Flutter Web (CanvasKit) usa la fuente por defecto (Roboto)
   # descargándola de la red recién al pintar el primer texto. Empaquetar

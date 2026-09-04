@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/usuario_sesion.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../../services/biometric_service.dart';
 import '../../services/version_service.dart';
-import '../../widgets/loading_indicator.dart';
+import '../../widgets/credito_desarrollador.dart';
+import '../../widgets/mascota_video.dart';
 import '../../widgets/page_transitions.dart';
 import '../actualizacion/actualizacion_requerida_page.dart';
 import '../auth/login_page.dart';
@@ -112,22 +112,28 @@ class _SplashPageState extends State<SplashPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const PhosphorIcon(
-                  PhosphorIconsDuotone.bread,
-                  size: 64,
-                  color: AppColors.primary,
-                )
+            // Sin saludo acá: esta pantalla suele estar en camino menos de
+            // un segundo (cuando hay sesión guardada) — un saludo de varios
+            // segundos se vería cortado a mitad de gesto casi siempre. El
+            // reposo solo ya comunica "vivo, cargando" de sobra. `moveY`
+            // hace que "suba" a su lugar (no solo que aparezca creciendo),
+            // en la misma dirección en la que el sello de abajo "baja" al
+            // suyo — las dos entradas se leen como un solo momento, no dos
+            // animaciones sueltas.
+            const MascotaVideo(width: 136, height: 180)
                 .animate()
                 .fadeIn(duration: 450.ms)
+                .moveY(
+                  begin: 26,
+                  end: 0,
+                  curve: Curves.easeOutCubic,
+                  duration: 450.ms,
+                )
                 .scale(
                   begin: const Offset(0.82, 0.82),
                   end: const Offset(1, 1),
                   curve: Curves.easeOutBack,
                 ),
-            const SizedBox(height: 28),
-            const AppLoadingIndicator(
-              size: 72,
-            ).animate().fadeIn(delay: 80.ms, duration: 300.ms),
             const SizedBox(height: 24),
             Text(
                   'Panadería Ronceros',
@@ -155,6 +161,21 @@ class _SplashPageState extends State<SplashPage> {
                 .animate()
                 .fadeIn(delay: 240.ms, duration: 320.ms)
                 .moveY(begin: 6, end: 0),
+            const SizedBox(height: 36),
+            // Entra "bajando" a su lugar (begin negativo = arranca más
+            // arriba), justo lo opuesto al personaje que sube desde abajo
+            // — convergen hacia sus posiciones finales en vez de aparecer
+            // cada uno por su lado.
+            const CreditoDesarrollador()
+                .animate()
+                .fadeIn(delay: 320.ms, duration: 380.ms)
+                .moveY(
+                  begin: -18,
+                  end: 0,
+                  delay: 320.ms,
+                  duration: 380.ms,
+                  curve: Curves.easeOutCubic,
+                ),
           ],
         ),
       ),

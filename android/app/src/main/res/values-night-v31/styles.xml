@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Misma corrección que values-v31/styles.xml, para cuando el sistema
-         está en modo oscuro — el splash queda igual (fondo carbón liso,
-         sin ícono) en vez de depender del tema del sistema, así la marca
-         se ve consistente sin importar la configuración del usuario. -->
+         está en modo oscuro — el splash queda igual (crema liso, sin
+         ícono) en vez de depender del tema del sistema, así la marca se ve
+         consistente sin importar la configuración del usuario. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
-        <item name="android:windowSplashScreenBackground">#141414</item>
+        <item name="android:windowSplashScreenBackground">#FDF6EC</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_transparente</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">#141414</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#FDF6EC</item>
     </style>
 </resources>

@@ -5,12 +5,13 @@
          lo contrario — con nuestra ilustración eso se veía como una
          miniatura perdida en un fondo que no combinaba (ver
          splash_icon_transparente). Acá se fuerza un fondo sólido liso, del
-         mismo color que la primera pantalla real (MarcaDesarrolladorPage),
-         sin ícono, para que la transición sea invisible. -->
+         mismo crema que usa SplashPage (AppColors.background, #FDF6EC),
+         sin ícono, para que la transición al primer frame real de Flutter
+         sea invisible en vez del flash oscuro que había antes. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
-        <item name="android:windowSplashScreenBackground">#141414</item>
+        <item name="android:windowSplashScreenBackground">#FDF6EC</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_transparente</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">#141414</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#FDF6EC</item>
     </style>
 </resources>
