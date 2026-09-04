@@ -395,14 +395,17 @@ CREATE TABLE DetalleVentas (
 GO
 
 /* ============================================================================
-   11. PEDIDOS - Pedidos de pan de hamburguesa (unidades o paquetes de 12)
-       con fecha/hora de entrega. Distinto de Ventas (venta directa).
+   11. PEDIDOS - Cabecera de un pedido (cliente, tienda, estado, fecha de
+       entrega). Desde el carrito multi-producto (2026-09), el producto y la
+       cantidad ya NO viven acá — cada línea es una fila en PedidoItems
+       (ver más abajo). Un pedido conserva un solo Estado/EstadoPago/
+       FechaEntrega: se aprueba/entrega/cancela completo, no ítem por ítem.
+       Distinto de Ventas (venta directa, sin usar).
    ============================================================================ */
 CREATE TABLE Pedidos (
     IdPedido            INT IDENTITY(1,1)   NOT NULL,
     IdCliente           INT                 NOT NULL,
-    IdTienda            INT                 NULL,   -- a qué tienda pertenece (ver Tiendas)
-    IdProducto          INT                 NOT NULL,
+    IdTienda            INT                 NULL,   -- a qué tienda pertenece (ver Tiendas) — todos los ítems del carrito son de la misma
     IdTrabajador        INT                 NULL,   -- vendedor con ficha de Trabajador que lo registró (si tiene una)
     -- Quién de personal lo registró en realidad, sin importar si tiene o no
     -- una ficha de Trabajador (ej. el SUPERADMIN dueño no tiene una, tiene
@@ -410,10 +413,7 @@ CREATE TABLE Pedidos (
     -- se conserva aparte solo para casos donde además interese saber su
     -- ficha de personal (cargo, tiendas), no para saber "quién lo hizo".
     IdUsuarioRegistro   INT                 NULL,
-    TipoPedido          VARCHAR(20)         NOT NULL,   -- 'UNIDADES' | 'PAQUETES' (paquete = 12 unidades)
-    Cantidad            INT                 NOT NULL,
-    PrecioUnitario      DECIMAL(10,2)       NOT NULL,
-    Total               DECIMAL(10,2)       NOT NULL,
+    Total               DECIMAL(10,2)       NOT NULL,   -- = SUM(PedidoItems.Subtotal) de este pedido, calculado al crear
     FechaEntrega        DATETIME2           NULL,   -- opcional: pedido puede quedar "sin fecha programada"
     -- 'SOLICITADO' (el cliente lo pidió, esperando que el personal lo
     --   acepte o rechace según stock — solo aplica a pedidos de autoservicio,
@@ -442,8 +442,6 @@ CREATE TABLE Pedidos (
         REFERENCES Clientes(IdCliente),
     CONSTRAINT FK_Pedidos_Tienda FOREIGN KEY (IdTienda)
         REFERENCES Tiendas(IdTienda),
-    CONSTRAINT FK_Pedidos_Producto FOREIGN KEY (IdProducto)
-        REFERENCES Productos(IdProducto),
     CONSTRAINT FK_Pedidos_Trabajador FOREIGN KEY (IdTrabajador)
         REFERENCES Trabajadores(IdTrabajador),
     CONSTRAINT FK_Pedidos_UsuarioRegistro FOREIGN KEY (IdUsuarioRegistro)
@@ -454,8 +452,6 @@ CREATE TABLE Pedidos (
         REFERENCES Usuarios(IdUsuario),
     CONSTRAINT FK_Pedidos_UsuarioEntrego FOREIGN KEY (IdUsuarioEntrego)
         REFERENCES Usuarios(IdUsuario),
-    CONSTRAINT CK_Pedidos_TipoPedido CHECK (TipoPedido IN ('UNIDADES','PAQUETES')),
-    CONSTRAINT CK_Pedidos_Cantidad CHECK (Cantidad > 0),
     CONSTRAINT CK_Pedidos_Estado CHECK (Estado IN ('SOLICITADO','PENDIENTE','RECHAZADO','ENTREGADO','CANCELADO')),
     CONSTRAINT CK_Pedidos_EstadoPago CHECK (EstadoPago IS NULL OR EstadoPago IN ('PAGADO','DEUDA'))
 );
@@ -463,6 +459,58 @@ GO
 
 CREATE INDEX IX_Pedidos_FechaEntrega ON Pedidos(FechaEntrega);
 CREATE INDEX IX_Pedidos_Cliente ON Pedidos(IdCliente);
+GO
+
+/* ============================================================================
+   11b. PEDIDOITEMS - Líneas del carrito de un pedido (2026-09). Cada fila es
+        UN producto + cantidad + precio negociado/de catálogo de ESE pedido;
+        un Pedido tiene una o más filas acá. Reemplaza a las columnas
+        IdProducto/Cantidad/PrecioUnitario/TipoPedido que antes vivían en
+        Pedidos directamente (migración database_migrations/2026_09_pedido_items.sql).
+   ============================================================================ */
+CREATE TABLE PedidoItems (
+    IdPedidoItem        INT IDENTITY(1,1)   NOT NULL,
+    IdPedido            INT                 NOT NULL,
+    IdProducto          INT                 NOT NULL,
+    TipoPedido          VARCHAR(20)         NOT NULL,   -- 'UNIDADES' | 'PAQUETES' (paquete = 12 unidades) — por línea, no por pedido
+    Cantidad            INT                 NOT NULL,
+    PrecioUnitario      DECIMAL(10,2)       NOT NULL,
+    Subtotal            DECIMAL(10,2)       NOT NULL,   -- PrecioUnitario * Cantidad de ESTA línea
+    CONSTRAINT PK_PedidoItems PRIMARY KEY (IdPedidoItem),
+    CONSTRAINT FK_PedidoItems_Pedido FOREIGN KEY (IdPedido)
+        REFERENCES Pedidos(IdPedido),
+    CONSTRAINT FK_PedidoItems_Producto FOREIGN KEY (IdProducto)
+        REFERENCES Productos(IdProducto),
+    CONSTRAINT CK_PedidoItems_TipoPedido CHECK (TipoPedido IN ('UNIDADES','PAQUETES')),
+    CONSTRAINT CK_PedidoItems_Cantidad CHECK (Cantidad > 0),
+    CONSTRAINT CK_PedidoItems_PrecioUnitario CHECK (PrecioUnitario >= 0),
+    CONSTRAINT CK_PedidoItems_Subtotal CHECK (Subtotal >= 0)
+);
+GO
+
+CREATE INDEX IX_PedidoItems_Pedido ON PedidoItems(IdPedido);
+CREATE INDEX IX_PedidoItems_Producto ON PedidoItems(IdProducto);
+GO
+
+/* ============================================================================
+   11c. PEDIDOSHORNEADOSDETALLE - Atributos propios de una línea de Horneados
+        (carne, presentación, aderezo) — todas las líneas de esa tienda usan
+        el mismo producto placeholder en PedidoItems.IdProducto, así que lo
+        que de verdad las distingue vive acá, una fila por IdPedidoItem.
+        Esta tabla faltaba por completo de este archivo (drift histórico
+        contra la base real) hasta esta actualización.
+   ============================================================================ */
+CREATE TABLE PedidosHorneadosDetalle (
+    IdPedidoItem        INT                 NOT NULL,
+    Carne               VARCHAR(100)        NOT NULL,
+    Presentacion        VARCHAR(100)        NOT NULL,
+    AplicaAderezo       BIT                 NOT NULL,
+    TipoAderezo         VARCHAR(20)         NULL,   -- 'CRIOLLO' | 'ORIENTAL' — solo si AplicaAderezo = 1
+    PrecioAderezo       DECIMAL(10,2)       NULL,   -- solo si AplicaAderezo = 1
+    CONSTRAINT PK_PedidosHorneadosDetalle PRIMARY KEY (IdPedidoItem),
+    CONSTRAINT FK_PedidosHorneadosDetalle_PedidoItem FOREIGN KEY (IdPedidoItem)
+        REFERENCES PedidoItems(IdPedidoItem)
+);
 GO
 
 /* ============================================================================

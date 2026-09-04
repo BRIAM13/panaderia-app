@@ -124,6 +124,16 @@ ALTER TABLE PedidosHorneadosDetalle MODIFY COLUMN IdPedidoItem INT NOT NULL;
 -- FASE 2 — DESTRUCTIVA.
 -- ⚠️ Correr SOLO tras confirmar que el backend nuevo + el APK nuevo ya
 --    están en producción (ver la advertencia del encabezado).
+--
+-- ✅ YA EJECUTADA contra la base real (corporacionRonceros) el 2026-09-03,
+--    horas después de la Fase 1 — hacía falta con urgencia: el código
+--    nuevo de los 4 controladores de creación de pedidos ya insertaba en
+--    `Pedidos` sin las columnas viejas, pero como la Fase 2 todavía no
+--    había corrido, esas columnas seguían siendo NOT NULL sin default en
+--    la base real — todo pedido nuevo (personal, autoservicio, web
+--    pública, Horneados) fallaba con "Field 'IdProducto' doesn't have a
+--    default value". Confirmado tras correrla: `Pedidos.IdProducto` y
+--    `PedidosHorneadosDetalle.IdPedido` ya no existen.
 -- =====================================================================
 
 -- Nombre real de la FK vieja de PedidosHorneadosDetalle.IdPedido: se busca
