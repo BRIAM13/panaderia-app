@@ -782,6 +782,18 @@ class _GrupoDeudaCliente extends StatelessWidget {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
+                            // De qué era la deuda. Acá alcanza el resumen
+                            // compacto: es una pantalla de cobranza, no la
+                            // de preparar el pedido.
+                            if (pedido.productoResumen.isNotEmpty)
+                              Text(
+                                pedido.productoResumen,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontSize: 12,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             if (pedido.fechaEntregaReal != null)
                               Text(
                                 'Entregado el ${formatearFechaEntrega(pedido.fechaEntregaReal!)}',

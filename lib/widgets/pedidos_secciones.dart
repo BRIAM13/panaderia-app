@@ -14,6 +14,16 @@ import 'tarjeta_3d.dart';
 /// con el paso del tiempo, sin que nadie tenga que moverlo a mano.
 enum SeccionPedido { atrasados, hoy, proximos, sinFecha }
 
+/// Ícono de la tarjeta según lo que lleva el pedido: Horneados tiene el
+/// suyo, un pedido con paquetes de pan muestra la caja, y el resto el
+/// cubierto. Con varios productos manda el primero — es solo un ícono, el
+/// detalle real va listado en la tarjeta.
+IconData _iconoDe(Pedido pedido) {
+  if (pedido.esHorneado) return PhosphorIconsRegular.bowlFood;
+  if (pedido.items.any((i) => i.esPaquete)) return PhosphorIconsRegular.package;
+  return PhosphorIconsRegular.forkKnife;
+}
+
 SeccionPedido seccionDePedido(Pedido pedido) {
   final fecha = pedido.fechaEntrega;
   if (fecha == null) return SeccionPedido.sinFecha;
@@ -405,9 +415,7 @@ class PedidoCard extends StatelessWidget {
                       ),
                     ),
                     child: PhosphorIcon(
-                      pedido.tipoPedido == 'PAQUETES'
-                          ? PhosphorIconsRegular.package
-                          : PhosphorIconsRegular.forkKnife,
+                      _iconoDe(pedido),
                       color: colorSeccion,
                       size: 20,
                     ),
@@ -438,10 +446,11 @@ class PedidoCard extends StatelessWidget {
                           ],
                           const SizedBox(height: 4),
                         ],
-                        Text(
-                          '${pedido.tipoPedido == 'PAQUETES' ? 'Paquetes' : 'Unidades'} · ${pedido.cantidad} · S/ ${pedido.total.toStringAsFixed(2)}',
-                          style: theme.textTheme.bodyMedium,
-                        ),
+                        // Un pedido puede llevar varios productos: se listan
+                        // todos con su cantidad. Es la pantalla con la que
+                        // el personal prepara el pedido — un resumen
+                        // agregado no alcanza para saber qué despachar.
+                        _DetalleItemsPedido(pedido: pedido),
                         const SizedBox(height: 2),
                         Row(
                           children: [
@@ -720,6 +729,83 @@ class InfoAuditoriaPedido extends StatelessWidget {
               .toList(),
         ),
       ),
+    );
+  }
+}
+
+/// Los productos del pedido, uno por línea, con su cantidad y su subtotal,
+/// más el total abajo. Con un solo producto se colapsa a una sola línea
+/// (la mayoría de los pedidos son así, y una lista de un ítem con su
+/// "total" repetido debajo sería ruido).
+class _DetalleItemsPedido extends StatelessWidget {
+  const _DetalleItemsPedido({required this.pedido});
+
+  final Pedido pedido;
+
+  /// "100 unidades" / "2 paquetes" — en Horneados siempre unidades.
+  String _unidades(ItemPedido item) {
+    final etiqueta = item.esPaquete ? 'paquete' : 'unidad';
+    final plural = item.cantidad == 1
+        ? etiqueta
+        : (item.esPaquete ? 'paquetes' : 'unidades');
+    return '${item.cantidad} $plural';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final items = pedido.items;
+
+    // Un pedido siempre debería traer al menos una línea; si por algún
+    // motivo llegara vacío, se muestra el total y no una tarjeta rota.
+    if (items.isEmpty) {
+      return Text(
+        'S/ ${pedido.total.toStringAsFixed(2)}',
+        style: theme.textTheme.bodyMedium,
+      );
+    }
+
+    if (items.length == 1) {
+      final item = items.first;
+      return Text(
+        '${item.descripcion} · ${_unidades(item)} · S/ ${pedido.total.toStringAsFixed(2)}',
+        style: theme.textTheme.bodyMedium,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final item in items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 1),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    '• ${item.descripcion} · ${_unidades(item)}',
+                    style: theme.textTheme.bodyMedium,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'S/ ${item.subtotal.toStringAsFixed(2)}',
+                  style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 2),
+        Text(
+          'Total: S/ ${pedido.total.toStringAsFixed(2)}',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
     );
   }
 }

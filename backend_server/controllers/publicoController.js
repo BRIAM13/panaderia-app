@@ -3,7 +3,13 @@ const { registrarAuditoria } = require('../utils/auditLog');
 const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos');
 const { buscarPersonaPorDni, buscarEmpresaPorRuc } = require('./externalController');
 const { intentarClonarUsuarioCliente } = require('./clientesController');
-const { notificarPersonalTienda, SELECT_PEDIDOS_BASE, mapearFilaPedido } = require('./pedidosController');
+const {
+  notificarPersonalTienda,
+  SELECT_PEDIDOS_BASE,
+  armarPedidosConItems,
+  insertarItemsPedido,
+  resumirProductos,
+} = require('./pedidosController');
 const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy, fueraDeHorarioAtencion, franjaAjustada } = require('../utils/horariosPanaderia');
 const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
 const { RUC_PERU_REGEX } = require('../middlewares/validators');
@@ -158,11 +164,10 @@ async function crearPedidoPublico(req, res, next) {
   // valida contra RENIEC) o RUC (11 dígitos, contra SUNAT) — se distingue
   // solo por el largo, mismo criterio que ya usa validateCliente para el
   // registro manual de clientes.
-  const { documento, telefono, idProducto, cantidad, notas, fechaEntrega } = req.body;
+  const { documento, telefono, items, notas, fechaEntrega } = req.body;
   const documentoLimpio = String(documento).trim();
   const esRuc = RUC_PERU_REGEX.test(documentoLimpio);
   const telefonoLimpio = String(telefono).trim();
-  const cantidadNum = Number(cantidad);
 
   const pool = await getPool();
 
@@ -174,20 +179,24 @@ async function crearPedidoPublico(req, res, next) {
   // stock por WhatsApp antes de separarlo (ver PedidoForm.tsx, el aviso
   // que le muestra esto al cliente). Lo único que de verdad se exige es
   // una fecha/hora con formato válido y que no sea anterior a hoy.
+  //
+  // Con carrito, la fecha/hora de recojo sigue siendo UNA sola (es de la
+  // cabecera del pedido): se exige en cuanto AL MENOS UNA línea sea de pan
+  // por unidad. Un carrito solo de paquetes de hamburguesa sigue sin
+  // necesitar hora de recojo, igual que antes.
   let fechaEntregaUtc = null;
-  const productoPreview = await pool.request()
-    .input('IdProducto', sql.Int, idProducto)
-    .query(`
-      SELECT t.Slug
+  const idsProductos = items.map((i) => Number(i.idProducto));
+  const productosPreview = await pool.request().query(`
+      SELECT p.IdProducto, t.Slug
       FROM Productos p
       INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
       INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
-      WHERE p.IdProducto = @IdProducto AND p.Estado = 1 AND t.Estado = 1
+      WHERE p.IdProducto IN (${idsProductos.join(',')}) AND p.Estado = 1 AND t.Estado = 1
         AND t.Slug IN ('${SLUGS_TIENDA_PUBLICA.join("','")}')
     `);
-  const esPaquetePreview = productoPreview.recordset[0]?.Slug === 'hamburguesas';
+  const hayPanPorUnidad = productosPreview.recordset.some((p) => p.Slug !== 'hamburguesas');
 
-  if (!esPaquetePreview) {
+  if (hayPanPorUnidad) {
     const coincidencia = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(fechaEntrega || ''));
     if (!coincidencia) {
       return res.status(400).json({ mensaje: 'Elige una fecha y hora de recojo válidas.' });
@@ -236,38 +245,69 @@ async function crearPedidoPublico(req, res, next) {
   try {
     await transaction.begin();
 
-    const productoResult = await new sql.Request(transaction)
-      .input('IdProducto', sql.Int, idProducto)
-      .query(`
-        SELECT p.IdProducto, p.Nombre, p.PrecioUnitario, c.IdTienda, t.Slug
-        FROM Productos p
-        INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
-        INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
-        WHERE p.IdProducto = @IdProducto AND p.Estado = 1 AND t.Estado = 1
-          AND t.Slug IN ('${SLUGS_TIENDA_PUBLICA.join("','")}')
-      `);
-    if (productoResult.recordset.length === 0) {
-      await transaction.rollback();
-      return res.status(400).json({ mensaje: 'Ese producto ya no está disponible para pedir en línea.' });
-    }
-    const { Nombre: nombreProducto, IdTienda: idTienda, Slug: slugTienda } = productoResult.recordset[0];
+    // El precio del paquete de 12 es uno solo para toda la tienda de
+    // Hamburguesas (Configuraciones.PRECIO_PAQUETE): se resuelve una vez
+    // por request, no por línea.
+    const precioPaquete = await obtenerPrecioPaquete(pool);
 
-    // El pan de hamburguesa se vende por paquete de 12 a precio fijo (no por
-    // unidad suelta) — mismo precio y mismo TipoPedido que usa el personal
-    // en la app (ver crearMiPedido en pedidosController.js).
-    const esPaquete = slugTienda === 'hamburguesas';
-    const tipoPedido = esPaquete ? 'PAQUETES' : 'UNIDADES';
+    const lineas = [];
+    let idTienda = null;
 
-    if (!esPaquete && cantidadNum < CANTIDAD_MINIMA_UNIDAD) {
-      await transaction.rollback();
-      return res.status(400).json({
-        mensaje: `El pedido mínimo de ${nombreProducto} es ${CANTIDAD_MINIMA_UNIDAD} unidades.`,
+    for (const item of items) {
+      const productoResult = await new sql.Request(transaction)
+        .input('IdProducto', sql.Int, item.idProducto)
+        .query(`
+          SELECT p.IdProducto, p.Nombre, p.PrecioUnitario, c.IdTienda, t.Slug
+          FROM Productos p
+          INNER JOIN Categorias c ON c.IdCategoria = p.IdCategoria
+          INNER JOIN Tiendas t ON t.IdTienda = c.IdTienda
+          WHERE p.IdProducto = @IdProducto AND p.Estado = 1 AND t.Estado = 1
+            AND t.Slug IN ('${SLUGS_TIENDA_PUBLICA.join("','")}')
+        `);
+      if (productoResult.recordset.length === 0) {
+        await transaction.rollback();
+        return res.status(400).json({ mensaje: 'Uno de los productos ya no está disponible para pedir en línea.' });
+      }
+      const producto = productoResult.recordset[0];
+
+      // Un pedido pertenece a una sola tienda — mismo criterio que la app
+      // (ver crearPedido en pedidosController.js).
+      if (idTienda === null) {
+        idTienda = producto.IdTienda;
+      } else if (producto.IdTienda !== idTienda) {
+        await transaction.rollback();
+        return res.status(400).json({
+          mensaje: 'Todos los productos de un pedido deben ser de la misma tienda.',
+        });
+      }
+
+      // El pan de hamburguesa se vende por paquete de 12 a precio fijo (no por
+      // unidad suelta) — mismo precio y mismo TipoPedido que usa el personal
+      // en la app (ver crearMiPedido en pedidosController.js).
+      const esPaquete = producto.Slug === 'hamburguesas';
+      const tipoPedido = esPaquete ? 'PAQUETES' : 'UNIDADES';
+      const cantidadNum = Number(item.cantidad);
+
+      // El mínimo es por línea: 50 unidades de ESE pan, no 50 sumando dos
+      // productos distintos.
+      if (!esPaquete && cantidadNum < CANTIDAD_MINIMA_UNIDAD) {
+        await transaction.rollback();
+        return res.status(400).json({
+          mensaje: `El pedido mínimo de ${producto.Nombre} es ${CANTIDAD_MINIMA_UNIDAD} unidades.`,
+        });
+      }
+
+      const precioUnitario = esPaquete ? (precioPaquete ?? producto.PrecioUnitario) : producto.PrecioUnitario;
+
+      lineas.push({
+        idProducto: producto.IdProducto,
+        producto: producto.Nombre,
+        tipoPedido,
+        cantidad: cantidadNum,
+        precioUnitario,
+        subtotal: Number((precioUnitario * cantidadNum).toFixed(2)),
       });
     }
-
-    const precioUnitario = esPaquete
-      ? (await obtenerPrecioPaquete(pool)) ?? productoResult.recordset[0].PrecioUnitario
-      : productoResult.recordset[0].PrecioUnitario;
 
     const personaExistente = await new sql.Request(transaction)
       .input('DNI', sql.VarChar(15), documentoLimpio)
@@ -350,36 +390,36 @@ async function crearPedidoPublico(req, res, next) {
         `);
     }
 
-    const total = Number((precioUnitario * cantidadNum).toFixed(2));
+    const total = Number(lineas.reduce((acc, l) => acc + l.subtotal, 0).toFixed(2));
     const numeroPedidoDia = await obtenerSiguienteNumeroPedidoDia(transaction, idTienda);
     const notaWeb = `PEDIDO WEB — Cel: ${telefonoLimpio}${notas ? ' — ' + String(notas).trim().toUpperCase() : ''}`;
 
     const insertPedido = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, idCliente)
       .input('IdTienda', sql.Int, idTienda)
-      .input('IdProducto', sql.Int, idProducto)
-      .input('TipoPedido', sql.VarChar(20), tipoPedido)
-      .input('Cantidad', sql.Int, cantidadNum)
-      .input('PrecioUnitario', sql.Decimal(10, 2), precioUnitario)
       .input('Total', sql.Decimal(10, 2), total)
       .input('Notas', sql.NVarChar(300), notaWeb.slice(0, 300))
       .input('NumeroPedidoDia', sql.Int, numeroPedidoDia)
       .input('FechaEntrega', sql.DateTime, fechaEntregaUtc)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdProducto, IdTrabajador, TipoPedido, Cantidad, PrecioUnitario, Total, Notas, NumeroPedidoDia, FechaEntrega, Estado)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdTrabajador, Total, Notas, NumeroPedidoDia, FechaEntrega, Estado)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, @IdProducto, NULL, @TipoPedido, @Cantidad, @PrecioUnitario, @Total, @Notas, @NumeroPedidoDia, @FechaEntrega, 'SOLICITADO')
+        VALUES (@IdCliente, @IdTienda, NULL, @Total, @Notas, @NumeroPedidoDia, @FechaEntrega, 'SOLICITADO')
       `);
     const { IdPedido: idPedido } = insertPedido.recordset[0];
 
+    await insertarItemsPedido(transaction, idPedido, lineas);
+
     await transaction.commit();
+
+    const resumen = resumirProductos(lineas);
 
     await registrarAuditoria({
       idUsuario: null,
       accion: 'CREAR_PEDIDO_WEB_PUBLICO',
       tablaAfectada: 'Pedidos',
       registroAfectadoId: String(idPedido),
-      datosNuevos: { documento: documentoLimpio, idProducto, cantidad: cantidadNum, total, telefono: telefonoLimpio },
+      datosNuevos: { documento: documentoLimpio, items: lineas, total, telefono: telefonoLimpio },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -387,7 +427,7 @@ async function crearPedidoPublico(req, res, next) {
     await notificarPersonalTienda({
       idTienda,
       titulo: 'Nuevo pedido desde la página web',
-      cuerpo: `${nombreParaAviso} pidió ${cantidadNum} — S/ ${total.toFixed(2)}. Cel: ${telefonoLimpio}. Confírmalo en la app.`,
+      cuerpo: `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}. Cel: ${telefonoLimpio}. Confírmalo en la app.`,
       datos: { tipo: 'PEDIDO_SOLICITADO', idTienda: String(idTienda), idPedido: String(idPedido) },
     });
 
@@ -450,7 +490,7 @@ async function consultarPedidosPublicos(req, res, next) {
 
     return res.status(200).json({
       nombre: [nombres, apellidoPaterno].filter(Boolean).join(' '),
-      pedidos: pedidosResult.recordset.map((fila) => mapearFilaPedido(fila)),
+      pedidos: await armarPedidosConItems(pool, pedidosResult.recordset),
     });
   } catch (err) {
     return next(err);

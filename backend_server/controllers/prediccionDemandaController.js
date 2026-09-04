@@ -20,6 +20,11 @@ const TIEMPO_ESPERA_MS = 10000;
  * cantidad}]). Se agrupa por día porque puede haber varios pedidos
  * entregados el mismo día. Solo cuenta ENTREGADO — un pedido rechazado o
  * cancelado nunca fue demanda real satisfecha.
+ *
+ * La cantidad sale de `PedidoItems`, no de `Pedidos`: desde que un pedido
+ * puede tener varios productos, la cantidad de ESTE producto es la de sus
+ * líneas. Un pedido con pan francés y pan de agua ya no aporta su total
+ * entero a los dos.
  */
 async function obtenerContextoReciente(idTienda, idProducto, dias = 30) {
   const pool = await getPool();
@@ -30,14 +35,15 @@ async function obtenerContextoReciente(idTienda, idProducto, dias = 30) {
     .input('Dias', sql.Int, dias)
     .query(`
       SELECT
-        DATE(COALESCE(FechaEntregaReal, FechaCreacion)) AS Fecha,
-        SUM(Cantidad) AS Cantidad
-      FROM Pedidos
-      WHERE IdTienda = @IdTienda
-        AND IdProducto = @IdProducto
-        AND Estado = 'ENTREGADO'
-        AND COALESCE(FechaEntregaReal, FechaCreacion) >= DATE_SUB(CURDATE(), INTERVAL @Dias DAY)
-      GROUP BY DATE(COALESCE(FechaEntregaReal, FechaCreacion))
+        DATE(COALESCE(pd.FechaEntregaReal, pd.FechaCreacion)) AS Fecha,
+        SUM(pi.Cantidad) AS Cantidad
+      FROM Pedidos pd
+      INNER JOIN PedidoItems pi ON pi.IdPedido = pd.IdPedido
+      WHERE pd.IdTienda = @IdTienda
+        AND pi.IdProducto = @IdProducto
+        AND pd.Estado = 'ENTREGADO'
+        AND COALESCE(pd.FechaEntregaReal, pd.FechaCreacion) >= DATE_SUB(CURDATE(), INTERVAL @Dias DAY)
+      GROUP BY DATE(COALESCE(pd.FechaEntregaReal, pd.FechaCreacion))
       ORDER BY Fecha
     `);
   return resultado.recordset.map((fila) => ({

@@ -17,6 +17,7 @@ import '../../services/tiendas_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/contacto_utils.dart';
 import '../../widgets/contador_animado.dart';
+import '../../widgets/dashboard/metricas_avanzadas_dashboard.dart';
 import '../../widgets/escritorio.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/premium_button.dart';
@@ -564,6 +565,14 @@ class _DashboardPageState extends State<DashboardPage> {
               const SizedBox(height: 24),
               graficoUrgencia,
             ],
+            const SizedBox(height: 24),
+            MetricasAvanzadasDashboard(
+              resumen: resumen,
+              etiquetaDia: _etiquetaDia,
+              enFila: ancho >= 720,
+              altoGrafico: tablet ? 240 : 200,
+              detallado: ancho >= 720,
+            ),
           ],
         ],
       ),
@@ -1212,6 +1221,14 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: espacioEscritorio),
+              MetricasAvanzadasDashboard(
+                resumen: resumen,
+                etiquetaDia: _etiquetaDia,
+                enFila: true,
+                altoGrafico: 300,
+                detallado: true,
               ),
             ],
           ),

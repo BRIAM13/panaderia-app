@@ -1,108 +1,69 @@
-import '../models/cliente_model.dart';
+import '../models/pedido_model.dart';
 import 'api_client.dart';
 import 'secure_storage_service.dart';
 
-/// Datos mínimos del cliente que trae la respuesta de creación de un
-/// pedido — suficientes para armar el resumen post-registro sin tener que
-/// volver a pedir la lista completa de clientes.
-class PedidoClienteResumen {
-  const PedidoClienteResumen({
-    required this.dni,
-    required this.nombres,
-    required this.apellidoPaterno,
-    required this.apellidoMaterno,
-    required this.descripcionNegocio,
+// `Pedido`, `ItemPedido`, `PedidoResultado` y `PedidoClienteResumen` viven
+// en models/pedido_model.dart (los comparten Hamburguesas, Panadería,
+// Horneados y el hub del cliente). Se reexportan acá para que las pantallas
+// que ya importaban este servicio no necesiten un import extra.
+export '../models/pedido_model.dart';
+
+/// Una línea del carrito que el PERSONAL está por registrar: el precio lo
+/// negocia el vendedor en pantalla, así que va explícito (a diferencia de
+/// [NuevoItemAutoservicio], donde siempre sale del catálogo).
+class NuevoItemPedido {
+  const NuevoItemPedido({
+    required this.idProducto,
+    required this.producto,
+    required this.tipoPedido,
+    required this.cantidad,
+    required this.precioUnitario,
   });
 
-  factory PedidoClienteResumen.fromJson(Map<String, dynamic> json) =>
-      PedidoClienteResumen(
-        dni: json['dni'] as String?,
-        nombres: json['nombres'] as String? ?? '',
-        apellidoPaterno: json['apellidoPaterno'] as String? ?? '',
-        apellidoMaterno: json['apellidoMaterno'] as String?,
-        descripcionNegocio: json['descripcionNegocio'] as String?,
-      );
+  final int idProducto;
 
-  final String? dni;
-  final String nombres;
-  final String apellidoPaterno;
-  final String? apellidoMaterno;
-  final String? descripcionNegocio;
+  /// Solo para mostrar la línea en el carrito antes de enviarla — no se
+  /// manda al backend, que resuelve el nombre por [idProducto].
+  final String producto;
 
-  /// RUC (persona natural o jurídica) muestra solo la razón social; DNI o
-  /// sin documento muestran nombre completo con apellidos — misma regla
-  /// que [Cliente.nombreParaMostrar].
-  String get nombreParaMostrar {
-    final esRuc =
-        tipoDocumentoDesde(dni) == TipoClienteDocumento.rucPersonaNatural ||
-        tipoDocumentoDesde(dni) == TipoClienteDocumento.rucPersonaJuridica;
-    if (esRuc) return nombres;
-    return [
-      nombres,
-      apellidoPaterno,
-      apellidoMaterno,
-    ].where((s) => s != null && s.trim().isNotEmpty).join(' ');
-  }
+  /// 'UNIDADES' | 'PAQUETES'.
+  final String tipoPedido;
+  final int cantidad;
+  final double precioUnitario;
 
-  String? get nombreComercial =>
-      (descripcionNegocio != null && descripcionNegocio!.trim().isNotEmpty)
-      ? descripcionNegocio
-      : null;
+  double get subtotal => precioUnitario * cantidad;
+
+  Map<String, dynamic> toJson() => {
+    'idProducto': idProducto,
+    'tipoPedido': tipoPedido,
+    'cantidad': cantidad,
+    'precioUnitario': precioUnitario,
+  };
 }
 
-class PedidoResultado {
-  const PedidoResultado({
-    required this.idPedido,
-    required this.numeroPedidoDia,
-    this.tienda,
-    this.producto,
-    this.tipoPedido,
+/// Una línea del carrito de un CLIENTE (autoservicio): sin precio — el
+/// backend lo toma del catálogo, nadie está ahí para negociarlo.
+class NuevoItemAutoservicio {
+  const NuevoItemAutoservicio({
+    required this.idProducto,
+    required this.producto,
+    required this.cantidad,
     required this.precioUnitario,
-    required this.total,
-    required this.fechaEntrega,
-    required this.fechaCreacion,
-    required this.cliente,
+    required this.esPaquete,
   });
 
-  factory PedidoResultado.fromJson(Map<String, dynamic> json) =>
-      PedidoResultado(
-        idPedido: json['idPedido'] as int,
-        numeroPedidoDia: json['numeroPedidoDia'] as int? ?? 0,
-        tienda: json['tienda'] as String?,
-        producto: json['producto'] as String?,
-        tipoPedido: json['tipoPedido'] as String?,
-        precioUnitario: (json['precioUnitario'] as num).toDouble(),
-        total: (json['total'] as num).toDouble(),
-        fechaEntrega: json['fechaEntrega'] != null
-            ? DateTime.parse(json['fechaEntrega'] as String).toLocal()
-            : null,
-        fechaCreacion: DateTime.parse(
-          json['fechaCreacion'] as String,
-        ).toLocal(),
-        cliente: PedidoClienteResumen.fromJson(
-          json['cliente'] as Map<String, dynamic>,
-        ),
-      );
+  final int idProducto;
 
-  final int idPedido;
-
-  /// Correlativo #1, #2... que empieza de nuevo cada día calendario (hora
-  /// de Perú), independiente por tienda — es lo que se le muestra al
-  /// personal/cliente ("Pedido #N"), nunca [idPedido] (la PK real, que
-  /// sigue siendo lo único válido para llamar a /pedidos/:id/...).
-  final int numeroPedidoDia;
-
-  /// Solo vienen en la respuesta de [PedidosService.crearComoCliente] (ver
-  /// crearMiPedido en pedidosController.js) — [PedidosService.crear] (el
-  /// personal negociando en el momento) no los incluye.
-  final String? tienda;
-  final String? producto;
-  final String? tipoPedido;
+  /// Nombre y precio de catálogo: solo para pintar el carrito y su total
+  /// antes de enviar. El backend recalcula el precio, nunca confía en este.
+  final String producto;
   final double precioUnitario;
-  final double total;
-  final DateTime? fechaEntrega;
-  final DateTime fechaCreacion;
-  final PedidoClienteResumen cliente;
+  final bool esPaquete;
+  final int cantidad;
+
+  double get subtotal => precioUnitario * cantidad;
+
+  Map<String, dynamic> toJson() => {'idProducto': idProducto, 'cantidad': cantidad};
 }
 
 /// Un producto del catálogo de autoservicio — mismo catálogo que ve un
@@ -145,22 +106,19 @@ class PedidosService {
   final ApiClient _api;
   final SecureStorageService _storage;
 
+  /// Personal: registra un pedido con uno o varios productos. Todos los
+  /// productos deben ser de la misma tienda — el backend lo rechaza con 400
+  /// si no (ver crearPedido en pedidosController.js).
   Future<PedidoResultado> crear({
     required int idCliente,
-    required int idProducto,
-    required String tipoPedido,
-    required int cantidad,
-    required double precioUnitario,
+    required List<NuevoItemPedido> items,
     DateTime? fechaEntrega,
     String? notas,
   }) async {
     final token = await _storage.obtenerAccessToken();
     final data = await _api.post('/pedidos', {
       'idCliente': idCliente,
-      'idProducto': idProducto,
-      'tipoPedido': tipoPedido,
-      'cantidad': cantidad,
-      'precioUnitario': precioUnitario,
+      'items': items.map((i) => i.toJson()).toList(),
       'fechaEntrega': fechaEntrega?.toUtc().toIso8601String(),
       'notas': notas,
     }, token: token);
@@ -189,21 +147,20 @@ class PedidosService {
         .toList();
   }
 
-  /// Autoservicio (rol CLIENTE): el propio cliente registra su pedido. El
-  /// precio siempre sale del catálogo del producto elegido — nadie lo
-  /// negocia; la tienda y el tipo de pedido (paquete/unidad) se derivan en
-  /// el backend a partir de [idProducto], no hace falta enviarlos. Nace
-  /// como "solicitado", a la espera de que el personal lo confirme.
+  /// Autoservicio (rol CLIENTE): el propio cliente registra su pedido con
+  /// uno o varios productos. El precio siempre sale del catálogo del
+  /// producto elegido — nadie lo negocia; la tienda y el tipo de pedido
+  /// (paquete/unidad) se derivan en el backend a partir de cada
+  /// `idProducto`, no hace falta enviarlos. Nace como "solicitado", a la
+  /// espera de que el personal lo confirme.
   Future<PedidoResultado> crearComoCliente({
-    required int idProducto,
-    required int cantidad,
+    required List<NuevoItemAutoservicio> items,
     DateTime? fechaEntrega,
     String? notas,
   }) async {
     final token = await _storage.obtenerAccessToken();
     final data = await _api.post('/pedidos/mi-pedido', {
-      'idProducto': idProducto,
-      'cantidad': cantidad,
+      'items': items.map((i) => i.toJson()).toList(),
       'fechaEntrega': fechaEntrega?.toUtc().toIso8601String(),
       'notas': notas,
     }, token: token);
@@ -285,114 +242,4 @@ class PedidosService {
       token: token,
     );
   }
-}
-
-/// Un pedido ya registrado, tal como lo devuelve `GET /pedidos`.
-class Pedido {
-  const Pedido({
-    required this.idPedido,
-    required this.numeroPedidoDia,
-    required this.idCliente,
-    required this.idTienda,
-    required this.tienda,
-    required this.tipoPedido,
-    required this.cantidad,
-    required this.precioUnitario,
-    required this.total,
-    required this.fechaEntrega,
-    required this.estado,
-    required this.estadoPago,
-    required this.fechaEntregaReal,
-    required this.notas,
-    required this.fechaCreacion,
-    required this.cliente,
-    required this.producto,
-    required this.vendedor,
-    this.registradoPorRol,
-    this.aprobadoPor,
-    this.canceladoPor,
-    this.entregadoPor,
-  });
-
-  factory Pedido.fromJson(Map<String, dynamic> json) => Pedido(
-    idPedido: json['idPedido'] as int,
-    numeroPedidoDia: json['numeroPedidoDia'] as int? ?? 0,
-    idCliente: json['idCliente'] as int,
-    idTienda: json['idTienda'] as int?,
-    tienda: json['tienda'] as String?,
-    tipoPedido: json['tipoPedido'] as String,
-    cantidad: json['cantidad'] as int,
-    precioUnitario: (json['precioUnitario'] as num).toDouble(),
-    total: (json['total'] as num).toDouble(),
-    fechaEntrega: json['fechaEntrega'] != null
-        ? DateTime.parse(json['fechaEntrega'] as String).toLocal()
-        : null,
-    estado: json['estado'] as String,
-    estadoPago: json['estadoPago'] as String?,
-    fechaEntregaReal: json['fechaEntregaReal'] != null
-        ? DateTime.parse(json['fechaEntregaReal'] as String).toLocal()
-        : null,
-    notas: json['notas'] as String?,
-    fechaCreacion: DateTime.parse(json['fechaCreacion'] as String).toLocal(),
-    cliente: PedidoClienteResumen.fromJson(
-      json['cliente'] as Map<String, dynamic>,
-    ),
-    producto: json['producto'] as String,
-    // null si lo registró el propio cliente (autoservicio), no el personal.
-    vendedor: json['vendedor'] as String?,
-    // Estos 4 solo vienen del backend si quien pide la lista es
-    // ADMIN/SUPERADMIN (ver pedidosController.js) — para TRABAJADOR o el
-    // propio cliente siempre llegan null.
-    registradoPorRol: json['registradoPorRol'] as String?,
-    aprobadoPor: json['aprobadoPor'] as String?,
-    canceladoPor: json['canceladoPor'] as String?,
-    entregadoPor: json['entregadoPor'] as String?,
-  );
-
-  final int idPedido;
-
-  /// Correlativo #1, #2... que empieza de nuevo cada día calendario (hora
-  /// de Perú), independiente por tienda — es lo que se muestra al personal/
-  /// cliente ("Pedido #N"), nunca [idPedido] (la PK real que identifica el
-  /// pedido en /pedidos/:id/...).
-  final int numeroPedidoDia;
-  final int idCliente;
-  final int? idTienda;
-  final String? tienda;
-  final String tipoPedido;
-  final int cantidad;
-  final double precioUnitario;
-  final double total;
-  final DateTime? fechaEntrega;
-  // 'SOLICITADO' | 'PENDIENTE' | 'RECHAZADO' | 'ENTREGADO' | 'CANCELADO'
-  final String estado;
-  // 'PAGADO' | 'DEUDA' | null (null hasta que esté ENTREGADO)
-  final String? estadoPago;
-  final DateTime? fechaEntregaReal;
-  final String? notas;
-  final DateTime fechaCreacion;
-  final PedidoClienteResumen cliente;
-  final String producto;
-  final String? vendedor;
-
-  /// Visibles solo para ADMIN/SUPERADMIN (el backend ya filtra esto, no
-  /// hace falta repetir el chequeo de rol acá — si no corresponde, llegan
-  /// null y la UI simplemente no muestra nada).
-  final String? registradoPorRol;
-  final String? aprobadoPor;
-  final String? canceladoPor;
-  final String? entregadoPor;
-
-  bool get esSolicitado => estado == 'SOLICITADO';
-  bool get esEntregado => estado == 'ENTREGADO';
-  bool get esDeuda => estadoPago == 'DEUDA';
-
-  /// Ya se resolvió (entregado, rechazado o cancelado) — no necesita más
-  /// acción ni debe agruparse por fecha programada (ver Historial en
-  /// ListaPedidosPorSeccion). Solo SOLICITADO/PENDIENTE siguen "activos".
-  bool get esFinalizado =>
-      estado == 'ENTREGADO' || estado == 'RECHAZADO' || estado == 'CANCELADO';
-
-  /// El cliente puede cancelarlo mientras no se haya entregado todavía.
-  bool get sePuedeCancelar => estado == 'SOLICITADO' || estado == 'PENDIENTE';
 }

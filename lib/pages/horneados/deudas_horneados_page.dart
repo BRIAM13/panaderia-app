@@ -37,7 +37,7 @@ class _DeudasHorneadosPageState extends State<DeudasHorneadosPage> {
   final _horneadosService = HorneadosService();
   final _pedidosService = PedidosService();
 
-  List<PedidoHorneado> _deudas = [];
+  List<Pedido> _deudas = [];
   bool _cargando = true;
   String? _error;
 
@@ -64,8 +64,7 @@ class _DeudasHorneadosPageState extends State<DeudasHorneadosPage> {
     }
   }
 
-  Future<void> _marcarPagada(PedidoHorneado horneado) async {
-    final pedido = horneado.pedido;
+  Future<void> _marcarPagada(Pedido pedido) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -263,13 +262,13 @@ class _DeudasHorneadosPageState extends State<DeudasHorneadosPage> {
     );
   }
 
-  List<_GrupoDeuda> _agruparPorCliente(List<PedidoHorneado> deudas) {
-    final mapa = <int, List<PedidoHorneado>>{};
-    for (final horneado in deudas) {
-      mapa.putIfAbsent(horneado.pedido.idCliente, () => []).add(horneado);
+  List<_GrupoDeuda> _agruparPorCliente(List<Pedido> deudas) {
+    final mapa = <int, List<Pedido>>{};
+    for (final pedido in deudas) {
+      mapa.putIfAbsent(pedido.idCliente, () => []).add(pedido);
     }
     final grupos = mapa.entries
-        .map((e) => _GrupoDeuda(cliente: e.value.first.pedido.cliente, pedidos: e.value))
+        .map((e) => _GrupoDeuda(cliente: e.value.first.cliente, pedidos: e.value))
         .toList();
     grupos.sort((a, b) => b.total.compareTo(a.total));
     return grupos;
@@ -279,15 +278,15 @@ class _DeudasHorneadosPageState extends State<DeudasHorneadosPage> {
 class _GrupoDeuda {
   _GrupoDeuda({required this.cliente, required this.pedidos});
   final PedidoClienteResumen cliente;
-  final List<PedidoHorneado> pedidos;
-  double get total => pedidos.fold(0.0, (acc, p) => acc + p.pedido.total);
+  final List<Pedido> pedidos;
+  double get total => pedidos.fold(0.0, (acc, p) => acc + p.total);
 }
 
 class _GrupoDeudaHorneado extends StatelessWidget {
   const _GrupoDeudaHorneado({required this.grupo, required this.onMarcarPagada});
 
   final _GrupoDeuda grupo;
-  final ValueChanged<PedidoHorneado> onMarcarPagada;
+  final ValueChanged<Pedido> onMarcarPagada;
 
   @override
   Widget build(BuildContext context) {
@@ -336,8 +335,7 @@ class _GrupoDeudaHorneado extends StatelessWidget {
           ],
         ),
         const Divider(height: 20),
-        ...grupo.pedidos.map((horneado) {
-          final pedido = horneado.pedido;
+        ...grupo.pedidos.map((pedido) {
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
@@ -346,8 +344,12 @@ class _GrupoDeudaHorneado extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // `productoResumen` ya viene armado con la carne de
+                      // cada línea ("POLLO x2, CHANCHO x1") — acá es un
+                      // subtítulo compacto de cobranza, no la pantalla con
+                      // la que se prepara el pedido.
                       Text(
-                        'Pedido #${pedido.numeroPedidoDia} · ${horneado.carne ?? '—'} · S/ ${pedido.total.toStringAsFixed(2)}',
+                        'Pedido #${pedido.numeroPedidoDia} · ${pedido.productoResumen.isEmpty ? '—' : pedido.productoResumen} · S/ ${pedido.total.toStringAsFixed(2)}',
                         style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       if (pedido.fechaEntregaReal != null)
@@ -368,7 +370,7 @@ class _GrupoDeudaHorneado extends StatelessWidget {
                   ),
                 ),
                 OutlinedButton(
-                  onPressed: () => onMarcarPagada(horneado),
+                  onPressed: () => onMarcarPagada(pedido),
                   child: const Text('Marcar pagada'),
                 ),
               ],

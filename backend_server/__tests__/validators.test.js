@@ -2,6 +2,8 @@ const {
   validateConsultarPedidosPublico,
   validateSolicitarRecuperacion,
   validateConfirmarRecuperacion,
+  validarItemsPedido,
+  MAXIMO_ITEMS_POR_PEDIDO,
 } = require('../middlewares/validators');
 
 /** Simula res.status(x).json(y) capturando lo que se llamó, sin necesitar
@@ -127,5 +129,83 @@ describe('validateConfirmarRecuperacion', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
+  });
+});
+
+/**
+ * Regla compartida por las tres vías que crean pedidos de catálogo
+ * (personal, autoservicio y página web): lo único que cambia entre ellas es
+ * qué campos manda el cliente y cuáles deriva el controller.
+ */
+describe('validarItemsPedido', () => {
+  const itemValido = { idProducto: 3, tipoPedido: 'UNIDADES', cantidad: 10, precioUnitario: 1.5 };
+
+  test('un carrito válido no devuelve errores', () => {
+    expect(validarItemsPedido([itemValido], { requierePrecio: true, requiereTipoPedido: true })).toEqual([]);
+  });
+
+  test('rechaza un carrito vacío o ausente', () => {
+    expect(validarItemsPedido([])).toHaveLength(1);
+    expect(validarItemsPedido(undefined)).toHaveLength(1);
+    expect(validarItemsPedido(null)).toHaveLength(1);
+    // Un objeto suelto no es un carrito: el body viejo (un producto plano)
+    // tiene que fallar, no colarse como si fuera una línea.
+    expect(validarItemsPedido(itemValido)).toHaveLength(1);
+  });
+
+  test('rechaza más líneas que el máximo permitido', () => {
+    const muchos = Array.from({ length: MAXIMO_ITEMS_POR_PEDIDO + 1 }, () => itemValido);
+    const errores = validarItemsPedido(muchos);
+    expect(errores).toHaveLength(1);
+    expect(errores[0]).toMatch(new RegExp(String(MAXIMO_ITEMS_POR_PEDIDO)));
+  });
+
+  test('acepta exactamente el máximo', () => {
+    const justos = Array.from({ length: MAXIMO_ITEMS_POR_PEDIDO }, () => itemValido);
+    expect(validarItemsPedido(justos)).toEqual([]);
+  });
+
+  test('el error dice QUÉ línea está mal, no solo que hay una mala', () => {
+    const errores = validarItemsPedido([itemValido, { idProducto: 0, cantidad: 5 }]);
+    expect(errores[0]).toMatch(/Producto 2:/);
+  });
+
+  test('exige precio solo cuando el llamador lo pide', () => {
+    const sinPrecio = { idProducto: 3, cantidad: 10 };
+    expect(validarItemsPedido([sinPrecio])).toEqual([]);
+    expect(validarItemsPedido([sinPrecio], { requierePrecio: true })).toHaveLength(1);
+  });
+
+  test('exige tipoPedido solo cuando el llamador lo pide', () => {
+    const sinTipo = { idProducto: 3, cantidad: 10 };
+    expect(validarItemsPedido([sinTipo])).toEqual([]);
+    expect(validarItemsPedido([sinTipo], { requiereTipoPedido: true })).toHaveLength(1);
+    expect(validarItemsPedido([{ ...sinTipo, tipoPedido: 'CAJAS' }], { requiereTipoPedido: true })).toHaveLength(1);
+  });
+
+  test('la cantidad debe ser un entero positivo', () => {
+    expect(validarItemsPedido([{ idProducto: 3, cantidad: 0 }])).toHaveLength(1);
+    expect(validarItemsPedido([{ idProducto: 3, cantidad: -5 }])).toHaveLength(1);
+    expect(validarItemsPedido([{ idProducto: 3, cantidad: 2.5 }])).toHaveLength(1);
+    expect(validarItemsPedido([{ idProducto: 3, cantidad: '10' }])).toHaveLength(1);
+  });
+
+  test('cantidadMaxima solo aplica cuando se pasa (la usa la web pública)', () => {
+    const enorme = [{ idProducto: 3, cantidad: 900 }];
+    expect(validarItemsPedido(enorme)).toEqual([]);
+    expect(validarItemsPedido(enorme, { cantidadMaxima: 500 })).toHaveLength(1);
+    expect(validarItemsPedido([{ idProducto: 3, cantidad: 500 }], { cantidadMaxima: 500 })).toEqual([]);
+  });
+
+  test('un precio de 0 o negativo no pasa cuando se exige precio', () => {
+    expect(validarItemsPedido([{ ...itemValido, precioUnitario: 0 }], { requierePrecio: true })).toHaveLength(1);
+    expect(validarItemsPedido([{ ...itemValido, precioUnitario: -1 }], { requierePrecio: true })).toHaveLength(1);
+    expect(validarItemsPedido([{ ...itemValido, precioUnitario: NaN }], { requierePrecio: true })).toHaveLength(1);
+  });
+
+  test('una línea que no es un objeto se reporta sin reventar', () => {
+    expect(validarItemsPedido([null])).toHaveLength(1);
+    expect(validarItemsPedido(['pan'])).toHaveLength(1);
+    expect(validarItemsPedido([[]])).toHaveLength(1);
   });
 });
