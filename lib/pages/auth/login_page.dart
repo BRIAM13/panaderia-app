@@ -363,6 +363,12 @@ class _LoginPageState extends State<LoginPage> {
                       begin: const Offset(0.85, 0.85),
                       end: const Offset(1, 1),
                     ),
+                // El recorte de la mascota termina justo en el ruedo de la
+                // chaqueta, sin margen propio, así que sin esto el texto
+                // queda pegado al personaje. Escala con el resto: en
+                // pantallas bajas el espacio se achica antes que desaparecer
+                // el pie de página.
+                SizedBox(height: esEscritorio ? 14 : esc(10, 18)),
                 Text(
                       'Panadería Ronceros',
                       textAlign: TextAlign.center,

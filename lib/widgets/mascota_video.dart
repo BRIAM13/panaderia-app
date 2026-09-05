@@ -86,16 +86,21 @@ class _MascotaVideoState extends State<MascotaVideo>
   // el personaje. Un WebP animado tampoco sirve: CanvasKit lo decodifica
   // pero `Image` solo pinta su primer cuadro en Web (no hay bug que
   // resolver, es una limitación de esa combinación). La versión web anima
-  // a mano: los 80 fotogramas del clip completo (10s a 8fps — la misma
-  // tasa a la que se extrajeron del video original), WebP estático uno por
-  // archivo, con el mismo matte de alfa del video y un contorno fino ya
-  // horneados, ciclados con un Timer. 80 y no un subconjunto: reproducir
-  // menos fotogramas a 8fps acorta la duración real del gesto y el
-  // personaje se ve acelerado — acá la cantidad de fotogramas coincide con
-  // la duración real del clip para que la velocidad sea la misma que en
-  // Android/iOS, donde sí hay una textura capturable por AnimatedSampler.
-  static const _cantidadFotogramasWeb = 80;
-  static const _fpsWeb = 8;
+  // a mano: los 240 fotogramas del clip completo (10s a 24fps), WebP
+  // estático uno por archivo, con el mismo matte de alfa del video y un
+  // contorno fino ya horneados, ciclados con el reloj de vsync.
+  //
+  // 24fps y no menos: es exactamente la tasa del mp4 original (240 cuadros
+  // en 10s), así que cada WebP corresponde 1:1 con un cuadro del video y
+  // no hay remuestreo. A 8fps la duración total del gesto era correcta
+  // pero el movimiento se leía a saltos; bajar a 16 habría obligado a
+  // descartar 1 de cada 3 cuadros, con un espaciado irregular que se ve
+  // peor que un 16 parejo. La cantidad de fotogramas tiene que seguir
+  // coincidiendo con la duración real del clip: reproducir un subconjunto
+  // acorta el gesto y el personaje se ve acelerado respecto de Android/iOS,
+  // donde sí hay una textura capturable por AnimatedSampler.
+  static const _cantidadFotogramasWeb = 240;
+  static const _fpsWeb = 24;
   static const _carpetaFotogramasReposo = 'assets/mascota/frames_reposo';
   static const _carpetaFotogramasSaludo = 'assets/mascota/frames_saludo';
 
@@ -103,7 +108,6 @@ class _MascotaVideoState extends State<MascotaVideo>
       '$carpeta/f_${indice.toString().padLeft(3, '0')}.webp';
 
   int _fotogramaWeb = 0;
-  Timer? _temporizadorWeb;
 
   /// El programa se compila una sola vez por proceso: el splash y el login
   /// montan la mascota uno detrás del otro y no tiene sentido recompilar.
@@ -120,7 +124,7 @@ class _MascotaVideoState extends State<MascotaVideo>
 
   Future<void> _inicializar() async {
     // En web no se inicializa video ni shader: se precargan los fotogramas
-    // sueltos y se cicla entre ellos con un Timer (ver comentario de
+    // sueltos y se cicla entre ellos con un Ticker (ver comentario de
     // _carpetaFotogramasReposo/_carpetaFotogramasSaludo más arriba).
     if (kIsWeb) {
       await _inicializarWeb();
@@ -191,41 +195,86 @@ class _MascotaVideoState extends State<MascotaVideo>
     await (saludo ?? reposo)!.play();
   }
 
-  /// Precarga los 20 fotogramas de la carpeta correspondiente al modo (para
-  /// que el primer loop no parpadee esperando cada descarga) y arranca el
-  /// Timer que los cicla. `soloSaludo`/`saludarAlInicio` animan el saludo;
+  /// Precarga los fotogramas de la carpeta correspondiente al modo y arranca
+  /// el Timer que los cicla. `soloSaludo`/`saludarAlInicio` animan el saludo;
   /// `reposo` anima el reposo — a diferencia de la variante con video, acá
   /// no hay crossfade entre ambos clips, es uno u otro fijo por simplicidad.
+  ///
+  /// Solo se espera el primer segundo de animación (`_fpsWeb` fotogramas) y
+  /// el resto se sigue descargando de fondo: son 240 archivos, y esperarlos
+  /// todos dejaba la mascota en blanco varios segundos en la primera carga.
+  /// El reloj avanza a 24 cuadros por segundo mientras la descarga va muy
+  /// por delante, y si algún archivo llegara tarde `gaplessPlayback` mantiene
+  /// el cuadro anterior en pantalla en vez de parpadear.
   Future<void> _inicializarWeb() async {
     final saludando = widget.modo != ModoMascota.reposo;
     final carpeta = saludando
         ? _carpetaFotogramasSaludo
         : _carpetaFotogramasReposo;
 
+    // El cache de imágenes de Flutter guarda 100MB por defecto y los 240
+    // fotogramas decodificados ocupan ~147MB, así que con el límite de
+    // fábrica el ciclo desalojaba y volvía a decodificar cada cuadro: el
+    // reloj avanzaba a 24fps pero solo llegaban a pintarse ~12 imágenes por
+    // segundo, con saltos de hasta medio segundo — justo la sensación de
+    // tirones. Con la secuencia entera residente, después de la primera
+    // vuelta no se decodifica nada más.
+    final cache = PaintingBinding.instance.imageCache;
+    const necesario = 200 << 20;
+    if (cache.maximumSizeBytes < necesario) {
+      cache.maximumSizeBytes = necesario;
+    }
+
+    Future<void> precargar(int desde, int hasta) => Future.wait([
+      for (var i = desde; i < hasta; i++)
+        precacheImage(AssetImage(_rutaFotogramaWeb(carpeta, i)), context),
+    ]);
+
+    // El resto va en lotes chicos y encadenados, no todos de una: cada
+    // `precacheImage` decodifica el WebP en el hilo principal, y lanzar los
+    // 216 restantes juntos lo dejaba ocupado varios segundos seguidos — el
+    // personaje recién aparecía a los ~9s aunque sus fotogramas ya
+    // estuvieran descargados. Entre lote y lote el hilo queda libre para
+    // pintar. La descarga va muy por delante del consumo (un lote de 8 se
+    // decodifica bastante más rápido que el tercio de segundo que tarda la
+    // animación en atravesarlo).
+    Future<void> precargarResto(int desde) async {
+      for (var i = desde; i < _cantidadFotogramasWeb; i += 8) {
+        if (!mounted) return;
+        final hasta = i + 8;
+        await precargar(
+          i,
+          hasta > _cantidadFotogramasWeb ? _cantidadFotogramasWeb : hasta,
+        );
+      }
+    }
+
     if (mounted) {
-      await Future.wait([
-        for (var i = 0; i < _cantidadFotogramasWeb; i++)
-          precacheImage(
-            AssetImage(_rutaFotogramaWeb(carpeta, i)),
-            context,
-          ),
-      ]);
+      const inicial = _fpsWeb;
+      await precargar(0, inicial);
+      if (mounted) {
+        unawaited(precargarResto(inicial));
+      }
     }
 
     if (!mounted) return;
 
     setState(() => _listo = true);
 
-    _temporizadorWeb = Timer.periodic(
-      Duration(milliseconds: (1000 / _fpsWeb).round()),
-      (_) {
-        if (!mounted) return;
-        setState(
-          () => _fotogramaWeb =
-              (_fotogramaWeb + 1) % _cantidadFotogramasWeb,
-        );
-      },
-    );
+    // El fotograma se deduce del tiempo transcurrido en cada vsync, en vez
+    // de avanzar de a uno con un Timer.periodic: 1000/24 = 41.6ms no es
+    // múltiplo del vsync, así que un Timer redondeado a 42ms además de
+    // atrasarse medio segundo por vuelta dejaba cada cuadro en pantalla un
+    // número desparejo de refrescos (2 o 3), que es justamente la sensación
+    // de tirones. Con el reloj de vsync la cadencia es la misma que la de
+    // cualquier video de 24fps en una pantalla de 60Hz.
+    _reloj = createTicker((transcurrido) {
+      if (!mounted) return;
+      final indice =
+          (transcurrido.inMicroseconds * _fpsWeb ~/ Duration.microsecondsPerSecond) %
+          _cantidadFotogramasWeb;
+      if (indice != _fotogramaWeb) setState(() => _fotogramaWeb = indice);
+    })..start();
   }
 
   /// El listener de `video_player` dispara en cada tick de progreso, no
@@ -252,7 +301,6 @@ class _MascotaVideoState extends State<MascotaVideo>
   @override
   void dispose() {
     _reloj?.dispose();
-    _temporizadorWeb?.cancel();
     _reposo?.dispose();
     _saludo?.dispose();
     super.dispose();
