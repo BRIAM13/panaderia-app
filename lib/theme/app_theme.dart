@@ -201,6 +201,29 @@ ThemeData buildAppTheme() {
         );
       }),
     ),
+    // El Switch no tenía theming propio: al derivar todo del ColorScheme
+    // (ahora con un primario mucho más saturado), su estado APAGADO se
+    // volvía casi del mismo tono que el fondo crema de la tarjeta y perdía
+    // la lectura de "gris/inactivo". Acá se le da un gris neutro real,
+    // deliberadamente FUERA de la paleta cálida de la app (única excepción
+    // a la regla de arriba: es un control de estado, no una superficie de
+    // marca, y necesita leerse como gris para que "apagado" se entienda).
+    switchTheme: SwitchThemeData(
+      trackColor: WidgetStateProperty.resolveWith((estados) {
+        if (estados.contains(WidgetState.selected)) return AppColors.primary;
+        return const Color(0xFFD6D2CB);
+      }),
+      trackOutlineColor: WidgetStateProperty.resolveWith((estados) {
+        if (estados.contains(WidgetState.selected)) {
+          return Colors.transparent;
+        }
+        return const Color(0xFF8F897E);
+      }),
+      thumbColor: WidgetStateProperty.resolveWith((estados) {
+        if (estados.contains(WidgetState.selected)) return Colors.white;
+        return const Color(0xFF716B5F);
+      }),
+    ),
     // El riel de tablet usa la misma gramática que la barra de celular para
     // que cambiar de tamaño de pantalla no cambie el lenguaje visual.
     navigationRailTheme: NavigationRailThemeData(

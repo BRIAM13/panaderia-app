@@ -176,6 +176,15 @@ flutter:
     # contrastaba). Generada desde el mismo matte alfa de los clips.
     - assets/mascota/sombra_panadero.png
     - assets/mascota/sombra_panadero_saludo.png
+    # Secuencia de fotogramas (WebP estático, uno por archivo) con
+    # transparencia real y contorno de separación ya horneados. Flutter Web
+    # renderiza `video_player` como un <video> nativo del navegador (no como
+    # textura GPU: AnimatedSampler no puede capturarlo) y además CanvasKit
+    # no reproduce WebP ANIMADO multi-frame vía Image — por eso acá se anima
+    # a mano ciclando estos fotogramas sueltos con un Timer. Ver
+    # mascota_video.dart.
+    - assets/mascota/frames_saludo/
+    - assets/mascota/frames_reposo/
 
   # Recompone el canal alfa que viene empaquetado dentro del MP4 de la
   # mascota, para que el panadero se dibuje con transparencia real.

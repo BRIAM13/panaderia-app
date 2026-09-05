@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_shaders/flutter_shaders.dart';
@@ -78,6 +80,31 @@ class _MascotaVideoState extends State<MascotaVideo>
   static const _rutaSombraSaludo =
       'assets/mascota/sombra_panadero_saludo.png';
 
+  // Flutter Web pinta `video_player` como un <video> del DOM (no como una
+  // textura Skia/Impeller), así que `AnimatedSampler` no puede capturarlo
+  // para recomponer el alfa — el resultado es un cuadro vacío o basura, no
+  // el personaje. Un WebP animado tampoco sirve: CanvasKit lo decodifica
+  // pero `Image` solo pinta su primer cuadro en Web (no hay bug que
+  // resolver, es una limitación de esa combinación). La versión web anima
+  // a mano: los 80 fotogramas del clip completo (10s a 8fps — la misma
+  // tasa a la que se extrajeron del video original), WebP estático uno por
+  // archivo, con el mismo matte de alfa del video y un contorno fino ya
+  // horneados, ciclados con un Timer. 80 y no un subconjunto: reproducir
+  // menos fotogramas a 8fps acorta la duración real del gesto y el
+  // personaje se ve acelerado — acá la cantidad de fotogramas coincide con
+  // la duración real del clip para que la velocidad sea la misma que en
+  // Android/iOS, donde sí hay una textura capturable por AnimatedSampler.
+  static const _cantidadFotogramasWeb = 80;
+  static const _fpsWeb = 8;
+  static const _carpetaFotogramasReposo = 'assets/mascota/frames_reposo';
+  static const _carpetaFotogramasSaludo = 'assets/mascota/frames_saludo';
+
+  static String _rutaFotogramaWeb(String carpeta, int indice) =>
+      '$carpeta/f_${indice.toString().padLeft(3, '0')}.webp';
+
+  int _fotogramaWeb = 0;
+  Timer? _temporizadorWeb;
+
   /// El programa se compila una sola vez por proceso: el splash y el login
   /// montan la mascota uno detrás del otro y no tiene sentido recompilar.
   static Future<ui.FragmentProgram>? _programaCache;
@@ -92,6 +119,14 @@ class _MascotaVideoState extends State<MascotaVideo>
   }
 
   Future<void> _inicializar() async {
+    // En web no se inicializa video ni shader: se precargan los fotogramas
+    // sueltos y se cicla entre ellos con un Timer (ver comentario de
+    // _carpetaFotogramasReposo/_carpetaFotogramasSaludo más arriba).
+    if (kIsWeb) {
+      await _inicializarWeb();
+      return;
+    }
+
     VideoPlayerController? reposo;
     VideoPlayerController? saludo;
 
@@ -156,6 +191,43 @@ class _MascotaVideoState extends State<MascotaVideo>
     await (saludo ?? reposo)!.play();
   }
 
+  /// Precarga los 20 fotogramas de la carpeta correspondiente al modo (para
+  /// que el primer loop no parpadee esperando cada descarga) y arranca el
+  /// Timer que los cicla. `soloSaludo`/`saludarAlInicio` animan el saludo;
+  /// `reposo` anima el reposo — a diferencia de la variante con video, acá
+  /// no hay crossfade entre ambos clips, es uno u otro fijo por simplicidad.
+  Future<void> _inicializarWeb() async {
+    final saludando = widget.modo != ModoMascota.reposo;
+    final carpeta = saludando
+        ? _carpetaFotogramasSaludo
+        : _carpetaFotogramasReposo;
+
+    if (mounted) {
+      await Future.wait([
+        for (var i = 0; i < _cantidadFotogramasWeb; i++)
+          precacheImage(
+            AssetImage(_rutaFotogramaWeb(carpeta, i)),
+            context,
+          ),
+      ]);
+    }
+
+    if (!mounted) return;
+
+    setState(() => _listo = true);
+
+    _temporizadorWeb = Timer.periodic(
+      Duration(milliseconds: (1000 / _fpsWeb).round()),
+      (_) {
+        if (!mounted) return;
+        setState(
+          () => _fotogramaWeb =
+              (_fotogramaWeb + 1) % _cantidadFotogramasWeb,
+        );
+      },
+    );
+  }
+
   /// El listener de `video_player` dispara en cada tick de progreso, no
   /// solo al terminar — `_mostrandoSaludo` evita repetir la transición en
   /// las llamadas siguientes una vez que ya se disparó la primera vez.
@@ -180,6 +252,7 @@ class _MascotaVideoState extends State<MascotaVideo>
   @override
   void dispose() {
     _reloj?.dispose();
+    _temporizadorWeb?.cancel();
     _reposo?.dispose();
     _saludo?.dispose();
     super.dispose();
@@ -249,9 +322,62 @@ class _MascotaVideoState extends State<MascotaVideo>
     );
   }
 
+  /// Contenido del Stack central (680x900) para la variante web: la foto
+  /// fija correspondiente al modo, con la misma silueta de fondo que usa
+  /// la variante con video, para que ambas plataformas se vean parejas.
+  Widget _contenidoWeb() {
+    final saludando = widget.modo != ModoMascota.reposo;
+    final carpeta = saludando
+        ? _carpetaFotogramasSaludo
+        : _carpetaFotogramasReposo;
+    final rutaSombra = saludando ? _rutaSombraSaludo : _rutaSombraReposo;
+
+    final foto = Image.asset(
+      _rutaFotogramaWeb(carpeta, _fotogramaWeb),
+      fit: BoxFit.fill,
+      excludeFromSemantics: true,
+      gaplessPlayback: true,
+    );
+
+    if (!widget.mostrarSombra) return foto;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned(
+          left: -9,
+          top: 4,
+          width: _anchoClip * 1.05,
+          height: _altoClip * 1.05,
+          child: Image.asset(
+            rutaSombra,
+            fit: BoxFit.fill,
+            excludeFromSemantics: true,
+          ),
+        ),
+        foto,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_listo) return SizedBox(width: widget.width, height: widget.height);
+
+    if (kIsWeb) {
+      return SizedBox(
+        width: widget.width,
+        height: widget.height,
+        child: FittedBox(
+          fit: BoxFit.contain,
+          child: SizedBox(
+            width: _anchoClip,
+            height: _altoClip,
+            child: _contenidoWeb(),
+          ),
+        ),
+      );
+    }
 
     // FittedBox + un tamaño intrínseco fijo (en vez de Stack/StackFit.expand
     // directo sobre VideoPlayer) preserva la proporción real del recorte
