@@ -86,23 +86,100 @@ class _MascotaVideoState extends State<MascotaVideo>
   // el personaje. Un WebP animado tampoco sirve: CanvasKit lo decodifica
   // pero `Image` solo pinta su primer cuadro en Web (no hay bug que
   // resolver, es una limitación de esa combinación). La versión web anima
-  // a mano: los 240 fotogramas del clip completo (10s a 24fps), WebP
-  // estático uno por archivo, con el mismo matte de alfa del video y un
-  // contorno fino ya horneados, ciclados con el reloj de vsync.
+  // a mano: los fotogramas del clip como WebP estático uno por archivo, con
+  // el mismo matte de alfa del video y un contorno fino ya horneados,
+  // ciclados con el reloj de vsync.
   //
   // 24fps y no menos: es exactamente la tasa del mp4 original (240 cuadros
   // en 10s), así que cada WebP corresponde 1:1 con un cuadro del video y
   // no hay remuestreo. A 8fps la duración total del gesto era correcta
   // pero el movimiento se leía a saltos; bajar a 16 habría obligado a
   // descartar 1 de cada 3 cuadros, con un espaciado irregular que se ve
-  // peor que un 16 parejo. La cantidad de fotogramas tiene que seguir
-  // coincidiendo con la duración real del clip: reproducir un subconjunto
-  // acorta el gesto y el personaje se ve acelerado respecto de Android/iOS,
-  // donde sí hay una textura capturable por AnimatedSampler.
-  static const _cantidadFotogramasWeb = 240;
+  // peor que un 16 parejo. Los cuadros se consumen todos, sin saltear: un
+  // subconjunto salteado acorta el gesto y el personaje se ve acelerado
+  // respecto de Android/iOS, donde sí hay una textura capturable por
+  // AnimatedSampler.
+  //
+  // Las carpetas NO traen los 240 cuadros del mp4, sino el tramo que cierra
+  // el ciclo sobre sí mismo. El clip original no es un loop: entre su último
+  // cuadro y el primero el personaje está desplazado casi 20px (el render
+  // tiene un leve vaivén de cámara/cuerpo a lo largo de los 10s), y ese salto
+  // de golpe al reiniciar es exactamente lo que delataba que era un video que
+  // terminaba y volvía a empezar. Comparando cada cuadro contra todos los
+  // demás por diferencia cuadrática media sobre el RGBA premultiplicado se
+  // buscó el par (primero, último) cuya transición se pareciera lo más
+  // posible a un paso entre dos cuadros consecutivos cualesquiera — que es el
+  // nivel de salto que el ojo ya no distingue:
+  //
+  //   saludo: cuadros 20..198 del mp4 -> 179 archivos (7.46s). El salto de
+  //           cierre pasó de 11.7x a 2.8x la diferencia entre consecutivos.
+  //           No se pudo bajar más: donde el cuerpo calzaba mejor (cuadro
+  //           195) el personaje está en mitad de un parpadeo (190-197) y los
+  //           ojos cerrados chocaban contra los abiertos del arranque, y un
+  //           crossfade sobre ese tramo disolvía las pupilas — se veía peor
+  //           que el corte.
+  //   reposo: cuadros 4..228 del mp4 -> 225 archivos (9.38s). El salto quedó
+  //           en 1.1x el de dos consecutivos, o sea indistinguible.
+  //
+  // Los cuadros sobrantes de cada clip no se copiaron a assets/: los archivos
+  // están renumerados desde f_000 y las carpetas contienen exactamente el
+  // ciclo. El mp4 completo sigue en assets/mascota/ para Android/iOS.
+  static const _cantidadFotogramasWebSaludo = 179;
+  static const _cantidadFotogramasWebReposo = 225;
   static const _fpsWeb = 24;
   static const _carpetaFotogramasReposo = 'assets/mascota/frames_reposo';
   static const _carpetaFotogramasSaludo = 'assets/mascota/frames_saludo';
+
+  // Lienzo de la variante web, SEPARADO de _anchoClip/_altoClip (que son del
+  // cuadro empaquetado del video y las usa la rama de Android/iOS).
+  //
+  // Los fotogramas web ya vienen recortados al mínimo rectángulo que contiene
+  // el personaje en TODOS los cuadros del ciclo (la unión de los 240 bounding
+  // boxes, no un cuadro suelto: la mano en movimiento cambia el contorno
+  // fotograma a fotograma) más ~6px de aire para que el contorno mocha no
+  // roce el borde. Los 680x900 del video traían mucho vacío alrededor —
+  // 160px muertos arriba en el saludo, 79 arriba y 39/76 a los lados en el
+  // reposo — y con `BoxFit.contain` ese vacío se comía escala: el personaje
+  // se dibujaba bastante más chico que el hueco que se le reservaba.
+  //
+  // Las medidas son distintas por clip a propósito. El panadero no está
+  // encuadrado igual en los dos (mismo motivo por el que hay una silueta por
+  // clip, ver _rutaSombraReposo/_rutaSombraSaludo): en el saludo el brazo
+  // extendido lo hace más ancho y más bajo. Un lienzo común del tamaño del
+  // mayor devolvería justo el margen vacío que este cambio saca. En web solo
+  // se anima una secuencia por vez (no hay crossfade entre clips), así que
+  // elegir el par según el modo no cuesta nada.
+  static const _anchoClipWebSaludo = 583.0;
+  static const _altoClipWebSaludo = 746.0;
+  static const _anchoClipWebReposo = 577.0;
+  static const _altoClipWebReposo = 826.0;
+
+  // Origen de cada ventana de recorte dentro del cuadro original de 680x900.
+  // Solo se usa para reubicar la silueta de fondo, que está dibujada en las
+  // coordenadas del cuadro completo. El saludo arranca en -6 porque la mano
+  // llega a tocar x=0 en once cuadros del gesto (el mp4 fuente ya trae el
+  // meñique cortado contra el borde del lienzo de color) y esa columna extra
+  // le deja lugar al contorno para cerrar ese borde.
+  static const _origenXWebSaludo = -6.0;
+  static const _origenYWebSaludo = 154.0;
+  static const _origenXWebReposo = 33.0;
+  static const _origenYWebReposo = 73.0;
+
+  bool get _saludandoWeb => widget.modo != ModoMascota.reposo;
+
+  /// Cada clip cierra su ciclo en un cuadro distinto (ver el comentario de
+  /// _cantidadFotogramasWebSaludo), así que el largo del loop es por clip.
+  /// En web solo se anima una secuencia por instancia, así que alcanza con
+  /// elegirla una vez según el modo.
+  int get _cantidadFotogramasWeb => _saludandoWeb
+      ? _cantidadFotogramasWebSaludo
+      : _cantidadFotogramasWebReposo;
+
+  double get _anchoLienzoWeb =>
+      _saludandoWeb ? _anchoClipWebSaludo : _anchoClipWebReposo;
+
+  double get _altoLienzoWeb =>
+      _saludandoWeb ? _altoClipWebSaludo : _altoClipWebReposo;
 
   static String _rutaFotogramaWeb(String carpeta, int indice) =>
       '$carpeta/f_${indice.toString().padLeft(3, '0')}.webp';
@@ -201,7 +278,7 @@ class _MascotaVideoState extends State<MascotaVideo>
   /// no hay crossfade entre ambos clips, es uno u otro fijo por simplicidad.
   ///
   /// Solo se espera el primer segundo de animación (`_fpsWeb` fotogramas) y
-  /// el resto se sigue descargando de fondo: son 240 archivos, y esperarlos
+  /// el resto se sigue descargando de fondo: son ~200 archivos, y esperarlos
   /// todos dejaba la mascota en blanco varios segundos en la primera carga.
   /// El reloj avanza a 24 cuadros por segundo mientras la descarga va muy
   /// por delante, y si algún archivo llegara tarde `gaplessPlayback` mantiene
@@ -212,8 +289,8 @@ class _MascotaVideoState extends State<MascotaVideo>
         ? _carpetaFotogramasSaludo
         : _carpetaFotogramasReposo;
 
-    // El cache de imágenes de Flutter guarda 100MB por defecto y los 240
-    // fotogramas decodificados ocupan ~147MB, así que con el límite de
+    // El cache de imágenes de Flutter guarda 100MB por defecto y la secuencia
+    // decodificada entera ocupa ~110-140MB, así que con el límite de
     // fábrica el ciclo desalojaba y volvía a decodificar cada cuadro: el
     // reloj avanzaba a 24fps pero solo llegaban a pintarse ~12 imágenes por
     // segundo, con saltos de hasta medio segundo — justo la sensación de
@@ -231,8 +308,8 @@ class _MascotaVideoState extends State<MascotaVideo>
     ]);
 
     // El resto va en lotes chicos y encadenados, no todos de una: cada
-    // `precacheImage` decodifica el WebP en el hilo principal, y lanzar los
-    // 216 restantes juntos lo dejaba ocupado varios segundos seguidos — el
+    // `precacheImage` decodifica el WebP en el hilo principal, y lanzar todos
+    // los restantes juntos lo dejaba ocupado varios segundos seguidos — el
     // personaje recién aparecía a los ~9s aunque sus fotogramas ya
     // estuvieran descargados. Entre lote y lote el hilo queda libre para
     // pintar. La descarga va muy por delante del consumo (un lote de 8 se
@@ -370,11 +447,11 @@ class _MascotaVideoState extends State<MascotaVideo>
     );
   }
 
-  /// Contenido del Stack central (680x900) para la variante web: la foto
-  /// fija correspondiente al modo, con la misma silueta de fondo que usa
-  /// la variante con video, para que ambas plataformas se vean parejas.
+  /// Contenido del Stack central para la variante web: el fotograma que toca
+  /// según el modo, con la misma silueta de fondo que usa la variante con
+  /// video, para que ambas plataformas se vean parejas.
   Widget _contenidoWeb() {
-    final saludando = widget.modo != ModoMascota.reposo;
+    final saludando = _saludandoWeb;
     final carpeta = saludando
         ? _carpetaFotogramasSaludo
         : _carpetaFotogramasReposo;
@@ -389,12 +466,19 @@ class _MascotaVideoState extends State<MascotaVideo>
 
     if (!widget.mostrarSombra) return foto;
 
+    // La silueta está dibujada en las coordenadas del cuadro completo de
+    // 680x900, así que se la corre por el origen de la ventana de recorte
+    // para que siga cayendo exactamente detrás del personaje. El -9/+4 es el
+    // mismo desfase de "luz desde arriba" que usa la rama con video.
+    final origenX = saludando ? _origenXWebSaludo : _origenXWebReposo;
+    final origenY = saludando ? _origenYWebSaludo : _origenYWebReposo;
+
     return Stack(
       fit: StackFit.expand,
       children: [
         Positioned(
-          left: -9,
-          top: 4,
+          left: -9 - origenX,
+          top: 4 - origenY,
           width: _anchoClip * 1.05,
           height: _altoClip * 1.05,
           child: Image.asset(
@@ -419,8 +503,8 @@ class _MascotaVideoState extends State<MascotaVideo>
         child: FittedBox(
           fit: BoxFit.contain,
           child: SizedBox(
-            width: _anchoClip,
-            height: _altoClip,
+            width: _anchoLienzoWeb,
+            height: _altoLienzoWeb,
             child: _contenidoWeb(),
           ),
         ),
