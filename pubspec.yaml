@@ -101,17 +101,6 @@ dependencies:
   # al registrar un método de pago.
   image_picker: ^1.1.2
 
-  # Reproduce los clips cortos en loop de la mascota (panadero 3D animado)
-  # en el splash y el login — assets/mascota/, ver MascotaVideo.
-  video_player: ^2.9.5
-
-  # `AnimatedSampler`: aplica un fragment shader al contenido de un widget
-  # que se redibuja en cada frame (la textura del video de la mascota). Es
-  # lo que permite recomponer el canal alfa empaquetado en el MP4 y que el
-  # panadero salga con transparencia real en vez de con un rectángulo de
-  # fondo. Ver MascotaVideo y shaders/mascota_alfa.frag.
-  flutter_shaders: ^0.1.3
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -169,27 +158,16 @@ flutter:
   assets:
     - assets/icon/app_icon.png
     - assets/icon/app_icon_foreground.png
-    - assets/mascota/panadero_reposo.mp4
-    - assets/mascota/panadero_saludo.mp4
-    # Silueta desenfocada del personaje: se pinta detrás del video para
-    # darle separación del fondo crema (el uniforme blanco casi no
-    # contrastaba). Generada desde el mismo matte alfa de los clips.
-    - assets/mascota/sombra_panadero.png
-    - assets/mascota/sombra_panadero_saludo.png
     # Secuencia de fotogramas (WebP estático, uno por archivo) con
-    # transparencia real y contorno de separación ya horneados. Flutter Web
-    # renderiza `video_player` como un <video> nativo del navegador (no como
-    # textura GPU: AnimatedSampler no puede capturarlo) y además CanvasKit
-    # no reproduce WebP ANIMADO multi-frame vía Image — por eso acá se anima
-    # a mano ciclando estos fotogramas sueltos con un Timer. Ver
-    # mascota_video.dart.
+    # transparencia real y contorno de separación ya horneados. Es la ÚNICA
+    # fuente de la animación de la mascota en TODAS las plataformas
+    # (Android, iOS y Web): se ciclan a mano con el reloj de vsync. Antes
+    # Android/iOS usaban el MP4 original + un fragment shader que recomponía
+    # su alfa empaquetado, pero ese pipeline paralelo se veía distinto del
+    # de Web (más amarillento, personaje más chico, salto al reiniciar el
+    # loop). Ver mascota_video.dart.
     - assets/mascota/frames_saludo/
     - assets/mascota/frames_reposo/
-
-  # Recompone el canal alfa que viene empaquetado dentro del MP4 de la
-  # mascota, para que el panadero se dibuje con transparencia real.
-  shaders:
-    - shaders/mascota_alfa.frag
 
   # Sin esto, Flutter Web (CanvasKit) usa la fuente por defecto (Roboto)
   # descargándola de la red recién al pintar el primer texto. Empaquetar
