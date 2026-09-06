@@ -1,0 +1,19 @@
+# Blueprint de Render para el microservicio de predicción de demanda
+# (ml_service/). El backend Node ya corre en Render de forma manual; este
+# archivo permite crear el servicio del ml_service con "New > Blueprint"
+# en el dashboard de Render en vez de configurarlo campo por campo.
+#
+# El modelo entrenado (ml_service/modelos/modelo_demanda.joblib) ya está
+# versionado en el repo, así que no hace falta entrenar en el build: el
+# servicio arranca y lo carga directo.
+services:
+  - type: web
+    name: panaderia-ml-service
+    runtime: python
+    rootDir: ml_service
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
