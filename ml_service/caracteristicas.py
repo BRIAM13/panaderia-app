@@ -16,6 +16,7 @@ from typing import Iterable
 
 import pandas as pd
 
+import catalogo
 import feriados_peru
 
 # Variables tratadas como categóricas (se codifican one-hot). El día de la
@@ -23,6 +24,14 @@ import feriados_peru
 # entre "lunes" (0) y "domingo" (6) no es 6, y diciembre no es "11 más" que
 # enero — son ciclos, no escalas.
 COLUMNAS_CATEGORICAS = ["id_tienda", "id_producto", "dia_semana", "mes"]
+
+# Variante CON el rubro de la tienda. `tipo_rubro` se deriva de `id_tienda`
+# vía `catalogo.rubro_de_tienda`, nunca se recibe desde afuera: si el llamador
+# pudiera mandarlo, una tienda podría llegar etiquetada de una forma en
+# entrenamiento y de otra en inferencia, que es exactamente el skew que este
+# módulo existe para evitar.
+COLUMNAS_CATEGORICAS_CON_RUBRO = ["id_tienda", "tipo_rubro", "id_producto",
+                                  "dia_semana", "mes"]
 
 COLUMNAS_NUMERICAS = [
     "dia_del_mes",
@@ -36,12 +45,30 @@ COLUMNAS_NUMERICAS = [
     "dias_desde_inicio",
 ]
 
+# Contrato por defecto (13 variables: 4 categóricas + 9 numéricas). Es el que
+# consume el modelo desplegado; se mantiene intacto a propósito.
 COLUMNAS = COLUMNAS_CATEGORICAS + COLUMNAS_NUMERICAS
+
+# Contrato del experimento de rubro (14 variables).
+COLUMNAS_CON_RUBRO = COLUMNAS_CATEGORICAS_CON_RUBRO + COLUMNAS_NUMERICAS
+
+
+def columnas_categoricas(incluir_rubro: bool = False) -> list[str]:
+    """Categóricas del contrato pedido, para armar el ColumnTransformer."""
+    return list(
+        COLUMNAS_CATEGORICAS_CON_RUBRO if incluir_rubro else COLUMNAS_CATEGORICAS
+    )
+
+
+def columnas(incluir_rubro: bool = False) -> list[str]:
+    """Contrato completo de features, en orden fijo."""
+    return list(COLUMNAS_CON_RUBRO if incluir_rubro else COLUMNAS)
 
 
 def _fila(fecha: date, id_tienda: int, id_producto: int, fecha_origen: date) -> dict:
     return {
         "id_tienda": id_tienda,
+        "tipo_rubro": catalogo.rubro_de_tienda(id_tienda),
         "id_producto": id_producto,
         "dia_semana": fecha.weekday(),          # lunes = 0 … domingo = 6
         "mes": fecha.month,
@@ -66,6 +93,7 @@ def _fila(fecha: date, id_tienda: int, id_producto: int, fecha_origen: date) -> 
 def construir(
     registros: Iterable[tuple[date, int, int]],
     fecha_origen: date,
+    incluir_rubro: bool = False,
 ) -> pd.DataFrame:
     """Convierte una secuencia de (fecha, id_tienda, id_producto) en el
     DataFrame de features, con las columnas siempre en el mismo orden.
@@ -73,20 +101,29 @@ def construir(
     `fecha_origen` es el primer día del historial de entrenamiento. Se guarda
     en la metadata del modelo y se vuelve a pasar en inferencia para que
     `dias_desde_inicio` signifique lo mismo en ambos lados.
+
+    `incluir_rubro` selecciona el contrato de features. NO es una opción que
+    el llamador elija a mano en inferencia: se lee de la metadata del modelo
+    entrenado (ver `predictor.py`), de modo que el juego de columnas siempre
+    sea el mismo con el que se ajustó el pipeline.
     """
+    cols = columnas(incluir_rubro)
     filas = [
         _fila(fecha, id_tienda, id_producto, fecha_origen)
         for fecha, id_tienda, id_producto in registros
     ]
     if not filas:
-        return pd.DataFrame(columns=COLUMNAS)
-    return pd.DataFrame(filas)[COLUMNAS]
+        return pd.DataFrame(columns=cols)
+    return pd.DataFrame(filas)[cols]
 
 
-def desde_dataframe(df: pd.DataFrame, fecha_origen: date) -> pd.DataFrame:
+def desde_dataframe(
+    df: pd.DataFrame, fecha_origen: date, incluir_rubro: bool = False
+) -> pd.DataFrame:
     """Igual que `construir`, pero tomando un DataFrame que ya tiene las
     columnas `fecha`, `id_tienda` e `id_producto`."""
     return construir(
         zip(df["fecha"], df["id_tienda"], df["id_producto"]),
         fecha_origen,
+        incluir_rubro,
     )

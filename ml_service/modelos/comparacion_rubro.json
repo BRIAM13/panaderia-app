@@ -1,0 +1,1970 @@
+{
+  "generado_en": "2026-09-06T04:57:41+00:00",
+  "pregunta": "¿Mejora la predicción de demanda si el modelo conoce el rubro de la tienda, y conviene más un modelo único con esa variable o modelos especializados por rubro?",
+  "origen_datos": "SINTÉTICO — no se usó la base de producción",
+  "semillas": [
+    42,
+    7,
+    101,
+    2024,
+    31337
+  ],
+  "modelo_referencia": "random_forest",
+  "remuestreos_bootstrap": 2000,
+  "configuraciones": {
+    "a_unico_sin_rubro": "(a) Modelo único SIN rubro",
+    "b_unico_con_rubro": "(b) Modelo único CON rubro",
+    "c_especializado_por_rubro": "(c) Modelos especializados por rubro"
+  },
+  "escenarios": {
+    "produccion_1_tienda_por_rubro": {
+      "descripcion": "Las 3 tiendas del catálogo de producción (una por rubro). El rubro es una función biyectiva de `id_tienda`, así que es redundante por construcción: este escenario cuantifica esa redundancia.",
+      "particion": {
+        "fecha_origen": "2023-09-06",
+        "fecha_corte": "2026-01-29",
+        "filas_entrenamiento": 3504,
+        "filas_validacion": 876,
+        "tiendas_entrenamiento": [
+          1,
+          2,
+          3
+        ],
+        "tiendas_validacion": [
+          1,
+          2,
+          3
+        ],
+        "rubros": [
+          "HORNEADOS",
+          "PANADERIA_CLASICA",
+          "PAN_HAMBURGUESA"
+        ]
+      },
+      "configuraciones": {
+        "a_unico_sin_rubro": {
+          "etiqueta": "(a) Modelo único SIN rubro",
+          "modelos": {
+            "random_forest": {
+              "mae_media": 42.5036,
+              "mae_desv_estandar": 0.1728,
+              "mae_min": 42.251,
+              "mae_max": 42.718,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 42.718,
+                "rmse": 58.67,
+                "mape_pct": 20.828,
+                "r2": 0.8696
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 42.718,
+                  "rmse": 58.67,
+                  "mape_pct": 20.828,
+                  "r2": 0.8696
+                },
+                {
+                  "semilla": 7,
+                  "mae": 42.52,
+                  "rmse": 58.474,
+                  "mape_pct": 20.659,
+                  "r2": 0.8705
+                },
+                {
+                  "semilla": 101,
+                  "mae": 42.447,
+                  "rmse": 58.28,
+                  "mape_pct": 20.702,
+                  "r2": 0.8713
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 42.582,
+                  "rmse": 58.553,
+                  "mape_pct": 20.779,
+                  "r2": 0.8701
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 42.251,
+                  "rmse": 58.144,
+                  "mape_pct": 20.63,
+                  "r2": 0.8719
+                }
+              ]
+            },
+            "gradient_boosting": {
+              "mae_media": 46.1408,
+              "mae_desv_estandar": 0.647,
+              "mae_min": 45.355,
+              "mae_max": 46.813,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 46.055,
+                "rmse": 61.228,
+                "mape_pct": 24.716,
+                "r2": 0.858
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 46.055,
+                  "rmse": 61.228,
+                  "mape_pct": 24.716,
+                  "r2": 0.858
+                },
+                {
+                  "semilla": 7,
+                  "mae": 46.778,
+                  "rmse": 62.16,
+                  "mape_pct": 25.054,
+                  "r2": 0.8536
+                },
+                {
+                  "semilla": 101,
+                  "mae": 46.813,
+                  "rmse": 61.779,
+                  "mape_pct": 25.673,
+                  "r2": 0.8554
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 45.355,
+                  "rmse": 61.197,
+                  "mape_pct": 22.949,
+                  "r2": 0.8581
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 45.703,
+                  "rmse": 61.176,
+                  "mape_pct": 23.623,
+                  "r2": 0.8582
+                }
+              ]
+            }
+          },
+          "linea_base": {
+            "agrupacion": "tienda+producto+día de la semana",
+            "mae": 48.859,
+            "rmse": 73.068,
+            "mape_pct": 20.245,
+            "r2": 0.7977
+          },
+          "detalle_ajuste": {
+            "modelos_entrenados": 1,
+            "rubros_sin_modelo_propio": []
+          },
+          "por_rubro": [
+            {
+              "tipo_rubro": "HORNEADOS",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 147.79,
+              "mae": 36.006,
+              "rmse": 48.36,
+              "mape_pct": 26.636,
+              "r2": 0.4338
+            },
+            {
+              "tipo_rubro": "PANADERIA_CLASICA",
+              "observaciones": 438,
+              "tiendas": 1,
+              "demanda_media_diaria": 394.23,
+              "mae": 59.48,
+              "rmse": 74.223,
+              "mape_pct": 16.257,
+              "r2": 0.3719
+            },
+            {
+              "tipo_rubro": "PAN_HAMBURGUESA",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 73.33,
+              "mae": 15.906,
+              "rmse": 20.287,
+              "mape_pct": 24.16,
+              "r2": 0.3833
+            }
+          ]
+        },
+        "b_unico_con_rubro": {
+          "etiqueta": "(b) Modelo único CON rubro",
+          "modelos": {
+            "random_forest": {
+              "mae_media": 42.4886,
+              "mae_desv_estandar": 0.1939,
+              "mae_min": 42.195,
+              "mae_max": 42.693,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 42.693,
+                "rmse": 58.642,
+                "mape_pct": 20.784,
+                "r2": 0.8697
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 42.693,
+                  "rmse": 58.642,
+                  "mape_pct": 20.784,
+                  "r2": 0.8697
+                },
+                {
+                  "semilla": 7,
+                  "mae": 42.605,
+                  "rmse": 58.563,
+                  "mape_pct": 20.699,
+                  "r2": 0.8701
+                },
+                {
+                  "semilla": 101,
+                  "mae": 42.41,
+                  "rmse": 58.231,
+                  "mape_pct": 20.685,
+                  "r2": 0.8715
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 42.54,
+                  "rmse": 58.5,
+                  "mape_pct": 20.775,
+                  "r2": 0.8703
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 42.195,
+                  "rmse": 58.08,
+                  "mape_pct": 20.621,
+                  "r2": 0.8722
+                }
+              ]
+            },
+            "gradient_boosting": {
+              "mae_media": 46.089,
+              "mae_desv_estandar": 1.8338,
+              "mae_min": 44.262,
+              "mae_max": 48.782,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 47.047,
+                "rmse": 63.305,
+                "mape_pct": 24.2,
+                "r2": 0.8482
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 47.047,
+                  "rmse": 63.305,
+                  "mape_pct": 24.2,
+                  "r2": 0.8482
+                },
+                {
+                  "semilla": 7,
+                  "mae": 45.551,
+                  "rmse": 60.516,
+                  "mape_pct": 24.337,
+                  "r2": 0.8613
+                },
+                {
+                  "semilla": 101,
+                  "mae": 48.782,
+                  "rmse": 63.73,
+                  "mape_pct": 27.301,
+                  "r2": 0.8461
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 44.262,
+                  "rmse": 59.799,
+                  "mape_pct": 22.726,
+                  "r2": 0.8645
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 44.803,
+                  "rmse": 60.096,
+                  "mape_pct": 23.157,
+                  "r2": 0.8632
+                }
+              ]
+            }
+          },
+          "linea_base": {
+            "agrupacion": "rubro+producto+día de la semana",
+            "mae": 48.859,
+            "rmse": 73.068,
+            "mape_pct": 20.245,
+            "r2": 0.7977
+          },
+          "detalle_ajuste": {
+            "modelos_entrenados": 1,
+            "rubros_sin_modelo_propio": []
+          },
+          "por_rubro": [
+            {
+              "tipo_rubro": "HORNEADOS",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 147.79,
+              "mae": 35.993,
+              "rmse": 48.354,
+              "mape_pct": 26.565,
+              "r2": 0.434
+            },
+            {
+              "tipo_rubro": "PANADERIA_CLASICA",
+              "observaciones": 438,
+              "tiendas": 1,
+              "demanda_media_diaria": 394.23,
+              "mae": 59.451,
+              "rmse": 74.185,
+              "mape_pct": 16.252,
+              "r2": 0.3726
+            },
+            {
+              "tipo_rubro": "PAN_HAMBURGUESA",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 73.33,
+              "mae": 15.877,
+              "rmse": 20.263,
+              "mape_pct": 24.067,
+              "r2": 0.3847
+            }
+          ]
+        },
+        "c_especializado_por_rubro": {
+          "etiqueta": "(c) Modelos especializados por rubro",
+          "modelos": {
+            "random_forest": {
+              "mae_media": 42.5296,
+              "mae_desv_estandar": 0.1819,
+              "mae_min": 42.358,
+              "mae_max": 42.763,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 42.367,
+                "rmse": 58.174,
+                "mape_pct": 20.675,
+                "r2": 0.8718
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 42.367,
+                  "rmse": 58.174,
+                  "mape_pct": 20.675,
+                  "r2": 0.8718
+                },
+                {
+                  "semilla": 7,
+                  "mae": 42.763,
+                  "rmse": 58.688,
+                  "mape_pct": 20.798,
+                  "r2": 0.8695
+                },
+                {
+                  "semilla": 101,
+                  "mae": 42.488,
+                  "rmse": 58.406,
+                  "mape_pct": 20.715,
+                  "r2": 0.8708
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 42.358,
+                  "rmse": 58.231,
+                  "mape_pct": 20.687,
+                  "r2": 0.8715
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 42.672,
+                  "rmse": 58.678,
+                  "mape_pct": 20.776,
+                  "r2": 0.8696
+                }
+              ]
+            },
+            "gradient_boosting": {
+              "mae_media": 45.2866,
+              "mae_desv_estandar": 1.8393,
+              "mae_min": 43.416,
+              "mae_max": 48.274,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 44.5,
+                "rmse": 60.374,
+                "mape_pct": 22.59,
+                "r2": 0.8619
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 44.5,
+                  "rmse": 60.374,
+                  "mape_pct": 22.59,
+                  "r2": 0.8619
+                },
+                {
+                  "semilla": 7,
+                  "mae": 45.588,
+                  "rmse": 61.995,
+                  "mape_pct": 22.191,
+                  "r2": 0.8544
+                },
+                {
+                  "semilla": 101,
+                  "mae": 48.274,
+                  "rmse": 66.406,
+                  "mape_pct": 23.096,
+                  "r2": 0.8329
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 44.655,
+                  "rmse": 61.001,
+                  "mape_pct": 21.725,
+                  "r2": 0.859
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 43.416,
+                  "rmse": 58.896,
+                  "mape_pct": 21.749,
+                  "r2": 0.8686
+                }
+              ]
+            }
+          },
+          "linea_base": {
+            "agrupacion": "rubro+producto+día de la semana",
+            "mae": 48.859,
+            "rmse": 73.068,
+            "mape_pct": 20.245,
+            "r2": 0.7977
+          },
+          "detalle_ajuste": {
+            "modelos_entrenados": 3,
+            "rubros_sin_modelo_propio": []
+          },
+          "por_rubro": [
+            {
+              "tipo_rubro": "HORNEADOS",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 147.79,
+              "mae": 35.936,
+              "rmse": 48.27,
+              "mape_pct": 26.523,
+              "r2": 0.4359
+            },
+            {
+              "tipo_rubro": "PANADERIA_CLASICA",
+              "observaciones": 438,
+              "tiendas": 1,
+              "demanda_media_diaria": 394.23,
+              "mae": 58.815,
+              "rmse": 73.47,
+              "mape_pct": 16.015,
+              "r2": 0.3846
+            },
+            {
+              "tipo_rubro": "PAN_HAMBURGUESA",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 73.33,
+              "mae": 15.903,
+              "rmse": 20.281,
+              "mape_pct": 24.147,
+              "r2": 0.3837
+            }
+          ]
+        }
+      },
+      "cota_de_ruido": {
+        "descripcion": "MAE del modelo frente al MAE de un oráculo que conoce la demanda esperada real del generador. La razón mide qué fracción del error es atribuible al modelo y no al azar irreducible.",
+        "solo_valido_en_datos_sinteticos": true,
+        "mae_modelo": 42.718,
+        "mae_oraculo_irreducible": 37.898,
+        "razon": 1.127,
+        "por_producto": [
+          {
+            "id_tienda": 1,
+            "id_producto": 1,
+            "nombre_tienda": "Hamburguesas",
+            "nombre_producto": "Pan de Hamburguesa Clásico",
+            "tipo_rubro": "PAN_HAMBURGUESA",
+            "mae_modelo": 15.906,
+            "mae_oraculo_irreducible": 14.416,
+            "razon": 1.103
+          },
+          {
+            "id_tienda": 2,
+            "id_producto": 2,
+            "nombre_tienda": "Horneados",
+            "nombre_producto": "Producto Horneados General",
+            "tipo_rubro": "HORNEADOS",
+            "mae_modelo": 36.006,
+            "mae_oraculo_irreducible": 33.769,
+            "razon": 1.066
+          },
+          {
+            "id_tienda": 3,
+            "id_producto": 3,
+            "nombre_tienda": "Panadería",
+            "nombre_producto": "Pan de Agua",
+            "tipo_rubro": "PANADERIA_CLASICA",
+            "mae_modelo": 61.326,
+            "mae_oraculo_irreducible": 51.974,
+            "razon": 1.18
+          },
+          {
+            "id_tienda": 3,
+            "id_producto": 4,
+            "nombre_tienda": "Panadería",
+            "nombre_producto": "Pan Francés",
+            "tipo_rubro": "PANADERIA_CLASICA",
+            "mae_modelo": 57.633,
+            "mae_oraculo_irreducible": 51.434,
+            "razon": 1.121
+          }
+        ]
+      },
+      "significancia_vs_control": {
+        "b_unico_con_rubro": {
+          "random_forest": {
+            "diferencia_mae": 0.0249,
+            "diferencia_pct_sobre_a": 0.058,
+            "ic95_inferior": -0.0209,
+            "ic95_superior": 0.0698,
+            "significativa_al_95": false,
+            "lectura": "el intervalo del 95% contiene 0: la diferencia NO es distinguible del ruido",
+            "desv_entre_semillas_control": 0.1728,
+            "supera_ruido_de_semilla": false,
+            "relevante_practicamente": false,
+            "veredicto": "sin efecto",
+            "veredicto_detalle": "el IC 95% contiene 0: no hay evidencia de diferencia"
+          },
+          "gradient_boosting": {
+            "diferencia_mae": -0.9918,
+            "diferencia_pct_sobre_a": -2.154,
+            "ic95_inferior": -1.7395,
+            "ic95_superior": -0.2465,
+            "significativa_al_95": true,
+            "lectura": "la diferencia es distinguible de cero al 95%",
+            "desv_entre_semillas_control": 0.647,
+            "supera_ruido_de_semilla": true,
+            "relevante_practicamente": true,
+            "veredicto": "EMPEORA",
+            "veredicto_detalle": "aumenta el MAE un 2.154%, por encima del umbral de relevancia y del ruido de semilla"
+          }
+        },
+        "c_especializado_por_rubro": {
+          "random_forest": {
+            "diferencia_mae": 0.3511,
+            "diferencia_pct_sobre_a": 0.822,
+            "ic95_inferior": 0.1516,
+            "ic95_superior": 0.5505,
+            "significativa_al_95": true,
+            "lectura": "la diferencia es distinguible de cero al 95%",
+            "desv_entre_semillas_control": 0.1728,
+            "supera_ruido_de_semilla": true,
+            "relevante_practicamente": false,
+            "veredicto": "irrelevante",
+            "veredicto_detalle": "distinguible de 0 pero solo 0.822% del MAE, por debajo del umbral de relevancia práctica (1.0%): es real y no sirve para nada"
+          },
+          "gradient_boosting": {
+            "diferencia_mae": 1.5544,
+            "diferencia_pct_sobre_a": 3.375,
+            "ic95_inferior": 0.1895,
+            "ic95_superior": 2.9715,
+            "significativa_al_95": true,
+            "lectura": "la diferencia es distinguible de cero al 95%",
+            "desv_entre_semillas_control": 0.647,
+            "supera_ruido_de_semilla": true,
+            "relevante_practicamente": true,
+            "veredicto": "MEJORA",
+            "veredicto_detalle": "reduce el MAE un 3.375%, por encima del umbral de relevancia y del ruido de semilla"
+          }
+        }
+      },
+      "significancia_b_vs_c": {
+        "random_forest": {
+          "diferencia_mae": 0.3261,
+          "diferencia_pct_sobre_a": 0.764,
+          "ic95_inferior": 0.1251,
+          "ic95_superior": 0.5242,
+          "significativa_al_95": true,
+          "lectura": "la diferencia es distinguible de cero al 95%",
+          "desv_entre_semillas_control": 0.1728,
+          "supera_ruido_de_semilla": true,
+          "relevante_practicamente": false,
+          "veredicto": "irrelevante",
+          "veredicto_detalle": "distinguible de 0 pero solo 0.764% del MAE, por debajo del umbral de relevancia práctica (1.0%): es real y no sirve para nada"
+        },
+        "gradient_boosting": {
+          "diferencia_mae": 2.5463,
+          "diferencia_pct_sobre_a": 5.412,
+          "ic95_inferior": 1.029,
+          "ic95_superior": 4.0424,
+          "significativa_al_95": true,
+          "lectura": "la diferencia es distinguible de cero al 95%",
+          "desv_entre_semillas_control": 0.647,
+          "supera_ruido_de_semilla": true,
+          "relevante_practicamente": true,
+          "veredicto": "MEJORA",
+          "veredicto_detalle": "reduce el MAE un 5.412%, por encima del umbral de relevancia y del ruido de semilla"
+        }
+      },
+      "diagnostico_redundancia": {
+        "tiendas_por_rubro": {
+          "HORNEADOS": 1,
+          "PANADERIA_CLASICA": 1,
+          "PAN_HAMBURGUESA": 1
+        },
+        "rubro_determinado_por_id_tienda": true,
+        "una_sola_tienda_por_rubro": true,
+        "rubro_determinado_por_id_producto": true,
+        "rubro_redundante_en_entrenamiento": true,
+        "explicacion": "el one-hot de `id_tienda` codifica el rubro sin pérdida (hay una sola tienda por rubro)"
+      },
+      "modelo_referencia": "random_forest"
+    },
+    "multisucursal_tiendas_conocidas": {
+      "descripcion": "9 sucursales (3 por rubro), partición temporal estándar: todas las tiendas de validación ya se vieron en entrenamiento.",
+      "particion": {
+        "fecha_origen": "2023-09-06",
+        "fecha_corte": "2026-01-29",
+        "filas_entrenamiento": 10512,
+        "filas_validacion": 2628,
+        "tiendas_entrenamiento": [
+          11,
+          12,
+          13,
+          21,
+          22,
+          23,
+          31,
+          32,
+          33
+        ],
+        "tiendas_validacion": [
+          11,
+          12,
+          13,
+          21,
+          22,
+          23,
+          31,
+          32,
+          33
+        ],
+        "rubros": [
+          "HORNEADOS",
+          "PANADERIA_CLASICA",
+          "PAN_HAMBURGUESA"
+        ]
+      },
+      "configuraciones": {
+        "a_unico_sin_rubro": {
+          "etiqueta": "(a) Modelo único SIN rubro",
+          "modelos": {
+            "random_forest": {
+              "mae_media": 45.0208,
+              "mae_desv_estandar": 0.0734,
+              "mae_min": 44.916,
+              "mae_max": 45.102,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 44.916,
+                "rmse": 64.245,
+                "mape_pct": 21.563,
+                "r2": 0.8764
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 44.916,
+                  "rmse": 64.245,
+                  "mape_pct": 21.563,
+                  "r2": 0.8764
+                },
+                {
+                  "semilla": 7,
+                  "mae": 45.079,
+                  "rmse": 64.435,
+                  "mape_pct": 21.64,
+                  "r2": 0.8757
+                },
+                {
+                  "semilla": 101,
+                  "mae": 45.002,
+                  "rmse": 64.456,
+                  "mape_pct": 21.608,
+                  "r2": 0.8756
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 45.102,
+                  "rmse": 64.612,
+                  "mape_pct": 21.585,
+                  "r2": 0.875
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 45.005,
+                  "rmse": 64.481,
+                  "mape_pct": 21.557,
+                  "r2": 0.8755
+                }
+              ]
+            },
+            "gradient_boosting": {
+              "mae_media": 42.6438,
+              "mae_desv_estandar": 0.7545,
+              "mae_min": 42.041,
+              "mae_max": 43.949,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 42.531,
+                "rmse": 60.36,
+                "mape_pct": 21.227,
+                "r2": 0.8909
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 42.531,
+                  "rmse": 60.36,
+                  "mape_pct": 21.227,
+                  "r2": 0.8909
+                },
+                {
+                  "semilla": 7,
+                  "mae": 43.949,
+                  "rmse": 62.523,
+                  "mape_pct": 22.029,
+                  "r2": 0.883
+                },
+                {
+                  "semilla": 101,
+                  "mae": 42.241,
+                  "rmse": 60.469,
+                  "mape_pct": 20.718,
+                  "r2": 0.8905
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 42.457,
+                  "rmse": 60.45,
+                  "mape_pct": 21.376,
+                  "r2": 0.8906
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 42.041,
+                  "rmse": 60.326,
+                  "mape_pct": 20.286,
+                  "r2": 0.891
+                }
+              ]
+            }
+          },
+          "linea_base": {
+            "agrupacion": "tienda+producto+día de la semana",
+            "mae": 48.233,
+            "rmse": 73.722,
+            "mape_pct": 20.25,
+            "r2": 0.8373
+          },
+          "detalle_ajuste": {
+            "modelos_entrenados": 1,
+            "rubros_sin_modelo_propio": []
+          },
+          "por_rubro": [
+            {
+              "tipo_rubro": "HORNEADOS",
+              "observaciones": 657,
+              "tiendas": 3,
+              "demanda_media_diaria": 154.19,
+              "mae": 38.803,
+              "rmse": 52.869,
+              "mape_pct": 29.884,
+              "r2": 0.6061
+            },
+            {
+              "tipo_rubro": "PANADERIA_CLASICA",
+              "observaciones": 1314,
+              "tiendas": 3,
+              "demanda_media_diaria": 388.54,
+              "mae": 61.963,
+              "rmse": 81.18,
+              "mape_pct": 16.945,
+              "r2": 0.7288
+            },
+            {
+              "tipo_rubro": "PAN_HAMBURGUESA",
+              "observaciones": 657,
+              "tiendas": 3,
+              "demanda_media_diaria": 80.51,
+              "mae": 16.936,
+              "rmse": 23.113,
+              "mape_pct": 22.476,
+              "r2": 0.6747
+            }
+          ]
+        },
+        "b_unico_con_rubro": {
+          "etiqueta": "(b) Modelo único CON rubro",
+          "modelos": {
+            "random_forest": {
+              "mae_media": 45.3386,
+              "mae_desv_estandar": 0.0946,
+              "mae_min": 45.208,
+              "mae_max": 45.473,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 45.208,
+                "rmse": 64.622,
+                "mape_pct": 21.665,
+                "r2": 0.875
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 45.208,
+                  "rmse": 64.622,
+                  "mape_pct": 21.665,
+                  "r2": 0.875
+                },
+                {
+                  "semilla": 7,
+                  "mae": 45.356,
+                  "rmse": 64.824,
+                  "mape_pct": 21.734,
+                  "r2": 0.8742
+                },
+                {
+                  "semilla": 101,
+                  "mae": 45.32,
+                  "rmse": 64.896,
+                  "mape_pct": 21.743,
+                  "r2": 0.8739
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 45.473,
+                  "rmse": 65.103,
+                  "mape_pct": 21.761,
+                  "r2": 0.8731
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 45.336,
+                  "rmse": 64.907,
+                  "mape_pct": 21.708,
+                  "r2": 0.8739
+                }
+              ]
+            },
+            "gradient_boosting": {
+              "mae_media": 42.2124,
+              "mae_desv_estandar": 0.3008,
+              "mae_min": 41.885,
+              "mae_max": 42.667,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 42.015,
+                "rmse": 59.836,
+                "mape_pct": 21.203,
+                "r2": 0.8928
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 42.015,
+                  "rmse": 59.836,
+                  "mape_pct": 21.203,
+                  "r2": 0.8928
+                },
+                {
+                  "semilla": 7,
+                  "mae": 42.667,
+                  "rmse": 60.838,
+                  "mape_pct": 21.725,
+                  "r2": 0.8892
+                },
+                {
+                  "semilla": 101,
+                  "mae": 42.19,
+                  "rmse": 60.874,
+                  "mape_pct": 20.811,
+                  "r2": 0.8891
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 42.305,
+                  "rmse": 60.582,
+                  "mape_pct": 20.944,
+                  "r2": 0.8901
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 41.885,
+                  "rmse": 60.123,
+                  "mape_pct": 20.308,
+                  "r2": 0.8918
+                }
+              ]
+            }
+          },
+          "linea_base": {
+            "agrupacion": "rubro+producto+día de la semana",
+            "mae": 82.657,
+            "rmse": 115.94,
+            "mape_pct": 35.974,
+            "r2": 0.5975
+          },
+          "detalle_ajuste": {
+            "modelos_entrenados": 1,
+            "rubros_sin_modelo_propio": []
+          },
+          "por_rubro": [
+            {
+              "tipo_rubro": "HORNEADOS",
+              "observaciones": 657,
+              "tiendas": 3,
+              "demanda_media_diaria": 154.19,
+              "mae": 39.082,
+              "rmse": 53.462,
+              "mape_pct": 29.99,
+              "r2": 0.5972
+            },
+            {
+              "tipo_rubro": "PANADERIA_CLASICA",
+              "observaciones": 1314,
+              "tiendas": 3,
+              "demanda_media_diaria": 388.54,
+              "mae": 62.412,
+              "rmse": 81.608,
+              "mape_pct": 17.105,
+              "r2": 0.7259
+            },
+            {
+              "tipo_rubro": "PAN_HAMBURGUESA",
+              "observaciones": 657,
+              "tiendas": 3,
+              "demanda_media_diaria": 80.51,
+              "mae": 16.924,
+              "rmse": 22.935,
+              "mape_pct": 22.461,
+              "r2": 0.6797
+            }
+          ]
+        },
+        "c_especializado_por_rubro": {
+          "etiqueta": "(c) Modelos especializados por rubro",
+          "modelos": {
+            "random_forest": {
+              "mae_media": 45.3472,
+              "mae_desv_estandar": 0.178,
+              "mae_min": 45.19,
+              "mae_max": 45.622,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 45.426,
+                "rmse": 65.096,
+                "mape_pct": 21.751,
+                "r2": 0.8731
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 45.426,
+                  "rmse": 65.096,
+                  "mape_pct": 21.751,
+                  "r2": 0.8731
+                },
+                {
+                  "semilla": 7,
+                  "mae": 45.19,
+                  "rmse": 64.786,
+                  "mape_pct": 21.643,
+                  "r2": 0.8743
+                },
+                {
+                  "semilla": 101,
+                  "mae": 45.226,
+                  "rmse": 64.71,
+                  "mape_pct": 21.632,
+                  "r2": 0.8746
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 45.272,
+                  "rmse": 64.852,
+                  "mape_pct": 21.667,
+                  "r2": 0.8741
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 45.622,
+                  "rmse": 65.324,
+                  "mape_pct": 21.795,
+                  "r2": 0.8722
+                }
+              ]
+            },
+            "gradient_boosting": {
+              "mae_media": 44.2942,
+              "mae_desv_estandar": 1.3262,
+              "mae_min": 42.677,
+              "mae_max": 46.371,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 42.677,
+                "rmse": 60.016,
+                "mape_pct": 20.997,
+                "r2": 0.8922
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 42.677,
+                  "rmse": 60.016,
+                  "mape_pct": 20.997,
+                  "r2": 0.8922
+                },
+                {
+                  "semilla": 7,
+                  "mae": 46.371,
+                  "rmse": 64.596,
+                  "mape_pct": 23.899,
+                  "r2": 0.8751
+                },
+                {
+                  "semilla": 101,
+                  "mae": 44.269,
+                  "rmse": 62.863,
+                  "mape_pct": 21.591,
+                  "r2": 0.8817
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 44.0,
+                  "rmse": 62.013,
+                  "mape_pct": 21.479,
+                  "r2": 0.8849
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 44.154,
+                  "rmse": 61.949,
+                  "mape_pct": 22.289,
+                  "r2": 0.8851
+                }
+              ]
+            }
+          },
+          "linea_base": {
+            "agrupacion": "rubro+producto+día de la semana",
+            "mae": 82.657,
+            "rmse": 115.94,
+            "mape_pct": 35.974,
+            "r2": 0.5975
+          },
+          "detalle_ajuste": {
+            "modelos_entrenados": 3,
+            "rubros_sin_modelo_propio": []
+          },
+          "por_rubro": [
+            {
+              "tipo_rubro": "HORNEADOS",
+              "observaciones": 657,
+              "tiendas": 3,
+              "demanda_media_diaria": 154.19,
+              "mae": 39.216,
+              "rmse": 53.773,
+              "mape_pct": 30.151,
+              "r2": 0.5925
+            },
+            {
+              "tipo_rubro": "PANADERIA_CLASICA",
+              "observaciones": 1314,
+              "tiendas": 3,
+              "demanda_media_diaria": 388.54,
+              "mae": 62.8,
+              "rmse": 82.197,
+              "mape_pct": 17.238,
+              "r2": 0.722
+            },
+            {
+              "tipo_rubro": "PAN_HAMBURGUESA",
+              "observaciones": 657,
+              "tiendas": 3,
+              "demanda_media_diaria": 80.51,
+              "mae": 16.889,
+              "rmse": 23.356,
+              "mape_pct": 22.378,
+              "r2": 0.6678
+            }
+          ]
+        }
+      },
+      "cota_de_ruido": {
+        "descripcion": "MAE del modelo frente al MAE de un oráculo que conoce la demanda esperada real del generador. La razón mide qué fracción del error es atribuible al modelo y no al azar irreducible.",
+        "solo_valido_en_datos_sinteticos": true,
+        "mae_modelo": 44.916,
+        "mae_oraculo_irreducible": 37.968,
+        "razon": 1.183,
+        "por_producto": [
+          {
+            "id_tienda": 11,
+            "id_producto": 101,
+            "nombre_tienda": "Hamburguesas Centro",
+            "nombre_producto": "Pan de Hamburguesa Clásico",
+            "tipo_rubro": "PAN_HAMBURGUESA",
+            "mae_modelo": 14.998,
+            "mae_oraculo_irreducible": 13.283,
+            "razon": 1.129
+          },
+          {
+            "id_tienda": 12,
+            "id_producto": 101,
+            "nombre_tienda": "Hamburguesas Norte",
+            "nombre_producto": "Pan de Hamburguesa Clásico",
+            "tipo_rubro": "PAN_HAMBURGUESA",
+            "mae_modelo": 24.038,
+            "mae_oraculo_irreducible": 21.479,
+            "razon": 1.119
+          },
+          {
+            "id_tienda": 13,
+            "id_producto": 101,
+            "nombre_tienda": "Hamburguesas Sur",
+            "nombre_producto": "Pan de Hamburguesa Clásico",
+            "tipo_rubro": "PAN_HAMBURGUESA",
+            "mae_modelo": 11.771,
+            "mae_oraculo_irreducible": 8.633,
+            "razon": 1.363
+          },
+          {
+            "id_tienda": 21,
+            "id_producto": 201,
+            "nombre_tienda": "Panadería Centro",
+            "nombre_producto": "Pan de Agua",
+            "tipo_rubro": "PANADERIA_CLASICA",
+            "mae_modelo": 72.056,
+            "mae_oraculo_irreducible": 57.404,
+            "razon": 1.255
+          },
+          {
+            "id_tienda": 21,
+            "id_producto": 202,
+            "nombre_tienda": "Panadería Centro",
+            "nombre_producto": "Pan Francés",
+            "tipo_rubro": "PANADERIA_CLASICA",
+            "mae_modelo": 56.055,
+            "mae_oraculo_irreducible": 46.073,
+            "razon": 1.217
+          },
+          {
+            "id_tienda": 22,
+            "id_producto": 201,
+            "nombre_tienda": "Panadería Norte",
+            "nombre_producto": "Pan de Agua",
+            "tipo_rubro": "PANADERIA_CLASICA",
+            "mae_modelo": 45.492,
+            "mae_oraculo_irreducible": 35.213,
+            "razon": 1.292
+          },
+          {
+            "id_tienda": 22,
+            "id_producto": 202,
+            "nombre_tienda": "Panadería Norte",
+            "nombre_producto": "Pan Francés",
+            "tipo_rubro": "PANADERIA_CLASICA",
+            "mae_modelo": 30.752,
+            "mae_oraculo_irreducible": 28.316,
+            "razon": 1.086
+          },
+          {
+            "id_tienda": 23,
+            "id_producto": 201,
+            "nombre_tienda": "Panadería Sur",
+            "nombre_producto": "Pan de Agua",
+            "tipo_rubro": "PANADERIA_CLASICA",
+            "mae_modelo": 87.049,
+            "mae_oraculo_irreducible": 78.377,
+            "razon": 1.111
+          },
+          {
+            "id_tienda": 23,
+            "id_producto": 202,
+            "nombre_tienda": "Panadería Sur",
+            "nombre_producto": "Pan Francés",
+            "tipo_rubro": "PANADERIA_CLASICA",
+            "mae_modelo": 80.377,
+            "mae_oraculo_irreducible": 61.374,
+            "razon": 1.31
+          },
+          {
+            "id_tienda": 31,
+            "id_producto": 301,
+            "nombre_tienda": "Horneados Centro",
+            "nombre_producto": "Producto Horneados General",
+            "tipo_rubro": "HORNEADOS",
+            "mae_modelo": 44.647,
+            "mae_oraculo_irreducible": 38.252,
+            "razon": 1.167
+          },
+          {
+            "id_tienda": 32,
+            "id_producto": 301,
+            "nombre_tienda": "Horneados Norte",
+            "nombre_producto": "Producto Horneados General",
+            "tipo_rubro": "HORNEADOS",
+            "mae_modelo": 49.753,
+            "mae_oraculo_irreducible": 46.267,
+            "razon": 1.075
+          },
+          {
+            "id_tienda": 33,
+            "id_producto": 301,
+            "nombre_tienda": "Horneados Sur",
+            "nombre_producto": "Producto Horneados General",
+            "tipo_rubro": "HORNEADOS",
+            "mae_modelo": 22.009,
+            "mae_oraculo_irreducible": 20.948,
+            "razon": 1.051
+          }
+        ]
+      },
+      "significancia_vs_control": {
+        "b_unico_con_rubro": {
+          "random_forest": {
+            "diferencia_mae": -0.2912,
+            "diferencia_pct_sobre_a": -0.648,
+            "ic95_inferior": -0.4108,
+            "ic95_superior": -0.1693,
+            "significativa_al_95": true,
+            "lectura": "la diferencia es distinguible de cero al 95%",
+            "desv_entre_semillas_control": 0.0734,
+            "supera_ruido_de_semilla": true,
+            "relevante_practicamente": false,
+            "veredicto": "irrelevante",
+            "veredicto_detalle": "distinguible de 0 pero solo 0.648% del MAE, por debajo del umbral de relevancia práctica (1.0%): es real y no sirve para nada"
+          },
+          "gradient_boosting": {
+            "diferencia_mae": 0.5158,
+            "diferencia_pct_sobre_a": 1.213,
+            "ic95_inferior": 0.1617,
+            "ic95_superior": 0.8666,
+            "significativa_al_95": true,
+            "lectura": "la diferencia es distinguible de cero al 95%",
+            "desv_entre_semillas_control": 0.7545,
+            "supera_ruido_de_semilla": false,
+            "relevante_practicamente": true,
+            "veredicto": "dentro del ruido de semilla",
+            "veredicto_detalle": "la diferencia (0.5158) no supera la variación que produce cambiar la semilla del regresor (±0.7545)"
+          }
+        },
+        "c_especializado_por_rubro": {
+          "random_forest": {
+            "diferencia_mae": -0.5098,
+            "diferencia_pct_sobre_a": -1.135,
+            "ic95_inferior": -0.6951,
+            "ic95_superior": -0.3318,
+            "significativa_al_95": true,
+            "lectura": "la diferencia es distinguible de cero al 95%",
+            "desv_entre_semillas_control": 0.0734,
+            "supera_ruido_de_semilla": true,
+            "relevante_practicamente": true,
+            "veredicto": "EMPEORA",
+            "veredicto_detalle": "aumenta el MAE un 1.135%, por encima del umbral de relevancia y del ruido de semilla"
+          },
+          "gradient_boosting": {
+            "diferencia_mae": -0.1462,
+            "diferencia_pct_sobre_a": -0.344,
+            "ic95_inferior": -0.7927,
+            "ic95_superior": 0.4572,
+            "significativa_al_95": false,
+            "lectura": "el intervalo del 95% contiene 0: la diferencia NO es distinguible del ruido",
+            "desv_entre_semillas_control": 0.7545,
+            "supera_ruido_de_semilla": false,
+            "relevante_practicamente": false,
+            "veredicto": "sin efecto",
+            "veredicto_detalle": "el IC 95% contiene 0: no hay evidencia de diferencia"
+          }
+        }
+      },
+      "significancia_b_vs_c": {
+        "random_forest": {
+          "diferencia_mae": -0.2186,
+          "diferencia_pct_sobre_a": -0.483,
+          "ic95_inferior": -0.372,
+          "ic95_superior": -0.0729,
+          "significativa_al_95": true,
+          "lectura": "la diferencia es distinguible de cero al 95%",
+          "desv_entre_semillas_control": 0.0734,
+          "supera_ruido_de_semilla": true,
+          "relevante_practicamente": false,
+          "veredicto": "irrelevante",
+          "veredicto_detalle": "distinguible de 0 pero solo 0.483% del MAE, por debajo del umbral de relevancia práctica (1.0%): es real y no sirve para nada"
+        },
+        "gradient_boosting": {
+          "diferencia_mae": -0.662,
+          "diferencia_pct_sobre_a": -1.576,
+          "ic95_inferior": -1.2692,
+          "ic95_superior": -0.0902,
+          "significativa_al_95": true,
+          "lectura": "la diferencia es distinguible de cero al 95%",
+          "desv_entre_semillas_control": 0.7545,
+          "supera_ruido_de_semilla": false,
+          "relevante_practicamente": true,
+          "veredicto": "dentro del ruido de semilla",
+          "veredicto_detalle": "la diferencia (0.662) no supera la variación que produce cambiar la semilla del regresor (±0.7545)"
+        }
+      },
+      "diagnostico_redundancia": {
+        "tiendas_por_rubro": {
+          "HORNEADOS": 3,
+          "PANADERIA_CLASICA": 3,
+          "PAN_HAMBURGUESA": 3
+        },
+        "rubro_determinado_por_id_tienda": true,
+        "una_sola_tienda_por_rubro": false,
+        "rubro_determinado_por_id_producto": true,
+        "rubro_redundante_en_entrenamiento": true,
+        "explicacion": "el one-hot de `id_producto` codifica el rubro sin pérdida (cada producto se vende en un solo rubro), así que el modelo SIN la variable de rubro igual sabe de qué rubro se trata, por la puerta de atrás"
+      },
+      "modelo_referencia": "random_forest"
+    },
+    "multisucursal_tienda_nueva": {
+      "descripcion": "Mismo catálogo, pero las sucursales [13, 23, 33] se excluyen por completo del entrenamiento y son las únicas que se evalúan. Simula abrir un local nuevo y tener que planificar producción sin historial propio.",
+      "particion": {
+        "fecha_origen": "2023-09-06",
+        "fecha_corte": "2026-01-29",
+        "filas_entrenamiento": 7008,
+        "filas_validacion": 876,
+        "tiendas_entrenamiento": [
+          11,
+          12,
+          21,
+          22,
+          31,
+          32
+        ],
+        "tiendas_validacion": [
+          13,
+          23,
+          33
+        ],
+        "rubros": [
+          "HORNEADOS",
+          "PANADERIA_CLASICA",
+          "PAN_HAMBURGUESA"
+        ]
+      },
+      "configuraciones": {
+        "a_unico_sin_rubro": {
+          "etiqueta": "(a) Modelo único SIN rubro",
+          "modelos": {
+            "random_forest": {
+              "mae_media": 185.5992,
+              "mae_desv_estandar": 0.3804,
+              "mae_min": 184.936,
+              "mae_max": 185.892,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 185.703,
+                "rmse": 227.704,
+                "mape_pct": 88.999,
+                "r2": 0.1651
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 185.703,
+                  "rmse": 227.704,
+                  "mape_pct": 88.999,
+                  "r2": 0.1651
+                },
+                {
+                  "semilla": 7,
+                  "mae": 185.674,
+                  "rmse": 228.313,
+                  "mape_pct": 87.857,
+                  "r2": 0.1606
+                },
+                {
+                  "semilla": 101,
+                  "mae": 184.936,
+                  "rmse": 227.334,
+                  "mape_pct": 87.794,
+                  "r2": 0.1678
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 185.892,
+                  "rmse": 227.852,
+                  "mape_pct": 89.231,
+                  "r2": 0.164
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 185.791,
+                  "rmse": 228.166,
+                  "mape_pct": 88.532,
+                  "r2": 0.1617
+                }
+              ]
+            },
+            "gradient_boosting": {
+              "mae_media": 191.5596,
+              "mae_desv_estandar": 1.3016,
+              "mae_min": 189.477,
+              "mae_max": 192.788,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 191.449,
+                "rmse": 241.339,
+                "mape_pct": 82.557,
+                "r2": 0.0621
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 191.449,
+                  "rmse": 241.339,
+                  "mape_pct": 82.557,
+                  "r2": 0.0621
+                },
+                {
+                  "semilla": 7,
+                  "mae": 191.566,
+                  "rmse": 239.829,
+                  "mape_pct": 85.57,
+                  "r2": 0.0738
+                },
+                {
+                  "semilla": 101,
+                  "mae": 189.477,
+                  "rmse": 236.755,
+                  "mape_pct": 85.174,
+                  "r2": 0.0974
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 192.788,
+                  "rmse": 246.417,
+                  "mape_pct": 78.93,
+                  "r2": 0.0222
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 192.518,
+                  "rmse": 242.526,
+                  "mape_pct": 84.377,
+                  "r2": 0.0529
+                }
+              ]
+            }
+          },
+          "linea_base": {
+            "agrupacion": "tienda+producto+día de la semana",
+            "mae": 148.628,
+            "rmse": 200.688,
+            "mape_pct": 64.473,
+            "r2": 0.3515
+          },
+          "detalle_ajuste": {
+            "modelos_entrenados": 1,
+            "rubros_sin_modelo_propio": []
+          },
+          "por_rubro": [
+            {
+              "tipo_rubro": "HORNEADOS",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 93.8,
+              "mae": 125.807,
+              "rmse": 131.042,
+              "mape_pct": 158.534,
+              "r2": -11.5271
+            },
+            {
+              "tipo_rubro": "PANADERIA_CLASICA",
+              "observaciones": 438,
+              "tiendas": 1,
+              "demanda_media_diaria": 530.82,
+              "mae": 288.365,
+              "rmse": 306.876,
+              "mape_pct": 53.091,
+              "r2": -4.4115
+            },
+            {
+              "tipo_rubro": "PAN_HAMBURGUESA",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 49.16,
+              "mae": 40.277,
+              "rmse": 43.338,
+              "mape_pct": 91.278,
+              "r2": -6.9073
+            }
+          ]
+        },
+        "b_unico_con_rubro": {
+          "etiqueta": "(b) Modelo único CON rubro",
+          "modelos": {
+            "random_forest": {
+              "mae_media": 185.61,
+              "mae_desv_estandar": 0.5041,
+              "mae_min": 185.099,
+              "mae_max": 186.312,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 185.203,
+                "rmse": 227.597,
+                "mape_pct": 88.046,
+                "r2": 0.1659
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 185.203,
+                  "rmse": 227.597,
+                  "mape_pct": 88.046,
+                  "r2": 0.1659
+                },
+                {
+                  "semilla": 7,
+                  "mae": 186.312,
+                  "rmse": 228.377,
+                  "mape_pct": 89.512,
+                  "r2": 0.1601
+                },
+                {
+                  "semilla": 101,
+                  "mae": 185.099,
+                  "rmse": 227.229,
+                  "mape_pct": 88.589,
+                  "r2": 0.1686
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 185.526,
+                  "rmse": 227.951,
+                  "mape_pct": 88.35,
+                  "r2": 0.1633
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 185.91,
+                  "rmse": 228.382,
+                  "mape_pct": 88.47,
+                  "r2": 0.1601
+                }
+              ]
+            },
+            "gradient_boosting": {
+              "mae_media": 166.1654,
+              "mae_desv_estandar": 1.813,
+              "mae_min": 164.252,
+              "mae_max": 169.016,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 166.223,
+                "rmse": 206.916,
+                "mape_pct": 82.151,
+                "r2": 0.3106
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 166.223,
+                  "rmse": 206.916,
+                  "mape_pct": 82.151,
+                  "r2": 0.3106
+                },
+                {
+                  "semilla": 7,
+                  "mae": 169.016,
+                  "rmse": 214.296,
+                  "mape_pct": 76.151,
+                  "r2": 0.2605
+                },
+                {
+                  "semilla": 101,
+                  "mae": 164.252,
+                  "rmse": 207.765,
+                  "mape_pct": 75.502,
+                  "r2": 0.3049
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 165.011,
+                  "rmse": 210.136,
+                  "mape_pct": 73.462,
+                  "r2": 0.289
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 166.325,
+                  "rmse": 208.919,
+                  "mape_pct": 78.65,
+                  "r2": 0.2972
+                }
+              ]
+            }
+          },
+          "linea_base": {
+            "agrupacion": "rubro+producto+día de la semana",
+            "mae": 148.134,
+            "rmse": 197.057,
+            "mape_pct": 61.657,
+            "r2": 0.3747
+          },
+          "detalle_ajuste": {
+            "modelos_entrenados": 1,
+            "rubros_sin_modelo_propio": []
+          },
+          "por_rubro": [
+            {
+              "tipo_rubro": "HORNEADOS",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 93.8,
+              "mae": 125.489,
+              "rmse": 130.835,
+              "mape_pct": 157.939,
+              "r2": -11.4875
+            },
+            {
+              "tipo_rubro": "PANADERIA_CLASICA",
+              "observaciones": 438,
+              "tiendas": 1,
+              "demanda_media_diaria": 530.82,
+              "mae": 288.231,
+              "rmse": 306.859,
+              "mape_pct": 53.049,
+              "r2": -4.4109
+            },
+            {
+              "tipo_rubro": "PAN_HAMBURGUESA",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 49.16,
+              "mae": 38.861,
+              "rmse": 41.934,
+              "mape_pct": 88.149,
+              "r2": -6.4033
+            }
+          ]
+        },
+        "c_especializado_por_rubro": {
+          "etiqueta": "(c) Modelos especializados por rubro",
+          "modelos": {
+            "random_forest": {
+              "mae_media": 134.6672,
+              "mae_desv_estandar": 1.9864,
+              "mae_min": 132.124,
+              "mae_max": 137.616,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 137.616,
+                "rmse": 174.77,
+                "mape_pct": 69.594,
+                "r2": 0.5081
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 137.616,
+                  "rmse": 174.77,
+                  "mape_pct": 69.594,
+                  "r2": 0.5081
+                },
+                {
+                  "semilla": 7,
+                  "mae": 134.553,
+                  "rmse": 170.86,
+                  "mape_pct": 69.616,
+                  "r2": 0.5299
+                },
+                {
+                  "semilla": 101,
+                  "mae": 132.124,
+                  "rmse": 167.463,
+                  "mape_pct": 69.797,
+                  "r2": 0.5484
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 133.99,
+                  "rmse": 170.379,
+                  "mape_pct": 69.359,
+                  "r2": 0.5326
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 135.053,
+                  "rmse": 170.659,
+                  "mape_pct": 71.062,
+                  "r2": 0.531
+                }
+              ]
+            },
+            "gradient_boosting": {
+              "mae_media": 146.1312,
+              "mae_desv_estandar": 7.3156,
+              "mae_min": 139.906,
+              "mae_max": 158.344,
+              "semilla_base": {
+                "semilla": 42,
+                "mae": 158.344,
+                "rmse": 196.929,
+                "mape_pct": 76.173,
+                "r2": 0.3755
+              },
+              "por_semilla": [
+                {
+                  "semilla": 42,
+                  "mae": 158.344,
+                  "rmse": 196.929,
+                  "mape_pct": 76.173,
+                  "r2": 0.3755
+                },
+                {
+                  "semilla": 7,
+                  "mae": 139.906,
+                  "rmse": 174.477,
+                  "mape_pct": 72.302,
+                  "r2": 0.5098
+                },
+                {
+                  "semilla": 101,
+                  "mae": 141.202,
+                  "rmse": 176.479,
+                  "mape_pct": 70.819,
+                  "r2": 0.4985
+                },
+                {
+                  "semilla": 2024,
+                  "mae": 146.411,
+                  "rmse": 180.117,
+                  "mape_pct": 77.058,
+                  "r2": 0.4776
+                },
+                {
+                  "semilla": 31337,
+                  "mae": 144.793,
+                  "rmse": 179.012,
+                  "mape_pct": 75.147,
+                  "r2": 0.484
+                }
+              ]
+            }
+          },
+          "linea_base": {
+            "agrupacion": "rubro+producto+día de la semana",
+            "mae": 148.134,
+            "rmse": 197.057,
+            "mape_pct": 61.657,
+            "r2": 0.3747
+          },
+          "detalle_ajuste": {
+            "modelos_entrenados": 3,
+            "rubros_sin_modelo_propio": []
+          },
+          "por_rubro": [
+            {
+              "tipo_rubro": "HORNEADOS",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 93.8,
+              "mae": 90.473,
+              "rmse": 94.902,
+              "mape_pct": 118.933,
+              "r2": -5.5702
+            },
+            {
+              "tipo_rubro": "PANADERIA_CLASICA",
+              "observaciones": 438,
+              "tiendas": 1,
+              "demanda_media_diaria": 530.82,
+              "mae": 211.568,
+              "rmse": 236.194,
+              "mape_pct": 37.812,
+              "r2": -2.2058
+            },
+            {
+              "tipo_rubro": "PAN_HAMBURGUESA",
+              "observaciones": 219,
+              "tiendas": 1,
+              "demanda_media_diaria": 49.16,
+              "mae": 36.857,
+              "rmse": 39.954,
+              "mape_pct": 83.817,
+              "r2": -5.7207
+            }
+          ]
+        }
+      },
+      "cota_de_ruido": {
+        "descripcion": "MAE del modelo frente al MAE de un oráculo que conoce la demanda esperada real del generador. La razón mide qué fracción del error es atribuible al modelo y no al azar irreducible.",
+        "solo_valido_en_datos_sinteticos": true,
+        "mae_modelo": 185.703,
+        "mae_oraculo_irreducible": 42.333,
+        "razon": 4.387,
+        "por_producto": [
+          {
+            "id_tienda": 13,
+            "id_producto": 101,
+            "nombre_tienda": "Hamburguesas Sur",
+            "nombre_producto": "Pan de Hamburguesa Clásico",
+            "tipo_rubro": "PAN_HAMBURGUESA",
+            "mae_modelo": 40.277,
+            "mae_oraculo_irreducible": 8.633,
+            "razon": 4.665
+          },
+          {
+            "id_tienda": 23,
+            "id_producto": 201,
+            "nombre_tienda": "Panadería Sur",
+            "nombre_producto": "Pan de Agua",
+            "tipo_rubro": "PANADERIA_CLASICA",
+            "mae_modelo": 311.244,
+            "mae_oraculo_irreducible": 78.377,
+            "razon": 3.971
+          },
+          {
+            "id_tienda": 23,
+            "id_producto": 202,
+            "nombre_tienda": "Panadería Sur",
+            "nombre_producto": "Pan Francés",
+            "tipo_rubro": "PANADERIA_CLASICA",
+            "mae_modelo": 265.486,
+            "mae_oraculo_irreducible": 61.374,
+            "razon": 4.326
+          },
+          {
+            "id_tienda": 33,
+            "id_producto": 301,
+            "nombre_tienda": "Horneados Sur",
+            "nombre_producto": "Producto Horneados General",
+            "tipo_rubro": "HORNEADOS",
+            "mae_modelo": 125.807,
+            "mae_oraculo_irreducible": 20.948,
+            "razon": 6.006
+          }
+        ]
+      },
+      "significancia_vs_control": {
+        "b_unico_con_rubro": {
+          "random_forest": {
+            "diferencia_mae": 0.5003,
+            "diferencia_pct_sobre_a": 0.269,
+            "ic95_inferior": 0.3432,
+            "ic95_superior": 0.6559,
+            "significativa_al_95": true,
+            "lectura": "la diferencia es distinguible de cero al 95%",
+            "desv_entre_semillas_control": 0.3804,
+            "supera_ruido_de_semilla": true,
+            "relevante_practicamente": false,
+            "veredicto": "irrelevante",
+            "veredicto_detalle": "distinguible de 0 pero solo 0.269% del MAE, por debajo del umbral de relevancia práctica (1.0%): es real y no sirve para nada"
+          },
+          "gradient_boosting": {
+            "diferencia_mae": 25.2264,
+            "diferencia_pct_sobre_a": 13.177,
+            "ic95_inferior": 23.4281,
+            "ic95_superior": 27.1718,
+            "significativa_al_95": true,
+            "lectura": "la diferencia es distinguible de cero al 95%",
+            "desv_entre_semillas_control": 1.3016,
+            "supera_ruido_de_semilla": true,
+            "relevante_practicamente": true,
+            "veredicto": "MEJORA",
+            "veredicto_detalle": "reduce el MAE un 13.177%, por encima del umbral de relevancia y del ruido de semilla"
+          }
+        },
+        "c_especializado_por_rubro": {
+          "random_forest": {
+            "diferencia_mae": 48.0867,
+            "diferencia_pct_sobre_a": 25.894,
+            "ic95_inferior": 45.8701,
+            "ic95_superior": 50.3673,
+            "significativa_al_95": true,
+            "lectura": "la diferencia es distinguible de cero al 95%",
+            "desv_entre_semillas_control": 0.3804,
+            "supera_ruido_de_semilla": true,
+            "relevante_practicamente": true,
+            "veredicto": "MEJORA",
+            "veredicto_detalle": "reduce el MAE un 25.894%, por encima del umbral de relevancia y del ruido de semilla"
+          },
+          "gradient_boosting": {
+            "diferencia_mae": 33.1051,
+            "diferencia_pct_sobre_a": 17.292,
+            "ic95_inferior": 30.3918,
+            "ic95_superior": 35.9902,
+            "significativa_al_95": true,
+            "lectura": "la diferencia es distinguible de cero al 95%",
+            "desv_entre_semillas_control": 1.3016,
+            "supera_ruido_de_semilla": true,
+            "relevante_practicamente": true,
+            "veredicto": "MEJORA",
+            "veredicto_detalle": "reduce el MAE un 17.292%, por encima del umbral de relevancia y del ruido de semilla"
+          }
+        }
+      },
+      "significancia_b_vs_c": {
+        "random_forest": {
+          "diferencia_mae": 47.5865,
+          "diferencia_pct_sobre_a": 25.694,
+          "ic95_inferior": 45.342,
+          "ic95_superior": 49.9073,
+          "significativa_al_95": true,
+          "lectura": "la diferencia es distinguible de cero al 95%",
+          "desv_entre_semillas_control": 0.3804,
+          "supera_ruido_de_semilla": true,
+          "relevante_practicamente": true,
+          "veredicto": "MEJORA",
+          "veredicto_detalle": "reduce el MAE un 25.694%, por encima del umbral de relevancia y del ruido de semilla"
+        },
+        "gradient_boosting": {
+          "diferencia_mae": 7.8787,
+          "diferencia_pct_sobre_a": 4.74,
+          "ic95_inferior": 6.0811,
+          "ic95_superior": 9.5756,
+          "significativa_al_95": true,
+          "lectura": "la diferencia es distinguible de cero al 95%",
+          "desv_entre_semillas_control": 1.3016,
+          "supera_ruido_de_semilla": true,
+          "relevante_practicamente": true,
+          "veredicto": "MEJORA",
+          "veredicto_detalle": "reduce el MAE un 4.74%, por encima del umbral de relevancia y del ruido de semilla"
+        }
+      },
+      "diagnostico_redundancia": {
+        "tiendas_por_rubro": {
+          "HORNEADOS": 2,
+          "PANADERIA_CLASICA": 2,
+          "PAN_HAMBURGUESA": 2
+        },
+        "rubro_determinado_por_id_tienda": true,
+        "una_sola_tienda_por_rubro": false,
+        "rubro_determinado_por_id_producto": true,
+        "rubro_redundante_en_entrenamiento": true,
+        "explicacion": "el one-hot de `id_producto` codifica el rubro sin pérdida (cada producto se vende en un solo rubro), así que el modelo SIN la variable de rubro igual sabe de qué rubro se trata, por la puerta de atrás"
+      },
+      "modelo_referencia": "random_forest"
+    }
+  }
+}

@@ -49,10 +49,16 @@ from pathlib import Path
 
 import numpy as np
 
+import catalogo as cat
 import feriados_peru
 from catalogo import CATALOGO, Producto
 
-RUTA_BD = Path(__file__).parent / "data" / "entrenamiento.db"
+DIR_DATOS = Path(__file__).parent / "data"
+RUTA_BD = DIR_DATOS / "entrenamiento.db"
+# Base separada del experimento de rubro (catálogo multi-sucursal). Se mantiene
+# aparte a propósito: el modelo que se despliega NUNCA debe entrenarse con
+# tiendas que no existen en producción.
+RUTA_BD_RUBROS = DIR_DATOS / "entrenamiento_rubros.db"
 
 # --- Parámetros de la simulación (supuestos del negocio, ver README) --------
 
@@ -80,17 +86,14 @@ FACTOR_POSTERIOR_FERIADO = 0.88  # y compra menos el día después
 FACTOR_QUINCENA = 1.06
 FACTOR_FIN_DE_MES = 1.05
 
-# Tamaño típico de un pedido por producto (media de la geométrica que reparte
-# el total diario en pedidos individuales) y tope por pedido.
-TAMANO_PEDIDO = {
-    1: (2.5, 8),     # paquetes de pan de hamburguesa
-    2: (15.0, 60),   # unidades de horneados
-    3: (22.0, 90),   # unidades de pan de agua
-    4: (20.0, 90),   # unidades de pan francés
-}
+# El tamaño típico de un pedido (media de la geométrica que reparte el total
+# diario en pedidos individuales) y su tope viven ahora en el propio `Producto`
+# del catálogo, para que un catálogo nuevo no tenga que registrarse también acá.
 
 # Reparto de los pedidos de Panadería entre los dos turnos de recojo
-# (la hornada de la mañana sale ~4am y la de la tarde ~3pm).
+# (la hornada de la mañana sale ~4am y la de la tarde ~3pm). Se decide por
+# RUBRO y no por IdTienda: es una característica del negocio de panadería
+# clásica, no de una tienda en particular.
 PROBABILIDAD_TURNO_MANANA = 0.62
 
 
@@ -134,13 +137,13 @@ def sortear_demanda(rng: np.random.Generator, media: float, dispersion: float) -
 
 
 def repartir_en_pedidos(
-    rng: np.random.Generator, total: int, id_producto: int
+    rng: np.random.Generator, total: int, producto: Producto
 ) -> list[int]:
     """Reparte la demanda total de un día en pedidos individuales de tamaño
     aleatorio, para reproducir la granularidad de la tabla `Pedidos` real."""
     if total <= 0:
         return []
-    media_tamano, tope = TAMANO_PEDIDO[id_producto]
+    media_tamano, tope = producto.tamano_pedido_medio, producto.tamano_pedido_max
     pedidos: list[int] = []
     restante = total
     while restante > 0:
@@ -157,8 +160,21 @@ def generar(
     semilla: int = 20260830,
     fecha_fin: date | None = None,
     ruta_bd: Path = RUTA_BD,
+    catalogo: tuple[Producto, ...] = CATALOGO,
+    generar_pedidos: bool = True,
 ) -> dict:
-    """Genera el historial y lo escribe en SQLite. Devuelve un resumen."""
+    """Genera el historial y lo escribe en SQLite. Devuelve un resumen.
+
+    `catalogo` permite generar tanto el historial de producción (las 3 tiendas
+    reales, por defecto) como el historial multi-sucursal del experimento de
+    rubro, con exactamente el mismo modelo generativo — que es lo que hace
+    comparables los dos escenarios.
+
+    `generar_pedidos=False` omite la tabla de pedidos individuales. El
+    entrenamiento solo lee el agregado `demanda_diaria`; los pedidos existen
+    para que la base sintética tenga la misma FORMA que la de producción, cosa
+    que al experimento de rubro no le aporta nada y sí le cuesta tiempo.
+    """
     rng = np.random.default_rng(semilla)
 
     fecha_fin = fecha_fin or (date.today() - timedelta(days=1))
@@ -170,17 +186,29 @@ def generar(
 
     for offset in range(total_dias):
         fecha = fecha_inicio + timedelta(days=offset)
-        for producto in CATALOGO:
+        for producto in catalogo:
             crecimiento = (1 + producto.crecimiento_anual) ** (offset / 365.0)
             media = producto.demanda_base * crecimiento * factor_dia(fecha, producto)
             total = sortear_demanda(rng, media, producto.dispersion)
 
+            # El rubro se persiste junto a cada observación. Sale del catálogo,
+            # así que se propaga solo: no hay forma de que una tienda quede con
+            # un rubro distinto en los datos y en las features.
             filas_demanda.append(
-                (fecha.isoformat(), producto.id_tienda, producto.id_producto, total)
+                (
+                    fecha.isoformat(),
+                    producto.id_tienda,
+                    producto.id_producto,
+                    total,
+                    producto.tipo_rubro,
+                )
             )
 
-            for cantidad in repartir_en_pedidos(rng, total, producto.id_producto):
-                if producto.id_tienda == 3:
+            if not generar_pedidos:
+                continue
+
+            for cantidad in repartir_en_pedidos(rng, total, producto):
+                if producto.tipo_rubro == cat.PANADERIA_CLASICA:
                     turno = (
                         "MANANA"
                         if rng.random() < PROBABILIDAD_TURNO_MANANA
@@ -227,6 +255,11 @@ def generar(
                 id_tienda   INTEGER NOT NULL,
                 id_producto INTEGER NOT NULL,
                 cantidad    INTEGER NOT NULL,
+                -- Rubro de la tienda (espeja `Tiendas.TipoRubro` de
+                -- producción). Se guarda materializado para que la base
+                -- sintética sea autodescriptiva y el experimento de rubro
+                -- pueda auditarse sin volver a mirar `catalogo.py`.
+                tipo_rubro  TEXT    NOT NULL DEFAULT 'OTRO',
                 PRIMARY KEY (fecha, id_tienda, id_producto)
             );
 
@@ -245,8 +278,9 @@ def generar(
             filas_pedidos,
         )
         con.executemany(
-            "INSERT INTO demanda_diaria (fecha, id_tienda, id_producto, cantidad) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO demanda_diaria "
+            "(fecha, id_tienda, id_producto, cantidad, tipo_rubro) "
+            "VALUES (?, ?, ?, ?, ?)",
             filas_demanda,
         )
 
@@ -256,7 +290,11 @@ def generar(
             "fecha_inicio": fecha_inicio.isoformat(),
             "fecha_fin": fecha_fin.isoformat(),
             "dias": total_dias,
-            "productos": [p.id_producto for p in CATALOGO],
+            "productos": sorted({p.id_producto for p in catalogo}),
+            "tiendas": sorted({p.id_tienda for p in catalogo}),
+            "rubro_por_tienda": {
+                str(p.id_tienda): p.tipo_rubro for p in catalogo
+            },
             "factor_dia_semana": FACTOR_DIA_SEMANA,
             "factor_mes": FACTOR_MES,
             "origen": "SINTETICO — no proviene de la base de datos de producción",
@@ -274,9 +312,14 @@ def generar(
         "dias": total_dias,
         "fecha_inicio": fecha_inicio.isoformat(),
         "fecha_fin": fecha_fin.isoformat(),
+        "series": len(catalogo),
+        "tiendas": len({p.id_tienda for p in catalogo}),
         "filas_demanda_diaria": len(filas_demanda),
         "pedidos_generados": len(filas_pedidos),
-        "unidades_totales": sum(f[3] for f in filas_pedidos),
+        # Se suma del agregado diario y no de los pedidos: cuando
+        # `generar_pedidos=False` la lista de pedidos está vacía a propósito,
+        # pero el total de unidades simuladas sigue siendo el mismo.
+        "unidades_totales": sum(f[3] for f in filas_demanda),
     }
 
 
@@ -288,9 +331,24 @@ def main() -> None:
                         help="Años de historial a simular (por defecto 3).")
     parser.add_argument("--semilla", type=int, default=20260830,
                         help="Semilla del generador aleatorio (reproducibilidad).")
+    parser.add_argument(
+        "--experimento-rubro", action="store_true",
+        help="Genera el historial MULTI-SUCURSAL (varias tiendas por rubro) en "
+             "data/entrenamiento_rubros.db, para el experimento de rubro. No "
+             "toca la base de entrenamiento del modelo desplegado.",
+    )
     args = parser.parse_args()
 
-    resumen = generar(anios=args.anios, semilla=args.semilla)
+    if args.experimento_rubro:
+        resumen = generar(
+            anios=args.anios,
+            semilla=args.semilla,
+            ruta_bd=RUTA_BD_RUBROS,
+            catalogo=cat.CATALOGO_EXPERIMENTO_RUBRO,
+            generar_pedidos=False,
+        )
+    else:
+        resumen = generar(anios=args.anios, semilla=args.semilla)
 
     # Nota: la consola de Windows usa cp1252, que no sabe imprimir "→". Todo
     # lo que va a stdout se mantiene dentro de ese juego de caracteres; los
@@ -299,6 +357,7 @@ def main() -> None:
     print(f"  Base de datos    : {resumen['ruta_bd']}")
     print(f"  Rango            : {resumen['fecha_inicio']} - {resumen['fecha_fin']}"
           f" ({resumen['dias']} días)")
+    print(f"  Tiendas / series : {resumen['tiendas']} / {resumen['series']}")
     print(f"  Filas demanda    : {resumen['filas_demanda_diaria']:,}")
     print(f"  Pedidos          : {resumen['pedidos_generados']:,}")
     print(f"  Unidades/paquetes: {resumen['unidades_totales']:,}")

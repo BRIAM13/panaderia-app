@@ -88,9 +88,15 @@ class Predictor:
         """Predicción del modelo, recortada en 0 (la demanda no es negativa).
         Sin redondear y sin ajuste por contexto."""
         paquete = self._exigir_modelo()
+        # El contrato de features (con o sin `tipo_rubro`) se lee del artefacto
+        # entrenado, nunca se asume acá: es lo que garantiza que inferencia use
+        # exactamente las mismas columnas con las que se ajustó el pipeline.
+        # `.get` con default False mantiene compatibilidad con artefactos
+        # entrenados antes de que existiera la variable de rubro.
         X = caracteristicas.construir(
             ((f, id_tienda, id_producto) for f in fechas),
             paquete["fecha_origen"],
+            incluir_rubro=bool(paquete.get("usa_rubro", False)),
         )
         return np.clip(paquete["pipeline"].predict(X), 0, None)
 

@@ -27,10 +27,11 @@ desplegado; Fase 3: pruebas y seguridad, en curso en paralelo).
 3. [Cómo se generaron los datos sintéticos](#cómo-se-generaron-los-datos-sintéticos)
 4. [Metodología de entrenamiento y validación](#metodología-de-entrenamiento-y-validación)
 5. [Resultados obtenidos](#resultados-obtenidos)
-6. [Limitaciones declaradas](#limitaciones-declaradas)
-7. [Contrato de la API](#contrato-de-la-api)
-8. [Cómo correr todo localmente](#cómo-correr-todo-localmente)
-9. [Estructura de archivos](#estructura-de-archivos)
+6. [Experimento: ¿le sirve al modelo saber el rubro de la tienda?](#experimento-le-sirve-al-modelo-saber-el-rubro-de-la-tienda)
+7. [Limitaciones declaradas](#limitaciones-declaradas)
+8. [Contrato de la API](#contrato-de-la-api)
+9. [Cómo correr todo localmente](#cómo-correr-todo-localmente)
+10. [Estructura de archivos](#estructura-de-archivos)
 
 ---
 
@@ -211,12 +212,12 @@ producto, que representa la migración progresiva de clientes al canal digital.
 Cada producto tiene su propio nivel base, volatilidad y sensibilidad
 estacional, según cómo se comporta en la realidad del negocio:
 
-| Producto | Tienda | Unidad | Base/día | Dispersión | Sensib. estacional |
-|---|---|---|---:|---:|---:|
-| Pan de Hamburguesa Clásico | Hamburguesas | PAQUETES | 42 | 0.22 | 1.25 |
-| Producto Horneados General | Horneados | UNIDADES | 95 | 0.30 | 1.40 |
-| Pan de Agua | Panadería | UNIDADES | 310 | 0.16 | 0.70 |
-| Pan Francés | Panadería | UNIDADES | 260 | 0.18 | 0.75 |
+| Producto | Tienda | Rubro | Unidad | Base/día | Dispersión | Sensib. estacional |
+|---|---|---|---|---:|---:|---:|
+| Pan de Hamburguesa Clásico | Hamburguesas | `PAN_HAMBURGUESA` | PAQUETES | 42 | 0.22 | 1.25 |
+| Producto Horneados General | Horneados | `HORNEADOS` | UNIDADES | 95 | 0.30 | 1.40 |
+| Pan de Agua | Panadería | `PANADERIA_CLASICA` | UNIDADES | 310 | 0.16 | 0.70 |
+| Pan Francés | Panadería | `PANADERIA_CLASICA` | UNIDADES | 260 | 0.18 | 0.75 |
 
 El razonamiento: el **pan de consumo diario** (agua y francés) es el más
 estable —la gente compra pan todos los días, llueva o truene—, por eso baja
@@ -224,6 +225,13 @@ dispersión y sensibilidad estacional por debajo de 1. El **pan de
 hamburguesa** se compra para parrilladas y reuniones, así que amplifica los
 fines de semana y feriados. Los **horneados** (pastelería) son los más
 estacionales de todos: fuertes en fechas celebratorias, planos entre semana.
+
+La columna **Rubro** espeja `Tiendas.TipoRubro` de la base de producción. En el
+catálogo de producción hay exactamente una tienda por rubro, lo que tiene una
+consecuencia que conviene tener presente al leer los resultados: el rubro es
+deducible del `id_tienda`, así que no puede aportarle información nueva al
+modelo. Esa es justamente la pregunta que se mide en el
+[experimento de rubro](#experimento-le-sirve-al-modelo-saber-el-rubro-de-la-tienda).
 
 Los pedidos de Panadería además se reparten entre los dos **turnos de recojo**
 (62% mañana, 38% tarde), reflejando que la hornada de la mañana sale ~4am y la
@@ -233,13 +241,24 @@ turno por separado es la extensión natural del trabajo.
 
 ### Reproducibilidad
 
-El generador usa una **semilla fija** (`20260830`). Correrlo dos veces produce
-exactamente la misma base de datos, lo que permite reproducir las métricas de
-este documento años después. Se puede cambiar con `--semilla`.
+El generador usa una **semilla fija** (`20260830`), así que el azar está
+completamente determinado: correrlo dos veces **el mismo día** produce
+exactamente la misma base de datos. Se puede cambiar con `--semilla`.
 
-Salida con los parámetros por defecto: **3 años simulados (1.095 días), 4.380
-observaciones de demanda diaria, 79.621 pedidos individuales, ~1.003.284
-unidades/paquetes**, guardado en `data/entrenamiento.db`.
+> ⚠️ **La semilla fija no basta para reproducir un número exacto meses
+> después.** La ventana simulada termina en *ayer* (`date.today() - 1`), de
+> modo que correr el generador en otra fecha desplaza los tres años completos:
+> caen otros feriados en el tramo de validación, cambia el punto de corte y
+> cambian las métricas. Es una decisión deliberada —el historial sintético
+> tiene que llegar hasta hoy para que las predicciones que sirve la API sean
+> sobre fechas futuras reales— pero hay que declararla: **lo reproducible con
+> exactitud es la metodología, no la cifra**. Para congelar una ventana y
+> reproducir una tabla al decimal, pasar una `fecha_fin` explícita a
+> `generar_datos_sinteticos.generar()`.
+
+Salida con los parámetros por defecto (corrida del 2026-09-06): **3 años
+simulados (1.095 días), 4.380 observaciones de demanda diaria, 78.696 pedidos
+individuales, ~995.585 unidades/paquetes**, guardado en `data/entrenamiento.db`.
 
 > ⚠️ Sobre los identificadores: `catalogo.py` replica los `IdTienda`/`IdProducto`
 > del seed de `database_schema.sql` (1 = Hamburguesas, 2 = Horneados,
@@ -269,8 +288,9 @@ hacia atrás.
 
 ### Variables (features)
 
-Quince variables, todas derivables de la fecha —sin necesidad de conocer nada
-del futuro salvo el calendario, que sí se conoce:
+Trece variables (4 categóricas + 9 numéricas), todas derivables de la fecha
+—sin necesidad de conocer nada del futuro salvo el calendario, que sí se
+conoce:
 
 | Variable | Tipo | Qué captura |
 |---|---|---|
@@ -312,7 +332,7 @@ Se entrenan tres y se reportan los tres sobre exactamente la misma validación:
 
 Se selecciona automáticamente el de **menor MAE** en validación.
 
-**Por qué árboles y no deep learning.** Con ~4.400 observaciones y 15 variables
+**Por qué árboles y no deep learning.** Con ~4.400 observaciones y 13 variables
 tabulares, un ensamble de árboles es el estándar defendible: es lo que mejor
 funciona en ese régimen de datos. Una red neuronal no tendría datos suficientes
 para justificar su capacidad, sería más difícil de interpretar y no habría forma
@@ -341,20 +361,30 @@ Reporte completo y siempre actualizado en
 entrenamiento. Los números de abajo corresponden a la corrida con los
 parámetros por defecto.
 
-**Partición:** entrenamiento 2023-08-31 → 2026-01-23 (876 días, 3.504
-observaciones); validación 2026-01-23 → 2026-08-29 (219 días, 876
-observaciones).
+> **Sobre reproducir estos números.** El generador simula hasta *ayer*
+> (`date.today() - 1`), así que la ventana de tres años se desliza con la fecha
+> en que se corre. Regenerar los datos en otro día produce un historial
+> distinto y, por tanto, métricas distintas — e incluso puede cambiar cuál de
+> los dos modelos gana, porque Random Forest y Gradient Boosting quedan a
+> pocas décimas de MAE uno del otro. Lo reproducible con exactitud es la
+> *metodología*, no la cifra concreta; la tabla de abajo corresponde a la
+> corrida del 2026-09-06. Para fijar la ventana y reproducir un número exacto
+> hay que pasar una `fecha_fin` explícita a `generar_datos_sinteticos.generar`.
 
 ### Comparación de modelos
 
 | Modelo | MAE | RMSE | MAPE (%) | R² |
 |---|---:|---:|---:|---:|
-| Línea base estacional | 47.999 | 72.304 | 19.68 | 0.8104 |
-| Random Forest | 41.816 | 58.164 | 19.81 | 0.8773 |
-| **Gradient Boosting** *(seleccionado)* | **41.708** | **57.015** | 20.23 | **0.8821** |
+| Línea base estacional | 48.859 | 73.068 | 20.25 | 0.7977 |
+| **Random Forest** *(seleccionado)* | **42.718** | **58.670** | 20.83 | **0.8696** |
+| Gradient Boosting | 46.055 | 61.228 | 24.72 | 0.8580 |
 
-Gradient Boosting mejora el MAE de la línea base en un **13%** y el RMSE en un
-**21%**. Que la mejora en RMSE sea mayor que en MAE es informativo: el modelo
+**Partición:** entrenamiento 2023-09-06 → 2026-01-29 (876 días, 3.504
+observaciones); validación 2026-01-29 → 2026-09-04 (219 días, 876
+observaciones).
+
+Random Forest mejora el MAE de la línea base en un **13%** y el RMSE en un
+**20%**. Que la mejora en RMSE sea mayor que en MAE es informativo: el modelo
 gana sobre todo en los días *difíciles* —feriados, vísperas, picos— que son
 precisamente los que la heurística del día de la semana no puede anticipar y
 los que más cuestan al negocio.
@@ -363,10 +393,10 @@ los que más cuestan al negocio.
 
 | Tienda | Producto | Unidad | Demanda media/día | MAE | RMSE | MAPE (%) | R² |
 |---|---|---|---:|---:|---:|---:|---:|
-| Hamburguesas | Pan de Hamburguesa Clásico | PAQUETES | 73.08 | 14.316 | 18.815 | 20.52 | 0.4258 |
-| Horneados | Producto Horneados General | UNIDADES | 142.64 | 35.655 | 44.652 | 28.96 | 0.3112 |
-| Panadería | Pan de Agua | UNIDADES | 429.70 | 58.793 | 72.815 | 14.27 | 0.4153 |
-| Panadería | Pan Francés | UNIDADES | 366.80 | 58.069 | 73.164 | 17.17 | 0.4045 |
+| Hamburguesas | Pan de Hamburguesa Clásico | PAQUETES | 73.33 | 15.906 | 20.287 | 24.16 | 0.3833 |
+| Horneados | Producto Horneados General | UNIDADES | 147.79 | 36.006 | 48.360 | 26.64 | 0.4338 |
+| Panadería | Pan de Agua | UNIDADES | 421.18 | 61.326 | 75.272 | 15.97 | 0.3110 |
+| Panadería | Pan Francés | UNIDADES | 367.27 | 57.633 | 73.160 | 16.55 | 0.3196 |
 
 El desglose importa porque el MAE global está dominado por Panadería (cientos
 de unidades/día) y escondería el desempeño en Hamburguesas (decenas de
@@ -374,7 +404,7 @@ paquetes/día).
 
 ### Error del modelo frente al error irreducible
 
-Un **R² por producto de ~0.40** podría parecer bajo si se lee sin contexto. No
+Un **R² por producto de ~0.35** podría parecer bajo si se lee sin contexto. No
 lo es, y el servicio calcula el diagnóstico que lo demuestra.
 
 La demanda observada es una realización aleatoria alrededor de su valor
@@ -386,17 +416,17 @@ modelo, por bueno que sea, puede bajar de ahí. Como los datos son sintéticos,
 
 | Producto | MAE modelo | MAE oráculo (piso) | Razón |
 |---|---:|---:|---:|
-| Pan de Hamburguesa Clásico | 14.316 | 12.294 | 1.164 |
-| Producto Horneados General | 35.655 | 33.556 | 1.063 |
-| Pan de Agua | 58.793 | 56.613 | 1.039 |
-| Pan Francés | 58.069 | 52.737 | 1.101 |
-| **Global** | **41.708** | **38.800** | **1.075** |
+| Pan de Hamburguesa Clásico | 15.906 | 14.416 | 1.103 |
+| Producto Horneados General | 36.006 | 33.769 | 1.066 |
+| Pan de Agua | 61.326 | 51.974 | 1.180 |
+| Pan Francés | 57.633 | 51.434 | 1.121 |
+| **Global** | **42.718** | **37.898** | **1.127** |
 
-**El modelo comete apenas un 7,5% más de error que el mejor predictor
-teóricamente posible.** Dicho de otro modo: de todo el error observado, la
-inmensa mayoría es ruido irreducible del negocio y solo una fracción pequeña es
-atribuible al modelo. El R² de 0.40 no mide un modelo mediocre; mide un negocio
-con alta variabilidad diaria, que es exactamente lo que se simuló.
+**El modelo comete un 12,7% más de error que el mejor predictor teóricamente
+posible.** Dicho de otro modo: de todo el error observado, la mayor parte es
+ruido irreducible del negocio y solo una fracción es atribuible al modelo. El
+R² de ~0.35 por producto no mide un modelo mediocre; mide un negocio con alta
+variabilidad diaria, que es exactamente lo que se simuló.
 
 Este diagnóstico **solo puede calcularse en el entorno sintético** (en datos
 reales `λ` es desconocida). Valida la metodología —las variables y el modelo
@@ -407,28 +437,170 @@ producción.
 
 | Variable | Importancia |
 |---|---:|
-| `id_tienda` | 0.7818 |
-| `id_producto` | 0.0507 |
-| `dias_desde_inicio` | 0.0377 |
-| `es_fin_de_semana` | 0.0369 |
-| `es_feriado` | 0.0259 |
-| `es_vispera_feriado` | 0.0231 |
-| `semana_anio` | 0.0113 |
-| `dia_semana` | 0.0111 |
-| `mes` | 0.0104 |
-| `dia_del_mes` | 0.0071 |
-| `es_posterior_feriado` | 0.0024 |
-| `es_quincena` | 0.0009 |
-| `es_fin_de_mes` | 0.0006 |
+| `id_tienda` | 0.7761 |
+| `dias_desde_inicio` | 0.0397 |
+| `id_producto` | 0.0362 |
+| `es_fin_de_semana` | 0.0362 |
+| `es_feriado` | 0.0241 |
+| `dia_del_mes` | 0.0206 |
+| `semana_anio` | 0.0177 |
+| `es_vispera_feriado` | 0.0173 |
+| `dia_semana` | 0.0160 |
+| `mes` | 0.0111 |
+| `es_fin_de_mes` | 0.0022 |
+| `es_quincena` | 0.0019 |
+| `es_posterior_feriado` | 0.0009 |
 
 La lectura correcta: `id_tienda` domina porque separa escalas muy distintas
 (Panadería ~400 unidades/día vs. Hamburguesas ~73 paquetes/día) — es el
-«cuánto» base. Lo relevante es qué viene después: **tendencia, fin de semana,
-feriado y víspera de feriado** son las cuatro variables de calendario más
-importantes, en ese orden. Es decir, el modelo aprendió exactamente los patrones
-que se le inyectaron, lo que confirma que las variables elegidas son las
-correctas. Que `es_quincena` y `es_fin_de_mes` pesen poco también es coherente:
-se simularon como efectos deliberadamente débiles (+6% y +5%).
+«cuánto» base. Lo relevante es qué viene después: **tendencia
+(`dias_desde_inicio`), fin de semana, feriado y víspera de feriado** encabezan
+las variables de calendario. Es decir, el modelo aprendió exactamente los
+patrones que se le inyectaron, lo que confirma que las variables elegidas son
+las correctas. Que `es_quincena` y `es_fin_de_mes` pesen poco también es
+coherente: se simularon como efectos deliberadamente débiles (+6% y +5%).
+
+El orden exacto de las variables de calendario varía algo entre corridas (ver
+la nota sobre la ventana deslizante más arriba); lo que se mantiene estable, y
+es lo que sostiene el argumento, son los dos bloques: `id_tienda` domina, y
+después vienen tendencia y las banderas de calendario fuerte, muy por encima de
+las de ciclo de pago.
+
+---
+
+## Experimento: ¿le sirve al modelo saber el rubro de la tienda?
+
+**Pregunta:** ¿mejora la predicción si el modelo conoce el rubro de la tienda
+(pan de hamburguesa / panadería clásica / horneados), y conviene más un modelo
+único con esa variable o modelos especializados por rubro?
+
+Reporte completo en
+[`modelos/REPORTE_COMPARACION_RUBRO.md`](modelos/REPORTE_COMPARACION_RUBRO.md)
+y datos crudos en `modelos/comparacion_rubro.json`. Se regeneran con
+`python entrenar_modelo.py --experimento-rubro`. El código vive en
+`experimento_rubro.py`.
+
+### Qué se comparó
+
+Tres configuraciones, sobre **exactamente la misma partición temporal**, con el
+mismo regresor, los mismos hiperparámetros y las mismas semillas. Lo único que
+cambia es lo que se pregunta:
+
+| Configuración | Qué es |
+|---|---|
+| **(a)** `unico_sin_rubro` | El pipeline actual. Control. |
+| **(b)** `unico_con_rubro` | Igual, más `tipo_rubro` como variable categórica. |
+| **(c)** `especializado_por_rubro` | Un modelo entrenado solo con los datos de cada rubro. |
+
+Y sobre **tres escenarios**, porque la respuesta no es la misma en los tres y
+quedarse con uno solo llevaría a una conclusión equivocada:
+
+1. **Producción (1 tienda por rubro)** — las 3 tiendas reales.
+2. **Multi-sucursal, tiendas conocidas** — 9 sucursales sintéticas (3 por
+   rubro), partición temporal estándar.
+3. **Multi-sucursal, tienda NUEVA** — se deja una sucursal por rubro
+   (`13`, `23`, `33`) *totalmente fuera* del entrenamiento y solo se evalúa
+   sobre ellas. Simula abrir un local y tener que planificar producción sin
+   historial propio.
+
+> El escenario multi-sucursal usa un catálogo ampliado
+> (`catalogo.CATALOGO_EXPERIMENTO_RUBRO`) y su propia base
+> `data/entrenamiento_rubros.db`. **No** entra al modelo desplegado: esas
+> tiendas no existen en producción.
+
+### Cómo se decide si una diferencia es real
+
+Una diferencia de MAE de unas décimas de porcentaje **no es un ganador, es
+ruido**. Un resultado solo cuenta como MEJORA si pasa las tres pruebas:
+
+1. **Bootstrap pareado** (2.000 remuestreos) cuyo IC 95% no contiene 0.
+2. **Supera la dispersión entre semillas** — cada configuración se reentrena
+   con 5 semillas; si la diferencia es menor que lo que mueve cambiar la
+   semilla, no hay nada que concluir.
+3. **Supera el 1% del MAE** (relevancia práctica). Con ~900 observaciones
+   pareadas el bootstrap declara «significativa» una diferencia de 0,2%, que es
+   cierta y a la vez inútil: sobre cientos de unidades de pan al día no cambia
+   ninguna decisión de producción.
+
+Además todo se calcula con **los dos regresores**: si la conclusión dependiera
+de cuál se mira, no sería una conclusión.
+
+### Resultados (MAE, media ± desv. entre 5 semillas)
+
+| Escenario | Regresor | (a) sin rubro | (b) con rubro | (c) especializados | Línea base |
+|---|---|---:|---:|---:|---:|
+| 1. Producción | Random Forest | 42.504 ± 0.173 | 42.489 ± 0.194 | 42.530 ± 0.182 | 48.859 |
+| 1. Producción | Gradient Boosting | 46.141 ± 0.647 | 46.089 ± 1.834 | 45.287 ± 1.839 | 48.859 |
+| 2. Multi-sucursal conocidas | Random Forest | 45.021 ± 0.073 | 45.339 ± 0.095 | 45.347 ± 0.178 | 48.233 |
+| 2. Multi-sucursal conocidas | Gradient Boosting | 42.644 ± 0.754 | 42.212 ± 0.301 | 44.294 ± 1.326 | 48.233 |
+| **3. Tienda NUEVA** | Random Forest | 185.599 ± 0.380 | 185.610 ± 0.504 | **134.667 ± 1.986** | 148.628 |
+| **3. Tienda NUEVA** | Gradient Boosting | 191.560 ± 1.302 | 166.165 ± 1.813 | **146.131 ± 7.316** | 148.628 |
+
+Veredictos frente al control (a), regresor de referencia `random_forest`:
+
+| Escenario | (b) con rubro | (c) especializados |
+|---|---|---|
+| 1. Producción | +0.06% → **sin efecto** | +0.82% → **irrelevante** |
+| 2. Multi-sucursal conocidas | −0.65% → **irrelevante** | −1.14% → **empeora** |
+| 3. Tienda NUEVA | +0.27% → **irrelevante** | **+25.9% → MEJORA** |
+
+### Conclusión honesta
+
+**1. Con el catálogo de producción, el rubro no puede aportar nada — y eso es
+estructural, no empírico.** Hay una sola tienda por rubro, así que `tipo_rubro`
+es una función biyectiva de `id_tienda` y el one-hot de la tienda ya lo
+codifica sin pérdida. El experimento no lo descubre: lo confirma.
+
+**2. Hay una segunda vía de redundancia, y es la más interesante.** En este
+negocio cada rubro tiene sus propios productos —una hamburguesería y una
+panadería no venden lo mismo—, así que **`id_producto` ya identifica el rubro**.
+El modelo «sin rubro» conoce el rubro igual, por la puerta de atrás. Por eso
+(b) no mejora tampoco en el escenario multi-sucursal. El servicio calcula este
+diagnóstico automáticamente y lo imprime en el reporte.
+
+**3. Lo que sí cambia el resultado no es *declarar* el rubro sino *partir* el
+problema por rubro, y solo para una tienda nueva.** Ahí el one-hot de
+`id_tienda` no tiene ninguna columna que activar. (c) baja el MAE un **25,9%**
+frente al control con Random Forest y un **17,3%** con Gradient Boosting: los
+dos regresores coinciden, el efecto es grande y sobrevive a las tres pruebas.
+Parte de esa ventaja, hay que decirlo, no es «saber el rubro» sino dejar de
+repartir la capacidad del modelo entre series de escalas muy distintas.
+
+**4. Resultado incómodo que no se esconde:** en el escenario de tienda nueva,
+la **línea base sin ML (MAE 148.6) le gana a los modelos (a) y (b)** (185.6).
+Solo (c) la supera. Un modelo que no supera la heurística no justifica su
+complejidad, y en ese escenario (a) y (b) no la superan.
+
+**5. Los dos regresores no coinciden en todos los veredictos** de los
+escenarios 1 y 2. Donde discrepan, la evidencia es débil y no se presenta como
+resultado: un efecto que aparece con un regresor y desaparece con el otro es un
+efecto que estos datos no sostienen.
+
+> **La conclusión defendible no es «el rubro mejora la predicción».** Es:
+> declarar el rubro como una variable más no mejora nada mientras el modelo
+> pueda deducirlo de la tienda o del producto —que es el caso en este negocio—.
+> Lo que sí cambia el resultado, y sólo para una tienda nueva sin historial, es
+> **usar el rubro para partir el problema**. El rubro vale como criterio de
+> segmentación, no como feature.
+
+### Qué se decidió para el servicio
+
+El modelo desplegado **no** incorpora la variable de rubro: con el catálogo
+actual sería complejidad sin beneficio medible. Pero la variable ya está
+implementada de punta a punta —columna `Tiendas.TipoRubro` en la base,
+`tipo_rubro` en `catalogo.py` y en el pipeline de `caracteristicas.py`, y el
+contrato de features se guarda en el propio artefacto (`usa_rubro`) para que
+inferencia use siempre las mismas columnas del entrenamiento—. Activarla el día
+que el negocio abra una segunda tienda de un rubro existente es cambiar una
+bandera y reentrenar, no rehacer el modelo.
+
+**Limitación principal del experimento:** el escenario multi-sucursal es
+simulado. Que las tiendas de un mismo rubro compartan la forma de su demanda es
+un supuesto que el generador **inyecta a propósito**
+(`catalogo.FIRMA_POR_RUBRO`). El experimento mide si la metodología recupera esa
+estructura, no que la estructura exista en la realidad. Se comprueba con datos
+reales en cuanto haya dos tiendas operativas del mismo rubro con historial
+suficiente, sin cambios de código.
 
 ---
 
@@ -636,6 +808,21 @@ Entrena los tres modelos, imprime la comparación, selecciona el mejor y escribe
 - `modelos/metricas.json` — métricas completas en JSON
 - `modelos/REPORTE_METRICAS.md` — el mismo reporte en formato legible
 
+### 3b. (Opcional) Correr el experimento de rubro
+
+```bash
+python generar_datos_sinteticos.py --experimento-rubro   # una sola vez
+python entrenar_modelo.py --experimento-rubro
+```
+
+El primer comando crea `data/entrenamiento_rubros.db`, el historial
+multi-sucursal que el experimento necesita. El segundo corre las tres
+configuraciones sobre los tres escenarios y luego el entrenamiento normal;
+tarda varios minutos porque entrena decenas de modelos. Escribe
+`modelos/REPORTE_COMPARACION_RUBRO.md` y `modelos/comparacion_rubro.json`.
+No toca el modelo desplegado. Ver la sección
+[Experimento: ¿le sirve al modelo saber el rubro de la tienda?](#experimento-le-sirve-al-modelo-saber-el-rubro-de-la-tienda).
+
 ### 4. Levantar el servidor
 
 ```bash
@@ -678,12 +865,13 @@ ml_service/
 ├── requirements.txt               Dependencias con versión fijada
 ├── .gitignore
 │
-├── catalogo.py                    Tiendas y productos + parámetros de simulación
+├── catalogo.py                    Tiendas, rubros y productos + parámetros de simulación
 ├── feriados_peru.py               Feriados oficiales + fechas comerciales
 ├── caracteristicas.py             Ingeniería de features (única fuente de verdad)
 │
 ├── generar_datos_sinteticos.py    Genera data/entrenamiento.db
 ├── entrenar_modelo.py             Entrena, valida, selecciona y reporta
+├── experimento_rubro.py           Experimento de rubro (3 configuraciones)
 │
 ├── api.py                         Aplicación FastAPI (endpoints)
 ├── esquemas.py                    Contrato de entrada/salida (Pydantic)
@@ -691,11 +879,14 @@ ml_service/
 ├── prueba_humo.py                 Verificación de punta a punta
 │
 ├── data/
-│   └── entrenamiento.db           SQLite LOCAL con datos sintéticos (no versionado)
+│   ├── entrenamiento.db           SQLite LOCAL con datos sintéticos (no versionado)
+│   └── entrenamiento_rubros.db    Historial multi-sucursal del experimento (no versionado)
 └── modelos/
     ├── modelo_demanda.joblib      Modelo entrenado
     ├── metricas.json              Métricas de validación (JSON)
-    └── REPORTE_METRICAS.md        Métricas de validación (legible)
+    ├── REPORTE_METRICAS.md        Métricas de validación (legible)
+    ├── comparacion_rubro.json     Resultados del experimento de rubro (JSON)
+    └── REPORTE_COMPARACION_RUBRO.md   Experimento de rubro (legible)
 ```
 
 Dependencias entre módulos: `api.py → predictor.py → caracteristicas.py`, y

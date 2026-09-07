@@ -183,9 +183,22 @@ CREATE TABLE Tiendas (
     Nombre          NVARCHAR(100)       NOT NULL,
     Slug            VARCHAR(50)         NOT NULL,
     Disponible      BIT                 NOT NULL DEFAULT 0,  -- si ya está operativa (vs "Próximamente")
+    -- Rubro del negocio de la tienda. NO es lo mismo que el Nombre/Slug: el
+    -- nombre es comercial y puede cambiar o repetirse entre sucursales; el
+    -- rubro describe QUÉ TIPO de demanda tiene la tienda y es lo que consume
+    -- el microservicio de predicción (ml_service) como variable del modelo.
+    -- Dos tiendas del mismo rubro comparten forma de demanda (ciclo semanal,
+    -- sensibilidad a feriados) aunque vendan a escalas distintas, que es
+    -- justamente lo que permite predecir una sucursal nueva sin historial.
+    -- 'OTRO' es el valor honesto para las tiendas cuyo rubro todavía no está
+    -- definido o no encaja en los tres anteriores (Mercadería, Pastelería):
+    -- forzarles una categoría inventada le mentiría al modelo.
+    TipoRubro       VARCHAR(30)         NOT NULL DEFAULT 'OTRO',
     Estado          BIT                 NOT NULL DEFAULT 1,
     CONSTRAINT PK_Tiendas PRIMARY KEY (IdTienda),
-    CONSTRAINT UQ_Tiendas_Slug UNIQUE (Slug)
+    CONSTRAINT UQ_Tiendas_Slug UNIQUE (Slug),
+    CONSTRAINT CK_Tiendas_TipoRubro CHECK (TipoRubro IN
+        ('PAN_HAMBURGUESA','PANADERIA_CLASICA','HORNEADOS','OTRO'))
 );
 GO
 
@@ -611,12 +624,16 @@ GO
 
 -- Hamburguesas/Horneados ya operativas; el resto queda como "Próximamente"
 -- (Disponible=0) hasta que el negocio las active.
-INSERT INTO Tiendas (Nombre, Slug, Disponible) VALUES
-    ('Hamburguesas', 'hamburguesas', 1),
-    ('Horneados',    'horneados',    1),
-    ('Panadería',    'panaderia',    0),
-    ('Mercadería',   'mercaderia',   0),
-    ('Pastelería',   'pasteleria',   0);
+-- TipoRubro alimenta el modelo de predicción de demanda (ver ml_service).
+-- Mercadería y Pastelería quedan en 'OTRO' a propósito: no tienen catálogo
+-- ni operación todavía, así que asignarles un rubro sería un supuesto sin
+-- respaldo. Cuando arranquen, se actualiza esta columna y se reentrena.
+INSERT INTO Tiendas (Nombre, Slug, Disponible, TipoRubro) VALUES
+    ('Hamburguesas', 'hamburguesas', 1, 'PAN_HAMBURGUESA'),
+    ('Horneados',    'horneados',    1, 'HORNEADOS'),
+    ('Panadería',    'panaderia',    0, 'PANADERIA_CLASICA'),
+    ('Mercadería',   'mercaderia',   0, 'OTRO'),
+    ('Pastelería',   'pasteleria',   0, 'OTRO');
 GO
 
 INSERT INTO Categorias (IdTienda, Nombre)
