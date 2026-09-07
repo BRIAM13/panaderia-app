@@ -496,16 +496,39 @@ function validateCrearPedidoHorneado(req, res, next) {
  * datos y (potencialmente) gastar una consulta paga a apiperu.dev.
  */
 function validateCrearPedidoPublico(req, res, next) {
-  const { documento, telefono, items, notas } = req.body;
+  const { documento, telefono, email, items, notas } = req.body;
   const errores = [];
 
   if (!isNonEmptyString(documento) || (!DNI_PERU_REGEX.test(documento.trim()) && !RUC_PERU_REGEX.test(documento.trim()))) {
     errores.push('El documento debe ser un DNI de 8 dígitos o un RUC de 11 dígitos.');
   }
+  // El correo es OPCIONAL (a diferencia del celular): el formulario web lo
+  // pide, pero un pedido sin correo sigue siendo válido — y cuando el
+  // documento ya tiene uno guardado, el formulario directamente no lo manda.
+  if (email !== undefined && email !== null && String(email).trim().length > 0) {
+    const emailLimpio = String(email).trim();
+    // El asterisco se rechaza aparte porque EMAIL_REGEX lo aceptaría:
+    // `j***@gmail.com` es exactamente la máscara que la web le muestra al
+    // cliente cuando ya teníamos su correo (ver utils/enmascarar.js). Si
+    // alguna vez se reenviara esa máscara, guardarla pisaría un correo bueno
+    // con uno inservible — mejor un 400 ruidoso que un dato corrupto.
+    if (!EMAIL_REGEX.test(emailLimpio) || emailLimpio.includes('*') || emailLimpio.length > 150) {
+      errores.push('Email inválido.');
+    }
+  }
   // Celular peruano: siempre 9 dígitos, más estricto que TELEFONO_REGEX
   // (6-20, pensado para otros formularios que sí aceptan fijos/extranjeros).
-  if (!isNonEmptyString(telefono) || !CELULAR_PERU_REGEX.test(telefono.trim())) {
-    errores.push('Ingresa un número de celular válido de 9 dígitos.');
+  //
+  // Puede venir ausente: cuando el documento ya está registrado y tiene
+  // celular guardado, el formulario web NO lo reenvía (nunca ve el número
+  // completo, solo una máscara tipo 9*****321 — ver utils/enmascarar.js), y
+  // el controller reutiliza el que ya está en Personas. Que exista un
+  // celular utilizable lo decide el controller, que sí puede mirar la base;
+  // acá solo se exige que, SI viene, tenga forma de celular peruano.
+  if (telefono !== undefined && telefono !== null && String(telefono).trim().length > 0) {
+    if (!CELULAR_PERU_REGEX.test(String(telefono).trim())) {
+      errores.push('Ingresa un número de celular válido de 9 dígitos.');
+    }
   }
   // Tope de 500 por línea: sin JWT detrás, esta validación es la única
   // barrera antes de tocar la base (y de gastar una consulta paga a
@@ -706,6 +729,12 @@ module.exports = {
   validateConfirmarRecuperacion,
   DNI_PERU_REGEX,
   RUC_PERU_REGEX,
+  // Las usa publicoController para revalidar el correo/celular del pedido
+  // web antes de guardarlos en Personas — mismas reglas que acá, sin
+  // duplicarlas (el celular ya no es obligatorio en el body: puede salir de
+  // la fila de Personas, y eso solo lo puede decidir el controller).
+  EMAIL_REGEX,
+  CELULAR_PERU_REGEX,
   // Exportada para poder probar las reglas de carrito sueltas (ver
   // __tests__/validators.test.js) sin armar un req/res falso por caso.
   validarItemsPedido,

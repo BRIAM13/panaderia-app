@@ -12,7 +12,8 @@ const {
 } = require('./pedidosController');
 const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy, fueraDeHorarioAtencion, franjaAjustada } = require('../utils/horariosPanaderia');
 const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
-const { RUC_PERU_REGEX } = require('../middlewares/validators');
+const { RUC_PERU_REGEX, EMAIL_REGEX, CELULAR_PERU_REGEX } = require('../middlewares/validators');
+const { contactoEnmascarado, contactoVacio } = require('../utils/enmascarar');
 
 // Tiendas que la página web pública puede mostrar/vender — Mercadería y
 // Pastelería todavía no tienen catálogo real, y Horneados tiene precio
@@ -164,10 +165,24 @@ async function crearPedidoPublico(req, res, next) {
   // valida contra RENIEC) o RUC (11 dígitos, contra SUNAT) — se distingue
   // solo por el largo, mismo criterio que ya usa validateCliente para el
   // registro manual de clientes.
-  const { documento, telefono, items, notas, fechaEntrega } = req.body;
+  const { documento, telefono, email, items, notas, fechaEntrega } = req.body;
   const documentoLimpio = String(documento).trim();
   const esRuc = RUC_PERU_REGEX.test(documentoLimpio);
-  const telefonoLimpio = String(telefono).trim();
+  // Ambos pueden llegar vacíos/ausentes: si el documento ya está registrado
+  // con ese canal guardado, el formulario público NO lo reenvía (solo vio
+  // una máscara, nunca el valor real). El celular que de verdad se usa para
+  // el pedido se resuelve más abajo, ya con la fila de Personas a la vista.
+  const telefonoBody = telefono === undefined || telefono === null ? '' : String(telefono).trim();
+  const emailBody = email === undefined || email === null ? '' : String(email).trim();
+  // Revalidación server-side del correo: el validador ya lo revisó, pero
+  // esta es la única barrera real (no hay JWT detrás) y el valor termina en
+  // la base, así que no se confía en que el middleware haya corrido.
+  // El `includes('*')` descarta la máscara (`j***@gmail.com`), que
+  // EMAIL_REGEX sí aceptaría — ver la misma guarda en el validador.
+  const emailNuevo =
+    emailBody.length > 0 && emailBody.length <= 150 && EMAIL_REGEX.test(emailBody) && !emailBody.includes('*')
+      ? emailBody
+      : null;
 
   const pool = await getPool();
 
@@ -311,15 +326,73 @@ async function crearPedidoPublico(req, res, next) {
 
     const personaExistente = await new sql.Request(transaction)
       .input('DNI', sql.VarChar(15), documentoLimpio)
-      .query('SELECT IdPersona, Nombres, ApellidoPaterno FROM Personas WHERE DNI = @DNI');
+      .query(`
+        SELECT IdPersona, Nombres, ApellidoPaterno, Email, Telefono, EmailVerificado, TelefonoVerificado
+        FROM Personas WHERE DNI = @DNI
+      `);
 
     let idPersona;
     let nombreParaAviso;
+    // Celular con el que de verdad se contacta al cliente por este pedido:
+    // el que acaba de escribir, o el que ya teníamos guardado si no mandó
+    // ninguno (porque el formulario se lo mostró enmascarado y él no lo
+    // cambió). Nunca queda vacío: si no hay ni uno ni otro, se rechaza.
+    let telefonoLimpio = telefonoBody;
 
     if (personaExistente.recordset.length > 0) {
-      idPersona = personaExistente.recordset[0].IdPersona;
-      nombreParaAviso = [personaExistente.recordset[0].Nombres, personaExistente.recordset[0].ApellidoPaterno].filter(Boolean).join(' ');
+      const persona = personaExistente.recordset[0];
+      idPersona = persona.IdPersona;
+      nombreParaAviso = [persona.Nombres, persona.ApellidoPaterno].filter(Boolean).join(' ');
+
+      const telefonoGuardado = persona.Telefono ? String(persona.Telefono).trim() : '';
+      const emailGuardado = persona.Email ? String(persona.Email).trim() : '';
+      // BIT de MariaDB/mssql puede llegar como 1/0, true/false o Buffer
+      // según el driver — Boolean() sobre el valor crudo alcanza para los
+      // dos primeros, que son los que devuelve la capa de compatibilidad.
+      //
+      // Un canal sin valor guardado NO se considera bloqueado aunque su flag
+      // esté en 1 (fila inconsistente): así el servidor decide exactamente
+      // igual que el bloque `contacto` que vio la página (enArchivo:false =>
+      // campo editable), y el cliente nunca queda trabado en un campo que el
+      // formulario sí le dejó llenar.
+      const telefonoVerificado = Boolean(persona.TelefonoVerificado) && telefonoGuardado.length > 0;
+      const emailVerificado = Boolean(persona.EmailVerificado) && emailGuardado.length > 0;
+
+      // Un canal YA VERIFICADO no se toca desde acá bajo ningún concepto:
+      // cambiarlo exige pasar por el código de verificación dentro de la app
+      // (ver CodigosVerificacion). El formulario público ni siquiera ofrece
+      // editarlo, pero esta es la única barrera real — el body es del
+      // cliente y podría venir con cualquier cosa.
+      if (telefonoVerificado) {
+        telefonoLimpio = telefonoGuardado;
+      } else if (telefonoBody.length > 0 && telefonoBody !== telefonoGuardado) {
+        await new sql.Request(transaction)
+          .input('IdPersona', sql.Int, idPersona)
+          .input('Telefono', sql.VarChar(20), telefonoBody)
+          .query('UPDATE Personas SET Telefono = @Telefono WHERE IdPersona = @IdPersona');
+      } else if (telefonoBody.length === 0) {
+        telefonoLimpio = telefonoGuardado;
+      }
+
+      if (!emailVerificado && emailNuevo !== null && emailNuevo !== emailGuardado) {
+        await new sql.Request(transaction)
+          .input('IdPersona', sql.Int, idPersona)
+          .input('Email', sql.VarChar(150), emailNuevo)
+          .query('UPDATE Personas SET Email = @Email WHERE IdPersona = @IdPersona');
+      }
+
+      if (!CELULAR_PERU_REGEX.test(telefonoLimpio)) {
+        await transaction.rollback();
+        return res.status(400).json({ mensaje: 'Ingresa un número de celular válido de 9 dígitos.' });
+      }
     } else {
+      // Persona nueva: no hay nada guardado que reutilizar, así que el
+      // celular tiene que venir sí o sí en el body (el formulario lo pide
+      // como campo obligatorio en este caso).
+      if (!CELULAR_PERU_REGEX.test(telefonoLimpio)) {
+        await transaction.rollback();
+        return res.status(400).json({ mensaje: 'Ingresa un número de celular válido de 9 dígitos.' });
+      }
       // RUC (empresa/negocio, vía SUNAT) no tiene apellidos — se guarda la
       // razón social en Nombres, igual que ya hace el registro manual de
       // clientes-empresa en la app (ver Clientes/Personas, sin columna
@@ -352,11 +425,15 @@ async function crearPedidoPublico(req, res, next) {
         .input('ApellidoPaterno', sql.NVarChar(100), apellidoPaterno.toUpperCase())
         .input('ApellidoMaterno', sql.NVarChar(100), apellidoMaterno ? apellidoMaterno.toUpperCase() : null)
         .input('Telefono', sql.VarChar(20), telefonoLimpio)
+        // El correo es opcional: si el visitante no lo dejó, la columna
+        // queda NULL (nace sin verificar en los dos casos — EmailVerificado
+        // tiene DEFAULT 0 —, la verificación real vive en la app).
+        .input('Email', sql.VarChar(150), emailNuevo)
         .input('OrigenValidacion', sql.VarChar(20), origenValidacion)
         .query(`
-          INSERT INTO Personas (DNI, Nombres, ApellidoPaterno, ApellidoMaterno, Telefono, OrigenValidacion)
+          INSERT INTO Personas (DNI, Nombres, ApellidoPaterno, ApellidoMaterno, Telefono, Email, OrigenValidacion)
           OUTPUT INSERTED.IdPersona
-          VALUES (@DNI, @Nombres, @ApellidoPaterno, @ApellidoMaterno, @Telefono, @OrigenValidacion)
+          VALUES (@DNI, @Nombres, @ApellidoPaterno, @ApellidoMaterno, @Telefono, @Email, @OrigenValidacion)
         `);
       idPersona = nuevaPersona.recordset[0].IdPersona;
       nombreParaAviso = [nombres, apellidoPaterno].filter(Boolean).join(' ');
@@ -419,7 +496,7 @@ async function crearPedidoPublico(req, res, next) {
       accion: 'CREAR_PEDIDO_WEB_PUBLICO',
       tablaAfectada: 'Pedidos',
       registroAfectadoId: String(idPedido),
-      datosNuevos: { documento: documentoLimpio, items: lineas, total, telefono: telefonoLimpio },
+      datosNuevos: { documento: documentoLimpio, items: lineas, total, telefono: telefonoLimpio, email: emailNuevo },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -523,11 +600,33 @@ async function verificarDocumentoPublico(req, res, next) {
 
   try {
     const pool = await getPool();
+    // La fila se busca SIN filtrar por OrigenValidacion, pero el filtro
+    // sigue existiendo (`esCacheValida`): solo un registro nacido de una
+    // verificación real ahorra la consulta paga. La diferencia es que ahora
+    // el contacto guardado se puede aprovechar igual aunque la fila sea
+    // 'MANUAL' — si no, un cliente cargado a mano por el personal vería los
+    // campos vacíos acá y sin embargo, al enviar, el servidor conservaría
+    // sus datos verificados: dos comportamientos distintos para la misma
+    // fila. Que el documento exista de verdad se sigue decidiendo igual.
     const existente = await pool.request()
       .input('DNI', sql.VarChar(15), documentoLimpio)
-      .query("SELECT IdPersona FROM Personas WHERE DNI = @DNI AND OrigenValidacion IN ('RENIEC', 'SUNAT')");
-    if (existente.recordset.length > 0) {
-      return res.status(200).json({ existe: true });
+      .query(`
+        SELECT IdPersona, Email, Telefono, EmailVerificado, TelefonoVerificado, OrigenValidacion
+        FROM Personas WHERE DNI = @DNI
+      `);
+    const filaPersona = existente.recordset.length > 0 ? existente.recordset[0] : null;
+    // `contacto` le dice a la página qué canales ya tenemos guardados de
+    // este documento y cuáles están verificados, para que pueda
+    // autocompletarlos en vez de pedirlos de nuevo. SIEMPRE enmascarado: el
+    // DNI en Perú no es un secreto fuerte, así que devolver el correo o el
+    // celular completos convertiría este endpoint público en una forma de
+    // extraer el contacto real de cualquiera con solo saber su documento
+    // (ver utils/enmascarar.js).
+    const contacto = filaPersona ? contactoEnmascarado(filaPersona) : contactoVacio();
+
+    const esCacheValida = filaPersona && ['RENIEC', 'SUNAT'].includes(filaPersona.OrigenValidacion);
+    if (esCacheValida) {
+      return res.status(200).json({ existe: true, contacto });
     }
 
     const datosDocumento = esRuc
@@ -537,13 +636,17 @@ async function verificarDocumentoPublico(req, res, next) {
     if (datosDocumento.fuente === 'NO_ENCONTRADO') {
       return res.status(200).json({
         existe: false,
+        contacto: contactoVacio(),
         mensaje: esRuc
           ? 'No encontramos ese RUC en SUNAT. Verifica el número.'
           : 'No encontramos ese DNI en RENIEC. Verifica el número.',
       });
     }
 
-    return res.status(200).json({ existe: true });
+    // Documento confirmado por RENIEC/SUNAT. `contacto` va vacío si nunca
+    // pidió por acá (no hay fila en Personas), o con lo que ya tuviéramos
+    // guardado si la fila existía pero era 'MANUAL'.
+    return res.status(200).json({ existe: true, contacto });
   } catch (err) {
     return next(err);
   }

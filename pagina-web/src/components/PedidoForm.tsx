@@ -5,7 +5,9 @@ import {
   CalendarClock,
   CheckCircle2,
   Loader2,
+  Pencil,
   RotateCw,
+  ShieldCheck,
   ShoppingBag,
   UserRound,
   WifiOff,
@@ -51,6 +53,11 @@ const SelectorFecha = lazy(() =>
 );
 const SelectorHora = lazy(() => import("./SelectorHora").then((m) => ({ default: m.SelectorHora })));
 
+/** Misma regla que EMAIL_REGEX en el backend (middlewares/validators.js):
+ * un chequeo de forma, no de existencia — evita el viaje al servidor por un
+ * correo obviamente mal escrito, pero la validación que manda es la de allá. */
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 interface PedidoFormProps {
   /** El catálogo lo trae App y lo comparte con el menú de arriba: el precio
    * que se muestra en la tarjeta y el que se cobra acá salen del mismo
@@ -85,11 +92,37 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
   const [tipoDocumento, setTipoDocumento] = useState<TipoDocumento>("DNI");
   const [numeroDocumento, setNumeroDocumento] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [email, setEmail] = useState("");
+  // Solo aplican cuando ya teníamos ese dato guardado y NO está verificado:
+  // el cliente ve el valor enmascarado y, si toca "Cambiar", se le abre un
+  // campo vacío para escribir uno nuevo. Nunca se le pide editar un valor a
+  // medio tapar (`j***@gmail.com`), que sería imposible de completar bien.
+  const [cambiandoTelefono, setCambiandoTelefono] = useState(false);
+  const [cambiandoEmail, setCambiandoEmail] = useState(false);
   const {
     valido: documentoValido,
     verificando: verificandoDocumento,
     aviso: avisoDocumento,
+    contacto,
   } = useVerificacionDocumento(numeroDocumento, tipoDocumento);
+
+  // Tres estados por canal (correo y celular), según lo que el backend ya
+  // tenga guardado de este documento:
+  //   sin dato          -> campo normal, vacío y editable
+  //   guardado sin verificar -> se muestra la máscara + "Cambiar"
+  //   guardado y verificado  -> solo lectura (se cambia dentro de la app)
+  // El input aparece cuando no hay nada guardado, o cuando el cliente pidió
+  // cambiar un dato que todavía no estaba verificado.
+  const mostrarInputTelefono = !contacto.telefono.enArchivo || (!contacto.telefono.verificado && cambiandoTelefono);
+  const mostrarInputEmail = !contacto.email.enArchivo || (!contacto.email.verificado && cambiandoEmail);
+  const telefonoLimpio = telefono.trim();
+  const emailLimpio = email.trim();
+  // Lo que de verdad viaja en el pedido: solo un valor nuevo y completo,
+  // nunca la máscara. Si el cliente se quedó con el dato guardado, el campo
+  // ni se manda y el backend reutiliza el que ya está en Personas.
+  const enviarTelefono = mostrarInputTelefono && telefonoLimpio.length > 0;
+  const enviarEmail = mostrarInputEmail && emailLimpio.length > 0;
+  const telefonoResuelto = mostrarInputTelefono ? /^\d{9}$/.test(telefonoLimpio) : true;
 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,7 +215,24 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
   useEffect(() => {
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tipoDocumento, numeroDocumento, telefono, idProducto, cantidad, notas, fechaRecojo, horaRecojo]);
+  }, [tipoDocumento, numeroDocumento, telefono, email, idProducto, cantidad, notas, fechaRecojo, horaRecojo]);
+
+  // Al conocerse (o cambiar) el documento, lo que ya tenemos guardado de él
+  // manda sobre lo que el cliente hubiera tecleado antes: el campo vuelve a
+  // mostrarse como dato guardado, sin arrastrar un valor a medio escribir
+  // del documento anterior. Si el documento nuevo no tiene nada guardado, lo
+  // tecleado se respeta (no hay nada que lo reemplace).
+  useEffect(() => {
+    if (!contacto.telefono.enArchivo) return;
+    setTelefono("");
+    setCambiandoTelefono(false);
+  }, [contacto.telefono.enArchivo, contacto.telefono.mascara]);
+
+  useEffect(() => {
+    if (!contacto.email.enArchivo) return;
+    setEmail("");
+    setCambiandoEmail(false);
+  }, [contacto.email.enArchivo, contacto.email.mascara]);
 
   // Si el cliente ya había elegido una hora y el reloj avanza lo
   // suficiente como para que ese horario ya no respete los minutos de
@@ -311,8 +361,17 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
       setError(avisoDocumento ?? textoNoEncontrado(tipoDocumento));
       return;
     }
-    if (!/^\d{9}$/.test(telefono.trim())) {
+    // El celular solo se exige cuando de verdad hay un campo para
+    // escribirlo: si ya lo teníamos guardado y el cliente lo dejó así, el
+    // pedido ya queda contactable con ese número (lo resuelve el backend por
+    // documento, sin que la web llegue a verlo completo).
+    if (mostrarInputTelefono && !/^\d{9}$/.test(telefonoLimpio)) {
       setError("Ingresa un número de celular válido de 9 dígitos.");
+      return;
+    }
+    // El correo es opcional: solo se revisa el formato si escribió algo.
+    if (mostrarInputEmail && emailLimpio.length > 0 && !EMAIL_REGEX.test(emailLimpio)) {
+      setError("Ingresa un correo electrónico válido.");
       return;
     }
 
@@ -320,7 +379,11 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
     try {
       const respuesta = await crearPedidoPublico({
         documento: numeroDocumentoLimpio,
-        telefono: telefono.trim(),
+        // Ausentes = "conserva lo que ya tienes guardado". Nunca se manda la
+        // máscara: el backend la rechazaría y, sobre todo, sobrescribiría un
+        // dato bueno con uno lleno de asteriscos.
+        ...(enviarTelefono ? { telefono: telefonoLimpio } : {}),
+        ...(enviarEmail ? { email: emailLimpio } : {}),
         items: [{ idProducto: Number(idProducto), cantidad: cantidadNum }],
         notas: notas.trim() || undefined,
         fechaEntrega,
@@ -333,7 +396,9 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
         cantidad,
         esPaquete,
         documento: `${tipoDocumento} ${numeroDocumento}`,
-        telefono,
+        // Si se reutilizó el celular guardado, se muestra tal como el
+        // cliente lo vio en el formulario: enmascarado.
+        telefono: enviarTelefono ? telefonoLimpio : (contacto.telefono.mascara ?? "—"),
         fechaRecojo,
         horaRecojo: horaRecojoFinal,
         notas: notas.trim(),
@@ -357,6 +422,9 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
     setFueraDeVentanaAlEnviar(false);
     setNumeroDocumento("");
     setTelefono("");
+    setEmail("");
+    setCambiandoTelefono(false);
+    setCambiandoEmail(false);
     setCantidad("");
     setNotas("");
     setFechaRecojo("");
@@ -369,7 +437,10 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
   const pasoPedidoListo =
     idProducto !== "" && cantidadNum > 0 && (esPaquete || cantidadNum >= CANTIDAD_MINIMA_UNIDAD);
   const pasoRecojoListo = !mostrarCamposRecojo || Boolean(fechaRecojo && horaRecojo);
-  const pasoDatosListo = documentoValido === true && telefono.trim().length === 9;
+  // El correo no cuenta para marcar el paso como completo: es opcional. El
+  // celular sí, salvo que ya lo tengamos guardado (ahí no hay nada que
+  // escribir: el paso queda listo con solo verificar el documento).
+  const pasoDatosListo = documentoValido === true && telefonoResuelto;
   // El recojo solo cuenta como paso propio cuando se muestra (pan por
   // unidad): con el pan de hamburguesa, "Tus datos" es el paso 2, no el 3.
   const numeroPasoDatos = mostrarCamposRecojo ? 3 : 2;
@@ -722,17 +793,75 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
                       <label htmlFor="telefono" className="mb-1.5 block text-sm font-medium text-pan-carbon">
                         Celular
                       </label>
-                      <input
-                        id="telefono"
-                        inputMode="numeric"
-                        autoComplete="tel-national"
-                        maxLength={9}
-                        value={telefono}
-                        onChange={(e) => setTelefono(e.target.value.replace(/\D/g, ""))}
-                        placeholder="Ingresa tu número de celular"
-                        required
-                        className="campo-pan"
-                      />
+                      {mostrarInputTelefono ? (
+                        <>
+                          <input
+                            id="telefono"
+                            inputMode="numeric"
+                            autoComplete="tel-national"
+                            maxLength={9}
+                            value={telefono}
+                            onChange={(e) => setTelefono(e.target.value.replace(/\D/g, ""))}
+                            placeholder="Ingresa tu número de celular"
+                            required
+                            className="campo-pan"
+                          />
+                          {contacto.telefono.enArchivo && (
+                            <BotonVolverAlGuardado
+                              onClick={() => {
+                                setCambiandoTelefono(false);
+                                setTelefono("");
+                              }}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <ContactoGuardado
+                          mascara={contacto.telefono.mascara}
+                          verificado={contacto.telefono.verificado}
+                          notaVerificado="Celular verificado — para cambiarlo, hazlo dentro de la app."
+                          onCambiar={() => setCambiandoTelefono(true)}
+                        />
+                      )}
+                    </div>
+
+                    {/* El correo es opcional: sirve para mandarte el
+                        comprobante y avisos del pedido, pero un pedido sin
+                        correo se registra igual. */}
+                    <div>
+                      <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                        Correo electrónico <span className="font-normal text-pan-carbon-suave">(opcional)</span>
+                      </label>
+                      {mostrarInputEmail ? (
+                        <>
+                          <input
+                            id="email"
+                            type="email"
+                            inputMode="email"
+                            autoComplete="email"
+                            maxLength={150}
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="Ingresa tu correo electrónico"
+                            className="campo-pan"
+                          />
+                          {contacto.email.enArchivo && (
+                            <BotonVolverAlGuardado
+                              onClick={() => {
+                                setCambiandoEmail(false);
+                                setEmail("");
+                              }}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <ContactoGuardado
+                          mascara={contacto.email.mascara}
+                          verificado={contacto.email.verificado}
+                          notaVerificado="Correo verificado — para cambiarlo, hazlo dentro de la app."
+                          onCambiar={() => setCambiandoEmail(true)}
+                        />
+                      )}
                     </div>
                   </fieldset>
 
@@ -779,6 +908,74 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
         </div>
       </div>
     </section>
+  );
+}
+
+/** Un dato de contacto que ya teníamos guardado de este documento, mostrado
+ * SIEMPRE enmascarado (`j***@gmail.com`, `9*****321`): el valor completo no
+ * sale nunca del servidor, porque saber un DNI ajeno no debería alcanzar
+ * para averiguar el correo o el celular de su dueño.
+ *
+ * Dos variantes:
+ *  - sin verificar: se puede reemplazar por uno nuevo ("Cambiar" abre un
+ *    campo vacío — jamás se le pide al cliente editar un texto con
+ *    asteriscos, que no podría completar bien).
+ *  - verificado: solo lectura. Cambiarlo exige el código de verificación
+ *    que vive dentro de la app, no este formulario público. */
+function ContactoGuardado({
+  mascara,
+  verificado,
+  notaVerificado,
+  onCambiar,
+}: {
+  mascara: string | null;
+  verificado: boolean;
+  notaVerificado: string;
+  onCambiar: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+      className="rounded-xl border border-pan-borde/50 bg-pan-crema px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="flex min-w-0 items-center gap-2">
+          {verificado && <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={1.75} />}
+          <span className="truncate font-medium tracking-wide text-pan-carbon">{mascara ?? "—"}</span>
+        </span>
+        {!verificado && (
+          <button
+            type="button"
+            onClick={onCambiar}
+            className="-mx-2 inline-flex min-h-11 items-center gap-1.5 rounded px-2 text-xs font-semibold text-pan-terracota transition-colors hover:text-pan-terracota-profundo"
+          >
+            <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+            Cambiar
+          </button>
+        )}
+      </div>
+      <p className="mt-0.5 text-xs leading-relaxed text-pan-carbon-suave">
+        {verificado ? notaVerificado : "Lo tomamos de un pedido anterior. Te lo mostramos a medias por tu seguridad."}
+      </p>
+    </motion.div>
+  );
+}
+
+/** Salida del modo "Cambiar": descarta lo que se escribió y vuelve a usar el
+ * dato guardado, para que abrir el campo por curiosidad no obligue a
+ * escribir el número/correo de nuevo. */
+function BotonVolverAlGuardado({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="-mx-2 mt-1 inline-flex min-h-11 items-center gap-1.5 rounded px-2 text-xs font-semibold text-pan-carbon-suave transition-colors hover:text-pan-carbon"
+    >
+      <RotateCw className="h-3.5 w-3.5" strokeWidth={2} />
+      Usar el dato que ya teníamos
+    </button>
   );
 }
 

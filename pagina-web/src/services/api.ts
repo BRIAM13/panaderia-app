@@ -60,7 +60,13 @@ export interface PedidoPublicoInput {
   /** DNI (8 dígitos) o RUC (11 dígitos) — el backend distingue por el
    * largo, mismo criterio que el registro manual de clientes en la app. */
   documento: string;
-  telefono: string;
+  /** Se omite cuando el documento ya tiene celular guardado y el cliente no
+   * lo cambió: el backend reutiliza el que ya está en Personas. Nunca se
+   * manda la máscara (`9*****321`), solo un número nuevo y completo. */
+  telefono?: string;
+  /** Opcional siempre. Se manda solo cuando es un correo nuevo o uno que el
+   * cliente eligió reemplazar (y el anterior no estaba verificado). */
+  email?: string;
   /** El backend acepta un carrito (`items`) desde que se agregó soporte a
    * pedidos con varios productos — este formulario público solo arma UNO,
    * pero igual hay que mandarlo envuelto en el array o el backend lo
@@ -142,8 +148,31 @@ export async function consultarPedidosPublicos(dni: string): Promise<PedidoPubli
   return manejarRespuesta<PedidoPublicoConsultaResultado>(respuesta);
 }
 
+/** Estado de UN canal de contacto (correo o celular) de un documento que ya
+ * está registrado. El valor real NUNCA viaja hasta acá: solo su máscara
+ * (`j***@gmail.com`, `9*****321`), porque el DNI en Perú no es un secreto
+ * fuerte y este endpoint es público — ver utils/enmascarar.js en el backend. */
+export interface EstadoContacto {
+  /** Ya tenemos algo guardado para este canal. */
+  enArchivo: boolean;
+  /** Verificado con código dentro de la app: desde la web NO se puede
+   * cambiar (el backend ignora cualquier valor nuevo para este canal). */
+  verificado: boolean;
+  /** null siempre que `enArchivo` sea false. */
+  mascara: string | null;
+}
+
+export interface ContactoDocumento {
+  email: EstadoContacto;
+  telefono: EstadoContacto;
+}
+
 export interface VerificarDocumentoResultado {
   existe: boolean;
+  /** Qué datos de contacto ya tenemos de este documento. Puede faltar si el
+   * backend todavía no está actualizado — el hook lo trata como "nada
+   * guardado", que es el comportamiento de siempre. */
+  contacto?: ContactoDocumento;
   /** Presente solo cuando existe:false, ya explica el motivo (RENIEC/SUNAT
    * no lo tienen registrado). */
   mensaje?: string;

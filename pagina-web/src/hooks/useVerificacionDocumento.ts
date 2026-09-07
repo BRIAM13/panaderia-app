@@ -1,9 +1,19 @@
 import { useEffect, useState } from "react";
-import { verificarDocumentoPublico } from "../services/api";
+import { verificarDocumentoPublico, type ContactoDocumento } from "../services/api";
+
+export type { ContactoDocumento, EstadoContacto } from "../services/api";
 
 export type TipoDocumento = "DNI" | "RUC";
 
 export const LONGITUD_DOCUMENTO: Record<TipoDocumento, number> = { DNI: 8, RUC: 11 };
+
+/** Ningún dato guardado: el punto de partida mientras no hay un documento
+ * verificado, y también lo que aplica a un documento que nunca pidió por
+ * acá. Con esto el formulario nunca tiene que preguntar por `undefined`. */
+export const CONTACTO_VACIO: ContactoDocumento = {
+  email: { enArchivo: false, verificado: false, mascara: null },
+  telefono: { enArchivo: false, verificado: false, mascara: null },
+};
 
 export interface VerificacionDocumento {
   /** null = todavía no se completó/verificó (o la verificación misma
@@ -12,6 +22,10 @@ export interface VerificacionDocumento {
   verificando: boolean;
   /** Texto ya listo para mostrarle al cliente cuando algo no cuadra. */
   aviso: string | null;
+  /** Correo/celular que ya tenemos de este documento, enmascarados — para
+   * no volver a pedírselos a quien ya pidió antes. Siempre CONTACTO_VACIO
+   * mientras el documento no esté verificado. */
+  contacto: ContactoDocumento;
 }
 
 /** Verifica el documento contra RENIEC/SUNAT apenas llega al largo
@@ -30,20 +44,26 @@ export function useVerificacionDocumento(
   const [valido, setValido] = useState<boolean | null>(null);
   const [verificando, setVerificando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [contacto, setContacto] = useState<ContactoDocumento>(CONTACTO_VACIO);
 
   useEffect(() => {
     if (numeroDocumento.length !== LONGITUD_DOCUMENTO[tipoDocumento]) {
       setValido(null);
       setAviso(null);
+      setContacto(CONTACTO_VACIO);
       return;
     }
     let cancelado = false;
     setVerificando(true);
     setAviso(null);
+    // El contacto del documento anterior no aplica al que se está
+    // escribiendo ahora: se limpia de entrada, no cuando llega la respuesta.
+    setContacto(CONTACTO_VACIO);
     verificarDocumentoPublico(numeroDocumento)
       .then((resultado) => {
         if (cancelado) return;
         setValido(resultado.existe);
+        setContacto(resultado.existe ? (resultado.contacto ?? CONTACTO_VACIO) : CONTACTO_VACIO);
         if (!resultado.existe) {
           setAviso(resultado.mensaje ?? textoNoEncontrado(tipoDocumento));
         }
@@ -51,6 +71,7 @@ export function useVerificacionDocumento(
       .catch(() => {
         if (cancelado) return;
         setValido(null);
+        setContacto(CONTACTO_VACIO);
         setAviso("No pudimos verificar el documento. Intenta de nuevo en un momento.");
       })
       .finally(() => {
@@ -61,7 +82,7 @@ export function useVerificacionDocumento(
     };
   }, [numeroDocumento, tipoDocumento]);
 
-  return { valido, verificando, aviso };
+  return { valido, verificando, aviso, contacto };
 }
 
 export function textoNoEncontrado(tipoDocumento: TipoDocumento): string {

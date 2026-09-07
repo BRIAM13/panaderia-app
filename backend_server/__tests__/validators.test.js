@@ -1,4 +1,5 @@
 const {
+  validateCrearPedidoPublico,
   validateConsultarPedidosPublico,
   validateSolicitarRecuperacion,
   validateConfirmarRecuperacion,
@@ -56,6 +57,78 @@ describe('validateConsultarPedidosPublico', () => {
     const next = jest.fn();
 
     validateConsultarPedidosPublico(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+});
+
+describe('validateCrearPedidoPublico', () => {
+  /** Body mínimo válido: un pedido de la página web con un solo producto. */
+  function bodyBase(extra = {}) {
+    return { documento: '12345678', telefono: '987654321', items: [{ idProducto: 3, cantidad: 50 }], ...extra };
+  }
+
+  function correr(body) {
+    const req = { body };
+    const res = crearResFalso();
+    const next = jest.fn();
+    validateCrearPedidoPublico(req, res, next);
+    return { res, next };
+  }
+
+  test('acepta un pedido sin correo (el campo es opcional)', () => {
+    const { res, next } = correr(bodyBase());
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('acepta un correo bien formado', () => {
+    const { res, next } = correr(bodyBase({ email: 'juan.perez@gmail.com' }));
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('acepta un correo vacío igual que si no viniera', () => {
+    const { res, next } = correr(bodyBase({ email: '' }));
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('rechaza un correo mal formado', () => {
+    const { res, next } = correr(bodyBase({ email: 'juan.perez.gmail' }));
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json.mock.calls[0][0].errores).toContain('Email inválido.');
+  });
+
+  test('acepta un pedido SIN celular: el documento ya registrado puede tener uno guardado, y eso lo resuelve el controller contra la base', () => {
+    const { res, next } = correr({ documento: '12345678', items: [{ idProducto: 3, cantidad: 50 }] });
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('si viene un celular, sigue exigiéndose que tenga 9 dígitos', () => {
+    const { res, next } = correr(bodyBase({ telefono: '12345' }));
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  test('rechaza un celular enmascarado (nunca debería reenviarse la máscara que ve la web)', () => {
+    const { res, next } = correr(bodyBase({ telefono: '9*****321' }));
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  test('rechaza un correo enmascarado', () => {
+    const { res, next } = correr(bodyBase({ email: 'j***@gmail.com' }));
 
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
