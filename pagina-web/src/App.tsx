@@ -25,6 +25,26 @@ const PreguntasFrecuentes = lazy(() =>
   import("./components/PreguntasFrecuentes").then((m) => ({ default: m.PreguntasFrecuentes })),
 );
 
+// La pantalla donde quien pidió pan dejando su correo elige su contraseña.
+// No se llega a ella navegando por el sitio: solo desde el enlace del
+// correo de activación. Va aparte para que no pese sobre la landing, que
+// es lo que ve el 99% de las visitas.
+const ActivarCuentaPage = lazy(() =>
+  import("./components/ActivarCuentaPage").then((m) => ({ default: m.ActivarCuentaPage })),
+);
+
+// "Ruteo" del sitio, en una línea y sin librería. La página es una sola
+// landing con secciones y no tiene react-router; la única URL aparte es
+// /activar-cuenta. Instalar un router entero para eso sería más código,
+// más peso y más superficie que el problema que resuelve.
+//
+// Se compara el pathname exacto, tolerando la barra final que algunos
+// clientes de correo agregan al reescribir el enlace. Se evalúa una sola
+// vez, al cargar el módulo: sin router, esta URL no cambia sin recargar.
+const RUTA_ACTIVACION = "/activar-cuenta";
+const ES_RUTA_ACTIVACION =
+  (window.location.pathname.replace(/\/+$/, "") || "/") === RUTA_ACTIVACION;
+
 /** Hueco del mismo tamaño y forma que el bloque que se está descargando —
  * el mismo esqueleto con barrido que ya usan el selector de pan y el panel
  * de seguimiento, para que la espera se vea igual en toda la página y el
@@ -38,6 +58,27 @@ function EsqueletoSeccion({ className }: { className?: string }) {
 }
 
 function App() {
+  if (ES_RUTA_ACTIVACION) {
+    return (
+      <Suspense
+        fallback={
+          <div className="bg-mesh-panaderia flex min-h-screen items-center justify-center px-6">
+            <div className="esqueleto h-80 w-full max-w-md rounded-3xl" aria-hidden="true" />
+          </div>
+        }
+      >
+        <ActivarCuentaPage />
+      </Suspense>
+    );
+  }
+  return <Landing />;
+}
+
+/** El sitio de siempre: la landing de una sola página con sus secciones.
+ * Se separó de `App` cuando apareció la segunda "ruta" (/activar-cuenta),
+ * para que la decisión de qué mostrar no quedara enredada con los hooks de
+ * la landing (que no deben ni ejecutarse en la otra pantalla). */
+function Landing() {
   // El catálogo (precios + horarios) se pide UNA vez acá y se reparte: el
   // menú, el formulario, las preguntas frecuentes y la ficha de "Visítanos"
   // leen todos del mismo fetch. Antes solo lo pedía el formulario, así que

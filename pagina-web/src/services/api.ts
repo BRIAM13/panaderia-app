@@ -3,13 +3,19 @@
 
 const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
-  "https://panaderia-backend-vtdy.onrender.com/api";
+  "https://panaderia-backend-qy3y.onrender.com/api";
 
 export class ApiError extends Error {
   errores?: string[];
-  constructor(mensaje: string, errores?: string[]) {
+  /** Clasificación del backend cuando la hay ('INVALIDO', 'EXPIRADO',
+   * 'MAX_INTENTOS'…, ver OtpError en el backend). El mensaje ya viene
+   * redactado para mostrarse tal cual; esto sirve para decidir la FORMA de
+   * mostrarlo (ej. un callejón sin salida en vez de un error del campo). */
+  tipo?: string;
+  constructor(mensaje: string, errores?: string[], tipo?: string) {
     super(mensaje);
     this.errores = errores;
+    this.tipo = tipo;
   }
 }
 
@@ -95,7 +101,7 @@ async function manejarRespuesta<T>(respuesta: Response): Promise<T> {
   }
   if (!respuesta.ok) {
     const mensaje = (data.mensaje as string) || "Ocurrió un error inesperado.";
-    throw new ApiError(mensaje, data.errores as string[] | undefined);
+    throw new ApiError(mensaje, data.errores as string[] | undefined, data.tipo as string | undefined);
   }
   return data as T;
 }
@@ -181,4 +187,30 @@ export interface VerificarDocumentoResultado {
 export async function verificarDocumentoPublico(documento: string): Promise<VerificarDocumentoResultado> {
   const respuesta = await fetch(`${API_BASE_URL}/publico/verificar-documento?documento=${encodeURIComponent(documento)}`);
   return manejarRespuesta<VerificarDocumentoResultado>(respuesta);
+}
+
+/** Portal donde el cliente de verdad inicia sesión: la app Flutter
+ * compilada para web, en su propio subdominio. Es un sitio SEPARADO de
+ * este, sin sesión compartida — por eso la activación termina ofreciendo
+ * el enlace, no "entrando" sola. */
+export const URL_PORTAL_APP = "https://app.panaderiaronceros.com";
+
+export interface ActivarCuentaInput {
+  /** Viene del parámetro `p` del enlace del correo. */
+  idPersona: number;
+  /** Viene del parámetro `t`: token largo aleatorio, de un solo uso. */
+  token: string;
+  passwordNueva: string;
+}
+
+/** Cierra el flujo que arrancó con el pedido: define la contraseña y deja
+ * la cuenta activada. No devuelve sesión ni token — esta página no tiene
+ * dónde usarlos (ver URL_PORTAL_APP). */
+export async function activarCuenta(input: ActivarCuentaInput): Promise<{ mensaje: string }> {
+  const respuesta = await fetch(`${API_BASE_URL}/auth/activar-cuenta`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return manejarRespuesta<{ mensaje: string }>(respuesta);
 }

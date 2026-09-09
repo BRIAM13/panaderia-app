@@ -2,7 +2,11 @@ const { sql, getPool } = require('../config/db');
 const { registrarAuditoria } = require('../utils/auditLog');
 const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos');
 const { buscarPersonaPorDni, buscarEmpresaPorRuc } = require('./externalController');
-const { intentarClonarUsuarioCliente } = require('./clientesController');
+const {
+  crearUsuarioPendienteActivacion,
+  registrarActivacionCuenta,
+  enviarCorreoActivacion,
+} = require('../services/activacionService');
 const {
   notificarPersonalTienda,
   SELECT_PEDIDOS_BASE,
@@ -148,10 +152,11 @@ async function listarCatalogoPublico(req, res, next) {
 /**
  * Pedido desde la página web pública, sin login: el visitante solo da su
  * DNI — se verifica contra RENIEC (misma lógica que usa el personal en la
- * app) y, si la persona no existía, se crea su Persona + Cliente + una
- * cuenta de acceso (usuario=DNI, contraseña=DNI, con cambio obligatorio en
- * el primer ingreso) para que ya le funcione si más adelante se descarga la
- * app móvil. El pedido nace 'SOLICITADO' — igual que el autoservicio de la
+ * app) y, si la persona no existía, se crea su Persona + Cliente. Si además
+ * dejó un correo, se le crea una cuenta de acceso SIN activar y se le manda
+ * un enlace para que él mismo elija su contraseña, así ya le funciona si
+ * más adelante se descarga la app móvil; sin correo no se crea ninguna
+ * cuenta. El pedido nace 'SOLICITADO' — igual que el autoservicio de la
  * app — porque nadie del personal lo revisó todavía; hay que llamar al
  * cliente a confirmar antes de darlo por bueno.
  */
@@ -256,6 +261,11 @@ async function crearPedidoPublico(req, res, next) {
   }
 
   const transaction = new sql.Transaction(pool);
+
+  // Datos del correo de activación, si este pedido terminó creando una
+  // cuenta nueva. Se llena dentro de la transacción y se usa DESPUÉS del
+  // commit: un correo enviado no se puede deshacer con un rollback.
+  let activacionPendiente = null;
 
   try {
     await transaction.begin();
@@ -438,8 +448,33 @@ async function crearPedidoPublico(req, res, next) {
       idPersona = nuevaPersona.recordset[0].IdPersona;
       nombreParaAviso = [nombres, apellidoPaterno].filter(Boolean).join(' ');
 
-      if (!esRuc && datosDocumento.fuente === 'API_REAL') {
-        await intentarClonarUsuarioCliente(transaction, idPersona, documentoLimpio);
+      // Cuenta de acceso para la app — SOLO si dejó un correo.
+      //
+      // Antes se creaba siempre, con usuario = DNI y contraseña = DNI. En
+      // Perú el DNI está en cualquier boleta: eso equivalía a dejarle la
+      // cuenta abierta a quien lo conociera, a una persona que ni sabía
+      // que tenía cuenta. Ahora la cuenta nace inutilizable
+      // (`Activado = 0`, contraseña aleatoria que nadie conoce) y se le
+      // manda un correo para que ella misma elija su contraseña.
+      //
+      // Sin correo no hay a dónde mandar ese enlace, así que directamente
+      // NO se crea ninguna cuenta: la Persona y el Cliente sí se crean
+      // (el pedido tiene que quedar asociado a alguien), simplemente esa
+      // persona todavía no tiene acceso a la app.
+      //
+      // Las tres escrituras (Persona, Usuario y el token) van dentro de la
+      // MISMA transacción del pedido: si el pedido termina en rollback, no
+      // queda ni una cuenta huérfana ni un token vivo. El correo, que no
+      // se puede "desenviar", se manda recién después del commit.
+      if (!esRuc && datosDocumento.fuente === 'API_REAL' && emailNuevo) {
+        const cuenta = await crearUsuarioPendienteActivacion(transaction, {
+          idPersona,
+          nombreUsuario: documentoLimpio,
+        });
+        if (cuenta.creado) {
+          const { token } = await registrarActivacionCuenta({ transaction, idPersona, destino: emailNuevo });
+          activacionPendiente = { idPersona, destino: emailNuevo, token };
+        }
       }
     }
 
@@ -488,6 +523,21 @@ async function crearPedidoPublico(req, res, next) {
     await insertarItemsPedido(transaction, idPedido, lineas);
 
     await transaction.commit();
+
+    // Correo de activación de la cuenta recién creada. Va después del
+    // commit y con su propio try/catch: el pedido YA está guardado y es lo
+    // que de verdad le importa al cliente en este momento. Si el envío
+    // falla (Gmail caído, cuota agotada), no se le puede tirar abajo el
+    // pedido ni devolverle un error — queda registrado en los logs del
+    // servidor y la cuenta sigue esperando, sin activar, hasta que se
+    // resuelva.
+    if (activacionPendiente) {
+      try {
+        await enviarCorreoActivacion(activacionPendiente);
+      } catch (err) {
+        console.error('Error al enviar el correo de activación de cuenta:', err.message);
+      }
+    }
 
     const resumen = resumirProductos(lineas);
 

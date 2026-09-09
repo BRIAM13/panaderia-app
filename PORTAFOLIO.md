@@ -133,7 +133,7 @@ funcionalidades:
 
 ## Despliegue
 
-- Backend: Render (`panaderia-backend-vtdy.onrender.com`), desde
+- Backend: Render (`panaderia-backend-qy3y.onrender.com`), desde
   `backend_server/`.
 - Página web: Vercel, desde `pagina-web/`.
 - App: Google Play Store interno/producción (versión actual 1.1.6+9) +

@@ -6,12 +6,16 @@ name: Keep-alive backend + ML 24-7
 # gratuito.
 #
 # Costo real de esto: las 750 horas gratis de Render son por workspace, no
-# por servicio — dos servicios despiertos 24/7 sí pueden agotarlas antes de
-# fin de mes (~1,440-1,488 horas combinadas contra 750 disponibles). Es una
-# decisión consciente del negocio (evitar la espera en vez de ahorrar
-# horas); si vuelve a pasar lo de la suspensión, la solución real es pasar
-# el backend a un plan pago (Starter, ~$7/mes) para sacarlo del pool
-# gratuito, no quitar este ping.
+# por servicio. Backend (`briamronceros`, panaderia-backend-qy3y) y
+# ml_service (`panaderia ronceros`, panaderia-ml-service) viven hoy en
+# workspaces/cuentas Render separadas justamente para que cada uno tenga su
+# propio cupo de 750h y no compitan entre sí — si algún día vuelve a haber
+# suspensión por horas agotadas, es por servicio, no por la suma de ambos.
+# (Nota 2026-09-09: las cuentas se intercambiaron respecto a como estaban
+# antes — el backend se movió a `briamronceros` porque a `panaderia
+# ronceros` se le iban a agotar las horas del mes antes de tiempo; el
+# ml_service pasó a `panaderia ronceros` porque a ese sí le sobran horas y
+# no es tan urgente que corra todo el mes.)
 #
 # NO alcanza con "un ping cada 10 min" via `schedule`: se probó (ver
 # historial de este mismo workflow, y antes en keep-alive.yml) y GitHub NO
@@ -49,7 +53,7 @@ jobs:
           while [ "$(date +%s)" -lt "$fin" ]; do
             echo "=== $(date -u +%H:%M:%S) UTC ==="
             curl -sS --max-time 90 --retry 2 --retry-delay 5 \
-              "https://panaderia-backend-vtdy.onrender.com/api/keep-alive" || true
+              "https://panaderia-backend-qy3y.onrender.com/api/keep-alive" || true
             echo
             curl -sS --max-time 90 --retry 2 --retry-delay 5 \
               "https://panaderia-ml-service.onrender.com/salud" || true

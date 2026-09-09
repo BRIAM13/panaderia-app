@@ -8,6 +8,7 @@ const {
   refrescarToken,
   solicitarRecuperacion,
   confirmarRecuperacion,
+  activarCuenta,
 } = require('../controllers/authController');
 const {
   validateRegister,
@@ -16,6 +17,7 @@ const {
   validateRefreshToken,
   validateSolicitarRecuperacion,
   validateConfirmarRecuperacion,
+  validateActivarCuenta,
 } = require('../middlewares/validators');
 const { verificarToken } = require('../middlewares/authMiddleware');
 
@@ -59,11 +61,29 @@ const limitadorRecuperacion = rateLimit({
   message: { mensaje: 'Demasiados intentos. Intenta de nuevo en unos minutos.' },
 });
 
+// Contador propio (no se comparte con limitadorRecuperacion): son dos
+// flujos distintos y no tiene sentido que un cliente que está activando su
+// cuenta gaste los intentos de otro que olvidó su contraseña. 10 cada 15
+// min por IP alcanza de sobra para alguien que se equivoca al repetir la
+// contraseña, y corta el tanteo de tokens — que de por sí es inviable
+// (256 bits), pero cada intento cuesta un bcrypt.compare del servidor.
+const limitadorActivacion = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { mensaje: 'Demasiados intentos. Intenta de nuevo en unos minutos.' },
+});
+
 router.post('/register', limitadorRegistro, validateRegister, register);
 router.post('/login', limitadorLogin, validateLogin, login);
 router.post('/refresh-token', validateRefreshToken, refrescarToken);
 router.post('/recuperar/solicitar', limitadorRecuperacion, validateSolicitarRecuperacion, solicitarRecuperacion);
 router.post('/recuperar/confirmar', limitadorRecuperacion, validateConfirmarRecuperacion, confirmarRecuperacion);
+// Sin JWT a propósito: quien llega acá todavía no puede iniciar sesión
+// (su cuenta no está activada). La puerta de entrada real es el token del
+// correo — ver activarCuenta en authController.js.
+router.post('/activar-cuenta', limitadorActivacion, validateActivarCuenta, activarCuenta);
 
 router.get('/perfil', verificarToken, obtenerPerfil);
 router.post('/cambiar-password', verificarToken, validateCambiarPassword, cambiarPassword);

@@ -43,7 +43,7 @@ jobs:
       - name: Compilar web de producción
         run: |
           flutter build web --release \
-            --dart-define=API_BASE_URL=https://panaderia-backend-vtdy.onrender.com/api
+            --dart-define=API_BASE_URL=https://panaderia-backend-qy3y.onrender.com/api
 
       - name: Desplegar a Vercel (producción)
         run: npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN" --cwd build/web

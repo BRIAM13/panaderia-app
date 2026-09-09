@@ -33,6 +33,41 @@ describe('POST /api/auth/recuperar/solicitar', () => {
   });
 });
 
+describe('POST /api/auth/activar-cuenta', () => {
+  // Token con forma válida (43 caracteres base64url) para que el caso bajo
+  // prueba sea SIEMPRE el campo que se está probando y no el token.
+  const TOKEN_VALIDO = 'a'.repeat(43);
+
+  test('rechaza con 400 un body vacío, antes de tocar la base de datos', async () => {
+    const respuesta = await request(app).post('/api/auth/activar-cuenta').send({});
+    expect(respuesta.status).toBe(400);
+  });
+
+  test('rechaza con 400 una contraseña de menos de 8 caracteres', async () => {
+    const respuesta = await request(app)
+      .post('/api/auth/activar-cuenta')
+      .send({ idPersona: 5, token: TOKEN_VALIDO, passwordNueva: 'corta' });
+    expect(respuesta.status).toBe(400);
+    expect(respuesta.body.errores).toEqual(
+      expect.arrayContaining(['La contraseña debe tener al menos 8 caracteres.'])
+    );
+  });
+
+  test('rechaza con 400 un token con caracteres fuera del alfabeto base64url', async () => {
+    const respuesta = await request(app)
+      .post('/api/auth/activar-cuenta')
+      .send({ idPersona: 5, token: '../../etc/passwd', passwordNueva: 'clave-larga-1' });
+    expect(respuesta.status).toBe(400);
+  });
+
+  test('rechaza con 400 un idPersona que no es un entero positivo', async () => {
+    const respuesta = await request(app)
+      .post('/api/auth/activar-cuenta')
+      .send({ idPersona: 0, token: TOKEN_VALIDO, passwordNueva: 'clave-larga-1' });
+    expect(respuesta.status).toBe(400);
+  });
+});
+
 describe('POST /api/auth/recuperar/confirmar', () => {
   test('rechaza con 400 si el código no tiene 6 dígitos, antes de tocar la base de datos', async () => {
     const respuesta = await request(app)

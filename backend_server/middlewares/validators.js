@@ -104,6 +104,35 @@ function validateConfirmarRecuperacion(req, res, next) {
   next();
 }
 
+/**
+ * Body del enlace de activación de cuenta (POST /auth/activar-cuenta).
+ * El token es el de services/activacionService.js: 32 bytes en base64url,
+ * o sea 43 caracteres del alfabeto A-Z a-z 0-9 - _. El rango 20-200 deja
+ * margen por si algún día cambia el largo, pero corta de entrada cualquier
+ * cosa que no tenga forma de token (y con eso, cualquier intento de meter
+ * caracteres raros en la comparación bcrypt).
+ *
+ * Mínimo 8 caracteres para la contraseña, el mismo criterio que rige en
+ * todo el proyecto (register, cambiar contraseña, recuperación).
+ */
+const TOKEN_ACTIVACION_REGEX = /^[A-Za-z0-9_-]{20,200}$/;
+
+function validateActivarCuenta(req, res, next) {
+  const { idPersona, token, passwordNueva } = req.body;
+  const errores = [];
+  if (!Number.isInteger(Number(idPersona)) || Number(idPersona) <= 0) {
+    errores.push('Enlace de activación inválido.');
+  }
+  if (!isNonEmptyString(token) || !TOKEN_ACTIVACION_REGEX.test(token.trim())) {
+    errores.push('Enlace de activación inválido.');
+  }
+  if (!isNonEmptyString(passwordNueva) || passwordNueva.length < 8) {
+    errores.push('La contraseña debe tener al menos 8 caracteres.');
+  }
+  if (errores.length > 0) return res.status(400).json({ mensaje: 'Datos inválidos', errores });
+  next();
+}
+
 function validateRefreshToken(req, res, next) {
   const { refreshToken } = req.body;
 
@@ -727,6 +756,7 @@ module.exports = {
   validateCambiarPasswordSeguro,
   validateSolicitarRecuperacion,
   validateConfirmarRecuperacion,
+  validateActivarCuenta,
   DNI_PERU_REGEX,
   RUC_PERU_REGEX,
   // Las usa publicoController para revalidar el correo/celular del pedido

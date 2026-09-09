@@ -77,7 +77,14 @@ CREATE TABLE CodigosVerificacion (
     IdCodigo            INT IDENTITY(1,1)   NOT NULL,
     IdPersona           INT                 NOT NULL,
     Canal               VARCHAR(10)         NOT NULL,   -- 'SMS' | 'EMAIL'
-    Proposito           VARCHAR(30)         NOT NULL,   -- 'VERIFICAR_TELEFONO' | 'VERIFICAR_EMAIL' | 'AUTORIZAR_CAMBIO'
+    -- 'VERIFICAR_TELEFONO' | 'VERIFICAR_EMAIL' | 'AUTORIZAR_CAMBIO' | 'ACTIVAR_CUENTA'
+    -- 'ACTIVAR_CUENTA' no guarda un PIN de 6 dígitos sino un token largo
+    -- aleatorio (el que viaja en el link del correo de activación). Es el
+    -- mismo mecanismo — hash bcrypt, un solo uso, tope de intentos,
+    -- expiración — y por eso vive en esta misma tabla en vez de en una
+    -- propia; lo único distinto es el largo del secreto y que vence en
+    -- 48 horas en lugar de 10 minutos (ver services/activacionService.js).
+    Proposito           VARCHAR(30)         NOT NULL,
     Destino             VARCHAR(150)        NOT NULL,   -- número/correo al que se envió
     CodigoHash          VARCHAR(255)        NOT NULL,
     Intentos            INT                 NOT NULL DEFAULT 0,
@@ -87,7 +94,7 @@ CREATE TABLE CodigosVerificacion (
     CONSTRAINT PK_CodigosVerificacion PRIMARY KEY (IdCodigo),
     CONSTRAINT FK_CodigosVerificacion_Personas FOREIGN KEY (IdPersona) REFERENCES Personas(IdPersona),
     CONSTRAINT CK_CodigosVerificacion_Canal CHECK (Canal IN ('SMS','EMAIL')),
-    CONSTRAINT CK_CodigosVerificacion_Proposito CHECK (Proposito IN ('VERIFICAR_TELEFONO','VERIFICAR_EMAIL','AUTORIZAR_CAMBIO'))
+    CONSTRAINT CK_CodigosVerificacion_Proposito CHECK (Proposito IN ('VERIFICAR_TELEFONO','VERIFICAR_EMAIL','AUTORIZAR_CAMBIO','ACTIVAR_CUENTA'))
 );
 GO
 
@@ -236,6 +243,19 @@ CREATE TABLE Usuarios (
     PasswordHash                 VARCHAR(255)        NOT NULL,   -- hash bcrypt, nunca texto plano
     IdRol                        INT                 NOT NULL,   -- rol principal para autorización
     Estado                       BIT                 NOT NULL DEFAULT 1,
+    -- ¿La persona ya tomó posesión de su cuenta? Es una bandera DISTINTA
+    -- de `Estado`, a propósito: `Estado` es "el personal la habilitó o la
+    -- deshabilitó", `Activado` es "el dueño de la cuenta todavía no la
+    -- reclamó". El login los reporta con mensajes distintos porque lo que
+    -- tiene que hacer el cliente en cada caso es distinto.
+    --
+    -- DEFAULT 1: toda cuenta creada por el personal (clientes,
+    -- trabajadores) o por /auth/register nace usable. El ÚNICO camino que
+    -- la escribe en 0 es el registro desde la página web pública, que crea
+    -- la cuenta con una contraseña inutilizable y manda un correo con un
+    -- link para que la persona defina la suya (ver
+    -- services/activacionService.js y publicoController.js).
+    Activado                     BIT                 NOT NULL DEFAULT 1,
     IntentosFallidos             INT                 NOT NULL DEFAULT 0,
     Bloqueado                    BIT                 NOT NULL DEFAULT 0,
     FechaBloqueo                 DATETIME2           NULL,

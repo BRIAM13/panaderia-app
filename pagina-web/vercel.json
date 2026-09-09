@@ -15,5 +15,11 @@
       "destination": "https://app.panaderiaronceros.com/:path*",
       "permanent": true
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/activar-cuenta",
+      "destination": "/index.html"
+    }
   ]
 }

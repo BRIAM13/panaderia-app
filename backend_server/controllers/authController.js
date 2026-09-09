@@ -7,6 +7,7 @@ const {
 } = require('../utils/jwt');
 const { registrarAuditoria } = require('../utils/auditLog');
 const { solicitarCodigo, verificarCodigo, OtpError } = require('../services/otpService');
+const { PROPOSITO_ACTIVAR_CUENTA } = require('../services/activacionService');
 
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
 const MAX_LOGIN_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS) || 5;
@@ -23,6 +24,17 @@ const PROPOSITO_RECUPERAR_PASSWORD = 'AUTORIZAR_CAMBIO';
 
 const MENSAJE_RECUPERACION_GENERICO =
   'Si el usuario existe y tiene un correo verificado, te llegará un código de verificación.';
+
+/**
+ * Un solo mensaje para TODOS los motivos por los que un enlace de
+ * activación puede fallar (no existe esa persona, no tiene cuenta, el
+ * token no coincide, venció, ya se usó, demasiados intentos). Distinguirlos
+ * le permitiría a cualquiera usar este endpoint para averiguar qué
+ * IdPersona tienen cuenta — el mismo criterio que ya rige la recuperación
+ * de contraseña.
+ */
+const MENSAJE_ENLACE_ACTIVACION_INVALIDO =
+  'Este enlace de activación ya venció o ya se usó. Si ya activaste tu cuenta, inicia sesión con tu contraseña; si no, escríbenos por WhatsApp y te ayudamos.';
 
 function manejarOtpError(err, res, next) {
   if (err instanceof OtpError) {
@@ -203,7 +215,7 @@ async function login(req, res, next) {
       .request()
       .input('NombreUsuario', sql.VarChar(50), nombreUsuario)
       .query(`
-        SELECT u.IdUsuario, u.NombreUsuario, u.PasswordHash, u.Estado, u.Bloqueado,
+        SELECT u.IdUsuario, u.NombreUsuario, u.PasswordHash, u.Estado, u.Activado, u.Bloqueado,
                u.IntentosFallidos, u.IdPersona, u.RequiereCambioPassword, r.NombreRol
         FROM Usuarios u
         INNER JOIN Roles r ON r.IdRol = u.IdRol
@@ -225,6 +237,17 @@ async function login(req, res, next) {
 
     if (!usuario.Estado) {
       return res.status(403).json({ mensaje: 'La cuenta está deshabilitada' });
+    }
+
+    // Cuenta creada desde la página web pública que su dueño todavía no
+    // reclamó. Mensaje (y `tipo`) distintos de los de `Estado`: acá no hay
+    // nada que pedirle al personal, la persona sola lo resuelve abriendo
+    // su correo. Ver services/activacionService.js.
+    if (!usuario.Activado) {
+      return res.status(403).json({
+        mensaje: 'Activa tu cuenta desde el correo que te enviamos antes de iniciar sesión.',
+        tipo: 'CUENTA_NO_ACTIVADA',
+      });
     }
 
     if (usuario.Bloqueado) {
@@ -557,6 +580,123 @@ async function confirmarRecuperacion(req, res, next) {
   }
 }
 
+/**
+ * Cierre del flujo de activación que arranca en la página web pública: el
+ * cliente hizo un pedido dejando su correo, se le creó una cuenta sin
+ * contraseña usable y con `Activado = 0`, y le llegó un correo con un link
+ * que trae (idPersona, token). Acá define su contraseña y la cuenta queda
+ * lista. Ver services/activacionService.js.
+ *
+ * Es una ruta PÚBLICA (sin JWT) por definición: quien la usa todavía no
+ * puede iniciar sesión, justamente porque su cuenta no está activada. La
+ * protección real es el token — 256 bits aleatorios, guardado hasheado, de
+ * un solo uso, con vencimiento y tope de intentos, y que solo pudo llegar
+ * al correo que está en la ficha de esa persona.
+ *
+ * El `destino` NO viene del cliente: se lee de Personas.Email en la base.
+ * Así, un token robado no sirve para activar contra otro correo, y el
+ * `verificarCodigo` compara contra el mismo destino con el que se emitió.
+ *
+ * No emite JWT a propósito: quien llama es la página web pública
+ * (panaderiaronceros.com), un sitio distinto del portal donde de verdad se
+ * inicia sesión (app.panaderiaronceros.com). No comparten sesión ni hay
+ * SSO entre los dos dominios, así que un token acá no tendría dónde usarse
+ * — la página solo confirma y ofrece el enlace al portal.
+ */
+async function activarCuenta(req, res, next) {
+  const idPersona = Number(req.body.idPersona);
+  const { token, passwordNueva } = req.body;
+
+  try {
+    const pool = await getPool();
+
+    const result = await pool
+      .request()
+      .input('IdPersona', sql.Int, idPersona)
+      .query(`
+        SELECT u.IdUsuario, p.Email
+        FROM Usuarios u
+        INNER JOIN Personas p ON p.IdPersona = u.IdPersona
+        WHERE u.IdPersona = @IdPersona
+      `);
+
+    const cuenta = result.recordset[0];
+    // Mismo error genérico que un token que no coincide: nada acá debe
+    // permitir averiguar qué IdPersona existen o cuáles tienen cuenta.
+    if (!cuenta || !cuenta.Email) {
+      throw new OtpError('INVALIDO', MENSAJE_ENLACE_ACTIVACION_INVALIDO);
+    }
+
+    try {
+      await verificarCodigo({
+        idPersona,
+        proposito: PROPOSITO_ACTIVAR_CUENTA,
+        destino: cuenta.Email,
+        codigo: token,
+        consumir: true,
+      });
+    } catch (err) {
+      // Los mensajes de otpService hablan de "el código" y de "solicita uno
+      // nuevo", que acá no aplican: esto es un enlace, y hoy no hay un
+      // botón para pedir otro. Se conserva el `tipo` (por si el cliente
+      // quiere distinguirlos) y se reescribe el texto en los términos de
+      // este flujo, con la salida real que sí tiene la persona.
+      if (err instanceof OtpError) {
+        throw new OtpError(err.tipo, MENSAJE_ENLACE_ACTIVACION_INVALIDO);
+      }
+      throw err;
+    }
+
+    const nuevoHash = await bcrypt.hash(passwordNueva, SALT_ROUNDS);
+
+    await pool
+      .request()
+      .input('IdUsuario', sql.Int, cuenta.IdUsuario)
+      .input('PasswordHash', sql.VarChar(255), nuevoHash)
+      .query(`
+        UPDATE Usuarios
+        SET PasswordHash = @PasswordHash,
+            Activado = 1,
+            RequiereCambioPassword = 0,
+            IntentosFallidos = 0,
+            Bloqueado = 0,
+            FechaBloqueo = NULL,
+            FechaActualizacion = SYSUTCDATETIME()
+        WHERE IdUsuario = @IdUsuario
+      `);
+
+    // Hacer clic en un link único mandado a ESE correo exacto ya prueba que
+    // lo controla — igual de válido que el código de 6 dígitos de
+    // VERIFICAR_EMAIL, así que no tiene sentido pedírselo de nuevo por el
+    // otro camino. Destraba de una vez la recuperación de contraseña por
+    // correo y que el formulario público lo muestre como verificado la
+    // próxima vez.
+    await pool
+      .request()
+      .input('IdPersona', sql.Int, idPersona)
+      .query(`
+        UPDATE Personas
+        SET EmailVerificado = 1
+        WHERE IdPersona = @IdPersona
+      `);
+
+    await registrarAuditoria({
+      idUsuario: cuenta.IdUsuario,
+      accion: 'CUENTA_ACTIVADA_WEB',
+      tablaAfectada: 'Usuarios',
+      registroAfectadoId: String(cuenta.IdUsuario),
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return res.status(200).json({
+      mensaje: 'Cuenta activada correctamente. Ya puedes iniciar sesión con tu documento y tu nueva contraseña.',
+    });
+  } catch (err) {
+    return manejarOtpError(err, res, next);
+  }
+}
+
 /** Emite un nuevo accessToken a partir de un refreshToken vigente y no revocado. */
 async function refrescarToken(req, res, next) {
   const { refreshToken } = req.body;
@@ -645,4 +785,5 @@ module.exports = {
   refrescarToken,
   solicitarRecuperacion,
   confirmarRecuperacion,
+  activarCuenta,
 };
