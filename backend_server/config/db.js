@@ -15,6 +15,15 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   connectTimeout: 20000,
+  // La base vive detrás de un Network Load Balancer (Oracle Cloud), y como
+  // cualquier NLB puede cerrar en silencio una conexión inactiva sin avisar
+  // a ninguna de las dos puntas. Sin keepalive, el pool sigue creyendo que
+  // esa conexión sirve y la próxima consulta que la use se queda colgada
+  // hasta que el sistema operativo se da cuenta por su cuenta (minutos, no
+  // segundos) en vez de fallar rápido. El keepalive manda un ping periódico
+  // por cada conexión abierta para detectar esto al toque.
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
   charset: 'utf8mb4_unicode_ci',
   // Sin esto, mysql2 devuelve las columnas DECIMAL (dinero, ej. SUM() en los
   // resúmenes de tienda) como string en vez de number — a diferencia de
