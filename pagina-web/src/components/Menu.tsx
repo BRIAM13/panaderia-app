@@ -8,7 +8,16 @@ import { desplazarASeccion } from "../utils/scroll";
 import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
 import { EncabezadoSeccion } from "./EncabezadoSeccion";
 
-export function Menu({ catalogo }: { catalogo: CatalogoPublico }) {
+interface MenuProps {
+  catalogo: CatalogoPublico;
+  /** Se dispara con el id real del pan (el del catálogo, no el de la
+   * tarjeta) cuando el visitante toca "Pedir este pan" — quien escucha esto
+   * es PedidoForm, para dejar ese pan ya elegido cuando el formulario
+   * aparece en pantalla. */
+  onPedir: (idProducto: number) => void;
+}
+
+export function Menu({ catalogo, onPedir }: MenuProps) {
   return (
     <section id="menu" className="textura-grano bg-mesh-panaderia px-6 py-24 sm:py-32">
       <div className="mx-auto max-w-4xl">
@@ -17,7 +26,7 @@ export function Menu({ catalogo }: { catalogo: CatalogoPublico }) {
           icono={Croissant}
           titulo="Nuestro"
           tituloDestacado="pan"
-          descripcion="El de siempre, hecho como siempre se hizo, fresco todos los días. Pronto sumamos el resto de nuestra variedad con sus propias fotos."
+          descripcion="El de siempre, hecho como siempre se hizo, fresco todos los días. Estos tres son los que puedes encargar por la web; en la tienda encuentras el resto de nuestra variedad."
         />
 
         {/* El mínimo por encargo se dice ACÁ, antes de que nadie abra el
@@ -56,6 +65,7 @@ export function Menu({ catalogo }: { catalogo: CatalogoPublico }) {
               enCatalogo={catalogo.productos.find((p) => p.nombre === producto.nombreEnCatalogo)}
               cargandoPrecio={catalogo.cargando}
               index={index}
+              onPedir={onPedir}
             />
           ))}
         </div>
@@ -72,11 +82,13 @@ function TarjetaProducto({
   enCatalogo,
   cargandoPrecio,
   index,
+  onPedir,
 }: {
   producto: ProductoMenu;
   enCatalogo: ProductoPublico | undefined;
   cargandoPrecio: boolean;
   index: number;
+  onPedir: (idProducto: number) => void;
 }) {
   // La foto se revela con un fundido cuando termina de descargarse, sobre
   // un esqueleto del mismo tamaño: sin esto, en una conexión lenta la
@@ -147,10 +159,18 @@ function TarjetaProducto({
           <p className="mt-1.5 flex-1 text-sm leading-relaxed text-pan-carbon-suave">{producto.descripcion}</p>
           {/* Atajo directo al formulario desde cada pan: antes había que
               volver al menú o al botón del inicio para pedir algo que ya
-              se estaba mirando. */}
+              se estaba mirando, y ahí elegirlo de nuevo desde cero. Si el
+              catálogo todavía no cargó (enCatalogo === undefined) el clic
+              igual desplaza al formulario, solo que sin dejarlo preelegido
+              — nunca se manda un id inventado. Va a `pedido-formulario` y
+              no a `pedido`: quien toca esto quiere el formulario en
+              pantalla, no leer otra vez el título de la sección. */}
           <button
             type="button"
-            onClick={() => desplazarASeccion("pedido")}
+            onClick={() => {
+              if (enCatalogo) onPedir(enCatalogo.idProducto);
+              desplazarASeccion("pedido-formulario");
+            }}
             className="mt-2 -ml-1 inline-flex min-h-11 w-fit items-center gap-1.5 rounded px-1 text-sm font-semibold text-pan-terracota transition-colors hover:text-pan-terracota-profundo"
           >
             Pedir este pan

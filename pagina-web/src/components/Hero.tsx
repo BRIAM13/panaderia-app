@@ -247,7 +247,11 @@ export function Hero() {
               <span className="block font-[family-name:var(--font-display-panaderia)] text-sm font-semibold text-pan-carbon">
                 Horneado hoy
               </span>
-              <span className="block text-xs text-pan-carbon-suave">Fresco cada mañana</span>
+              {/* Antes decía "Fresco cada mañana", que es exactamente lo
+                  mismo que ya dice la razón "Horneado cada mañana" a dos
+                  dedos de acá: dos veces la misma frase en el mismo
+                  vistazo. */}
+              <span className="block text-xs text-pan-carbon-suave">Del horno a tu mesa</span>
             </span>
           </motion.div>
         </motion.div>

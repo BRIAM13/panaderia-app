@@ -86,6 +86,11 @@ function Landing() {
   // tienda no aparecía en ninguna parte fuera del formulario.
   const [pedidoEnviado, setPedidoEnviado] = useState(false);
   const catalogo = useCatalogoPublico({ pausado: pedidoEnviado });
+  // "Pedir este pan" en una tarjeta del menú no debería mandar al visitante
+  // a un formulario en blanco a elegir de nuevo el mismo pan que ya estaba
+  // mirando — vive acá, y no dentro del formulario, porque quien lo dispara
+  // es un componente hermano (Menu), no un descendiente de PedidoForm.
+  const [productoElegidoEnMenu, setProductoElegidoEnMenu] = useState<number | null>(null);
 
   return (
     // reducedMotion="user" hace que TODA animación de framer-motion del
@@ -103,9 +108,13 @@ function Landing() {
         <main id="contenido">
           <Hero />
           <Nosotros />
-          <Menu catalogo={catalogo} />
+          <Menu catalogo={catalogo} onPedir={setProductoElegidoEnMenu} />
           <ComoFunciona />
-          <PedidoForm catalogo={catalogo} onPedidoEnviado={setPedidoEnviado} />
+          <PedidoForm
+            catalogo={catalogo}
+            onPedidoEnviado={setPedidoEnviado}
+            productoElegidoEnMenu={productoElegidoEnMenu}
+          />
           <Suspense fallback={<EsqueletoSeccion className="h-48" />}>
             <SeguimientoPedido />
           </Suspense>

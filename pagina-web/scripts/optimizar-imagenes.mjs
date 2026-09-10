@@ -19,7 +19,10 @@
 // pida).
 //
 // Y, aparte, public/og-image.jpg: el recorte 1200x630 que usan Facebook,
-// WhatsApp y X al compartir el enlace.
+// WhatsApp y X al compartir el enlace, más los tres íconos del sitio
+// (favicon-32, favicon-64 y apple-touch-icon), que salen todos del dibujo
+// de la mascota. Si se cambia el panadero, basta volver a correr esto para
+// que la pestaña del navegador y el ícono de iOS queden al día.
 
 import { mkdir, readdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -90,25 +93,54 @@ async function generarOgImage() {
   console.log(`  og-image.jpg: ${OG_ANCHO}x${OG_ALTO} · ${kb(await tamano(destino))}`);
 }
 
-// iOS usa este ícono al guardar la página en la pantalla de inicio y lo
-// escala a 180x180. Los favicon de 32/64px existentes se verían borrosos
-// ampliados a ese tamaño, así que se genera aparte desde el dibujo del
-// panadero en alta (el mismo personaje del favicon), sobre el fondo crema
-// de la marca — iOS no respeta transparencias: las rellena de negro.
+// Los tres íconos del sitio (pestaña del navegador y pantalla de inicio de
+// iOS) salen del mismo sitio: un recorte de la CABEZA de la mascota. El
+// cuerpo entero no sirve para esto — a 32px, un panadero de cuerpo entero
+// es una mancha de tres píxeles de ancho; la cara con gorro se reconoce
+// hasta ahí. El encuadre va en proporciones y no en píxeles para que siga
+// valiendo si el dibujo del panadero cambia de tamaño: un cuadrado que
+// arranca justo arriba del gorro, baja hasta los hombros (un tercio del
+// alto de la figura) y se centra en el eje de la cabeza, que cae un pelo a
+// la izquierda del centro del dibujo.
+const CABEZA_ALTO = 0.328; // del alto del dibujo: gorro + cara + hombros
+const CABEZA_CENTRO = 0.491; // del ancho: dónde cae el eje de la cabeza
+const FAVICONS = [64, 32];
 const ICONO_IOS = 180;
+// Todos van opacos sobre el crema de la marca: iOS rellena de negro las
+// transparencias, y en la pestaña de un navegador en modo oscuro la cara
+// del panadero quedaría flotando sin fondo.
+const CREMA = { r: 253, g: 246, b: 236 };
 
-async function generarIconoIOS() {
+const ORIGEN_MASCOTA = path.join(RAIZ, "public", "images", "mascota", "panadero.png");
+
+async function recorteCabeza() {
+  const { width, height } = await sharp(ORIGEN_MASCOTA).metadata();
+  const lado = Math.round(height * CABEZA_ALTO);
+  const left = Math.max(0, Math.min(width - lado, Math.round(width * CABEZA_CENTRO - lado / 2)));
+  return { left, top: 0, width: lado, height: lado };
+}
+
+async function generarIconos() {
+  const cabeza = await recorteCabeza();
+  for (const medida of FAVICONS) {
+    const destino = path.join(RAIZ, "public", `favicon-${medida}.png`);
+    await sharp(ORIGEN_MASCOTA)
+      .extract(cabeza)
+      .resize(medida, medida)
+      .flatten({ background: CREMA })
+      .png()
+      .toFile(destino);
+    console.log(`  favicon-${medida}.png: ${medida}x${medida} · ${kb(await tamano(destino))}`);
+  }
+
+  // El de iOS lleva 12px de aire alrededor: el sistema le recorta las
+  // esquinas para redondearlo y, a sangre, se comería parte del gorro.
   const destino = path.join(RAIZ, "public", "apple-touch-icon.png");
-  await sharp(path.join(RAIZ, "public", "images", "mascota", "panadero.png"))
-    .resize(ICONO_IOS - 24, ICONO_IOS - 24, { fit: "contain", background: { r: 253, g: 246, b: 236 } })
-    .extend({
-      top: 12,
-      bottom: 12,
-      left: 12,
-      right: 12,
-      background: { r: 253, g: 246, b: 236 },
-    })
-    .flatten({ background: { r: 253, g: 246, b: 236 } })
+  await sharp(ORIGEN_MASCOTA)
+    .extract(cabeza)
+    .resize(ICONO_IOS - 24, ICONO_IOS - 24)
+    .extend({ top: 12, bottom: 12, left: 12, right: 12, background: CREMA })
+    .flatten({ background: CREMA })
     .png()
     .toFile(destino);
   console.log(`  apple-touch-icon.png: ${ICONO_IOS}x${ICONO_IOS} · ${kb(await tamano(destino))}`);
@@ -123,9 +155,9 @@ async function principal() {
     await optimizarProducto(archivo);
   }
 
-  console.log("Generando la imagen social (og:image) y el ícono de iOS…");
+  console.log("Generando la imagen social (og:image) y los íconos…");
   await generarOgImage();
-  await generarIconoIOS();
+  await generarIconos();
   console.log("Listo.");
 }
 

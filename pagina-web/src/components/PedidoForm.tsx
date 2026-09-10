@@ -67,9 +67,14 @@ interface PedidoFormProps {
    * del catálogo se detenga: sobre la pantalla de confirmación no hay nada
    * que refrescar. */
   onPedidoEnviado: (enviado: boolean) => void;
+  /** El id del pan que el visitante tocó en "Pedir este pan" desde el menú
+   * de arriba, o null si llegó acá por su cuenta (scroll, link del navbar).
+   * Vive en Landing porque quien lo dispara (Menu) es hermano de este
+   * formulario, no un ancestro ni un descendiente. */
+  productoElegidoEnMenu: number | null;
 }
 
-export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
+export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }: PedidoFormProps) {
   const { productos, horarios, cargando: cargandoProductos, error: errorCatalogo, recargar } = catalogo;
 
   // ORDEN DEL FORMULARIO: primero el pedido (pan, cantidad, recojo) y
@@ -198,6 +203,16 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
         manana.setDate(manana.getDate() + 1);
         return manana;
       })();
+
+  // El pan elegido en el menú de arriba se aplica acá apenas llega — este
+  // efecto es la única vía por la que ese clic externo entra al formulario;
+  // de ahí en más el visitante puede seguir cambiándolo desde el selector
+  // como si lo hubiera elegido acá mismo. Si vuelve a tocar "Pedir este
+  // pan" con OTRO pan, el id cambia y esto se repite; con el MISMO pan no
+  // hay nada que reaplicar (ya está elegido).
+  useEffect(() => {
+    if (productoElegidoEnMenu != null) setIdProducto(productoElegidoEnMenu);
+  }, [productoElegidoEnMenu]);
 
   // Al cambiar de producto, la cantidad y el recojo se limpian — quedan
   // vacíos con un placeholder que ya indica qué elegir (ver más abajo), en
@@ -464,14 +479,54 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
           />
         </motion.div>
 
-        <div className="relative mt-32 sm:mt-36">
+        {/* Segundo destino de scroll de la sección, aparte de `#pedido`.
+            Los botones que prometen empezar un pedido YA ("Pedir ahora" del
+            navbar, "Pedir este pan" del menú) apuntan acá y no al título:
+            aterrizando en `#pedido` la pantalla se llenaba con la cabecera
+            de la sección y el formulario quedaba fuera de vista, así que el
+            clic terminaba pidiendo un segundo scroll a mano. Los enlaces de
+            navegación genéricos (hero, footer, menú del navbar) siguen
+            yendo al título, que es lo que corresponde al recorrer la
+            página. El `scroll-mt` compensa dos cosas a la vez: el navbar
+            fijo (~60px en celular, ~68px desde sm) y todo lo que asoma POR
+            ENCIMA de este div, que es lo que de verdad manda: el panadero
+            (-top-24 = 96px, -top-32 = 128px desde sm) y, más arriba
+            todavía, su globo de diálogo. Sin contar ese asomo la barra le
+            cortaba el gorro; contando solo al panadero, le cortaba el
+            globo.
+
+            Y la entrada de scroll es de ESTE div, no de cada hijo: el
+            panadero y la tarjeta aparecen juntos, en el mismo movimiento.
+            Cuando cada uno traía su propio `whileInView`, sus observadores
+            cruzaban el umbral en momentos distintos —el panadero está más
+            arriba en la página— y se veía llegar primero al panadero, solo,
+            sobre un hueco vacío. */}
+        <motion.div
+          id="pedido-formulario"
+          initial="oculto"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-80px" }}
+          variants={{
+            oculto: { opacity: 0, y: 24 },
+            visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE_PREMIUM } },
+          }}
+          className="relative mt-32 scroll-mt-52 sm:mt-36 sm:scroll-mt-60"
+        >
           <MascotaPanadero anunciar={anunciarMascota} celebrando={resultado !== null} />
 
           <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.6, ease: EASE_PREMIUM, delay: 0.1 }}
+            // El escalón mínimo de la tarjeta ya no depende del scroll: la
+            // etiqueta de variante baja desde el padre, así que este retraso
+            // de 0,1s es una cascada deliberada DENTRO de la misma entrada,
+            // no dos entradas distintas disparadas en momentos distintos.
+            variants={{
+              oculto: { opacity: 0, y: 10 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.5, ease: EASE_PREMIUM, delay: 0.1 },
+              },
+            }}
             className="relative z-10 rounded-3xl border border-pan-borde/50 bg-pan-crema-suave p-5 shadow-md shadow-pan-carbon/5 sm:p-8"
           >
             <AnimatePresence mode="wait">
@@ -905,7 +960,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado }: PedidoFormProps) {
               )}
             </AnimatePresence>
           </motion.div>
-        </div>
+        </motion.div>
       </div>
     </section>
   );

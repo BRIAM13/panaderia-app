@@ -220,11 +220,16 @@ export function Navbar() {
               <Download className="h-4 w-4 shrink-0" strokeWidth={1.75} />
             </button>
           )}
+          {/* El botón de acción apunta al formulario en sí
+              (`pedido-formulario`), no al título de la sección: es una
+              promesa de empezar a pedir ya. El enlace "Hacer un pedido" de
+              la lista de navegación de arriba sigue yendo a `#pedido`, que
+              es lo que corresponde a recorrer la página. */}
           <motion.a
-            href="#pedido"
+            href="#pedido-formulario"
             onClick={(e) => {
               e.preventDefault();
-              desplazarASeccion("pedido");
+              desplazarASeccion("pedido-formulario");
             }}
             whileHover={{ scale: 1.05, y: -1 }}
             whileTap={{ scale: 0.97 }}
@@ -323,12 +328,25 @@ export function Navbar() {
                   Descargar app
                 </button>
               )}
+              {/* Mismo destino que el botón de escritorio: el formulario,
+                  no el título de la sección. */}
               <a
-                href="#pedido"
+                href="#pedido-formulario"
                 onClick={(e) => {
                   e.preventDefault();
                   setAbierto(false);
-                  desplazarASeccion("pedido");
+                  // El desplazamiento NO puede salir en el mismo clic que
+                  // cierra el panel: mientras está abierto el fondo va
+                  // bloqueado (`body.style.overflow = "hidden"`, más
+                  // arriba) y, al cerrarse, el salto de alto de la cabecera
+                  // cancela el scroll suave apenas arranca. En los dos
+                  // casos el visitante se quedaba exactamente donde estaba,
+                  // con el menú cerrado y nada más. Dos cuadros de espera
+                  // alcanzan: para entonces React ya pintó el panel cerrado
+                  // y devolvió el scroll del fondo.
+                  requestAnimationFrame(() =>
+                    requestAnimationFrame(() => desplazarASeccion("pedido-formulario")),
+                  );
                 }}
                 className="mt-2 flex min-h-12 items-center justify-center rounded-full bg-pan-terracota px-5 text-center text-[0.9375rem] font-semibold text-pan-crema transition-opacity hover:opacity-90"
               >
