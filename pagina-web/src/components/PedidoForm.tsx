@@ -27,7 +27,7 @@ import {
   esMuyTardeHoy,
   estaFueraDeVentana,
   formatearHora12,
-  franjaAjustada,
+  franjaEfectiva,
   fueraDeHorarioAtencion,
   hayVentanaHoy,
   horaMinimaHoy,
@@ -180,14 +180,16 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   // esta hora (fija, no depende del reloj como el mínimo de arriba).
   const maximoHoraHoy = horarios && esRecojoHoy ? horarios.horaTopeRecojo : undefined;
 
-  // Piso/techo que rige CUALQUIER fecha (no solo hoy): el rango efectivo
-  // según qué franjas de recojo (mañana 4am / tarde 3pm) están activas
-  // ahora mismo — si el dueño apagó una por falta de stock, el rango se
-  // achica a la otra. Si apagó las dos, "23:59"-"00:00" es un rango
-  // invertido a propósito: el mismo mecanismo que ya cierra el selector
-  // cuando el piso supera el techo (ver SelectorHora) deja todo
-  // deshabilitado sin necesitar un caso especial aparte.
-  const franja = horarios ? franjaAjustada(horarios) : null;
+  // Rango efectivo para la fecha YA ELEGIDA (o para hoy, si todavía no se
+  // eligió ninguna): los interruptores de franja (mañana 4am / tarde 3pm)
+  // solo achican el rango cuando la fecha elegida es hoy — son la señal de
+  // "hoy no queda stock de esa hornada", no una decisión de horario que
+  // deba seguir aplicando a un pedido de mañana. Si apagó las dos y la
+  // fecha elegida es hoy, "23:59"-"00:00" es un rango invertido a
+  // propósito: el mismo mecanismo que ya cierra el selector cuando el piso
+  // supera el techo (ver SelectorHora) deja todo deshabilitado sin
+  // necesitar un caso especial aparte.
+  const franja = horarios ? franjaEfectiva(fechaRecojo, horarios) : null;
   const minimoHoraSiempre = franja?.piso ?? "23:59";
   const maximoHoraSiempre = franja?.tope ?? "00:00";
 
@@ -327,8 +329,8 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
         setError("Elige una fecha y hora de recojo.");
         return;
       }
-      if (horarios && fueraDeHorarioAtencion(horaRecojo, horarios)) {
-        const franjaActual = franjaAjustada(horarios);
+      if (horarios && fueraDeHorarioAtencion(fechaRecojo, horaRecojo, horarios)) {
+        const franjaActual = franjaEfectiva(fechaRecojo, horarios);
         setError(
           franjaActual
             ? `Atendemos de ${formatearHora12(franjaActual.piso)} a ${formatearHora12(franjaActual.tope)}. Elige una hora dentro de ese horario.`

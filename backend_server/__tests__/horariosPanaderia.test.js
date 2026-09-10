@@ -1,5 +1,6 @@
 const {
   franjaAjustada,
+  franjaEfectiva,
   fueraDeHorarioAtencion,
   calcularMinimoRecojo,
   validarFechaEntrega,
@@ -58,27 +59,73 @@ describe('franjaAjustada', () => {
   });
 });
 
+// "Hoy" fijado por fijarHoraPeru() es 2026-08-30; "mañana" es 2026-08-31.
+const HOY = { anio: 2026, mes: 8, dia: 30 };
+const MANANA = { anio: 2026, mes: 8, dia: 31 };
+
+describe('franjaEfectiva', () => {
+  test('para hoy, es exactamente franjaAjustada (respeta los interruptores)', () => {
+    fijarHoraPeru(9, 0);
+    const horarios = { ...HORARIOS_DEFECTO, franjaMananaActiva: false, franjaTardeActiva: false };
+    expect(franjaEfectiva(HOY, horarios)).toBeNull();
+  });
+
+  test('para una fecha futura, ignora los interruptores y usa el horario completo', () => {
+    fijarHoraPeru(9, 0);
+    const horarios = { ...HORARIOS_DEFECTO, franjaMananaActiva: false, franjaTardeActiva: false };
+    expect(franjaEfectiva(MANANA, horarios)).toEqual({ piso: '04:00', tope: '22:00' });
+  });
+
+  test('para una fecha futura, una sola franja apagada tampoco afecta', () => {
+    fijarHoraPeru(9, 0);
+    const horarios = { ...HORARIOS_DEFECTO, franjaTardeActiva: false };
+    expect(franjaEfectiva(MANANA, horarios)).toEqual({ piso: '04:00', tope: '22:00' });
+  });
+});
+
 describe('fueraDeHorarioAtencion', () => {
-  test('una hora dentro del rango de atención no está fuera de horario', () => {
-    expect(fueraDeHorarioAtencion({ hora: 10, minuto: 0 }, HORARIOS_DEFECTO)).toBe(false);
+  test('una hora de hoy dentro del rango de atención no está fuera de horario', () => {
+    fijarHoraPeru(9, 0);
+    expect(fueraDeHorarioAtencion({ ...HOY, hora: 10, minuto: 0 }, HORARIOS_DEFECTO)).toBe(false);
   });
 
   test('antes de la apertura sí está fuera de horario', () => {
-    expect(fueraDeHorarioAtencion({ hora: 3, minuto: 0 }, HORARIOS_DEFECTO)).toBe(true);
+    fijarHoraPeru(9, 0);
+    expect(fueraDeHorarioAtencion({ ...HOY, hora: 3, minuto: 0 }, HORARIOS_DEFECTO)).toBe(true);
   });
 
   test('después del cierre sí está fuera de horario', () => {
-    expect(fueraDeHorarioAtencion({ hora: 23, minuto: 0 }, HORARIOS_DEFECTO)).toBe(true);
+    fijarHoraPeru(9, 0);
+    expect(fueraDeHorarioAtencion({ ...HOY, hora: 23, minuto: 0 }, HORARIOS_DEFECTO)).toBe(true);
   });
 
-  test('si se apagó la franja de la tarde, una hora que antes era válida ahora queda fuera', () => {
+  test('si se apagó la franja de la tarde, una hora de HOY que antes era válida ahora queda fuera', () => {
+    fijarHoraPeru(9, 0);
     const horarios = { ...HORARIOS_DEFECTO, franjaTardeActiva: false };
-    expect(fueraDeHorarioAtencion({ hora: 16, minuto: 0 }, horarios)).toBe(true);
+    expect(fueraDeHorarioAtencion({ ...HOY, hora: 16, minuto: 0 }, horarios)).toBe(true);
   });
 
-  test('sin ninguna franja activa, cualquier hora está fuera de horario', () => {
+  test('sin ninguna franja activa, cualquier hora de HOY está fuera de horario', () => {
+    fijarHoraPeru(9, 0);
     const horarios = { ...HORARIOS_DEFECTO, franjaMananaActiva: false, franjaTardeActiva: false };
-    expect(fueraDeHorarioAtencion({ hora: 10, minuto: 0 }, horarios)).toBe(true);
+    expect(fueraDeHorarioAtencion({ ...HOY, hora: 10, minuto: 0 }, horarios)).toBe(true);
+  });
+
+  // Regresión: apagar las dos franjas de HOY (ej. el dueño se quedó sin
+  // stock) no debe bloquear un pedido para MAÑANA, que arranca con stock
+  // nuevo — antes franjaAjustada() se aplicaba igual a cualquier fecha.
+  test('sin ninguna franja de hoy activa, una hora de MAÑANA sigue disponible normalmente', () => {
+    fijarHoraPeru(9, 0);
+    const horarios = { ...HORARIOS_DEFECTO, franjaMananaActiva: false, franjaTardeActiva: false };
+    expect(fueraDeHorarioAtencion({ ...MANANA, hora: 4, minuto: 0 }, horarios)).toBe(false);
+    expect(fueraDeHorarioAtencion({ ...MANANA, hora: 15, minuto: 30 }, horarios)).toBe(false);
+    expect(fueraDeHorarioAtencion({ ...MANANA, hora: 3, minuto: 0 }, horarios)).toBe(true); // antes de abrir, igual fuera
+  });
+
+  test('con solo la franja de la tarde de hoy apagada, mañana igual ofrece la franja de la tarde completa', () => {
+    fijarHoraPeru(9, 0);
+    const horarios = { ...HORARIOS_DEFECTO, franjaTardeActiva: false };
+    expect(fueraDeHorarioAtencion({ ...MANANA, hora: 18, minuto: 0 }, horarios)).toBe(false);
   });
 });
 

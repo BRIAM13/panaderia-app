@@ -7,6 +7,7 @@ import {
   formatearFechaBonita,
   formatearHora12,
   franjaAjustada,
+  franjaEfectiva,
   fueraDeHorarioAtencion,
   hayVentanaHoy,
   horaAMinutos,
@@ -109,14 +110,44 @@ describe("franjaAjustada", () => {
   });
 });
 
+describe("franjaEfectiva", () => {
+  test("para hoy, es exactamente franjaAjustada (respeta los interruptores)", () => {
+    const horarios = { ...HORARIOS_DEFECTO, franjaMananaActiva: false, franjaTardeActiva: false };
+    expect(franjaEfectiva("2026-08-31", horarios, LUNES(9))).toBeNull();
+  });
+
+  test("para una fecha futura, ignora los interruptores y usa el horario completo", () => {
+    const horarios = { ...HORARIOS_DEFECTO, franjaMananaActiva: false, franjaTardeActiva: false };
+    // "hoy" es lunes 31; se pregunta por el martes 1 de setiembre.
+    expect(franjaEfectiva("2026-09-01", horarios, LUNES(9))).toEqual({ piso: "04:00", tope: "22:00" });
+  });
+
+  test("sin fecha elegida todavía, se comporta como hoy", () => {
+    const horarios = { ...HORARIOS_DEFECTO, franjaTardeActiva: false };
+    expect(franjaEfectiva("", horarios, LUNES(9))).toEqual({ piso: "04:00", tope: "15:30" });
+  });
+});
+
 describe("fueraDeHorarioAtencion", () => {
-  test("una hora dentro del rango de atención no está fuera de horario", () => {
-    expect(fueraDeHorarioAtencion("10:00", HORARIOS_DEFECTO)).toBe(false);
+  test("una hora de hoy dentro del rango de atención no está fuera de horario", () => {
+    expect(fueraDeHorarioAtencion("2026-08-31", "10:00", HORARIOS_DEFECTO, LUNES(9))).toBe(false);
   });
 
   test("antes de la apertura o después del cierre sí está fuera de horario", () => {
-    expect(fueraDeHorarioAtencion("03:00", HORARIOS_DEFECTO)).toBe(true);
-    expect(fueraDeHorarioAtencion("23:00", HORARIOS_DEFECTO)).toBe(true);
+    expect(fueraDeHorarioAtencion("2026-08-31", "03:00", HORARIOS_DEFECTO, LUNES(9))).toBe(true);
+    expect(fueraDeHorarioAtencion("2026-08-31", "23:00", HORARIOS_DEFECTO, LUNES(9))).toBe(true);
+  });
+
+  // Regresión: apagar las dos franjas de HOY (ej. el dueño se quedó sin
+  // stock) no debe bloquear un pedido para MAÑANA, que arranca con stock
+  // nuevo — antes franjaAjustada() se aplicaba igual a cualquier fecha,
+  // así que el selector de hora se quedaba sin ninguna hora elegible.
+  test("sin ninguna franja de hoy activa, una hora de MAÑANA sigue disponible normalmente", () => {
+    const horarios = { ...HORARIOS_DEFECTO, franjaMananaActiva: false, franjaTardeActiva: false };
+    // "hoy" es lunes 31; se pregunta por el martes 1 de setiembre.
+    expect(fueraDeHorarioAtencion("2026-09-01", "04:00", horarios, LUNES(9))).toBe(false);
+    expect(fueraDeHorarioAtencion("2026-09-01", "15:30", horarios, LUNES(9))).toBe(false);
+    expect(fueraDeHorarioAtencion("2026-09-01", "03:00", horarios, LUNES(9))).toBe(true); // antes de abrir, igual fuera
   });
 });
 

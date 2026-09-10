@@ -14,7 +14,7 @@ const {
   insertarItemsPedido,
   resumirProductos,
 } = require('./pedidosController');
-const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy, fueraDeHorarioAtencion, franjaAjustada } = require('../utils/horariosPanaderia');
+const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy, fueraDeHorarioAtencion, franjaEfectiva } = require('../utils/horariosPanaderia');
 const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
 const { RUC_PERU_REGEX, EMAIL_REGEX, CELULAR_PERU_REGEX } = require('../middlewares/validators');
 const { contactoEnmascarado, contactoVacio } = require('../utils/enmascarar');
@@ -227,13 +227,14 @@ async function crearPedidoPublico(req, res, next) {
       return res.status(400).json({ mensaje: 'La fecha de recojo no puede ser anterior a hoy.' });
     }
     const horarios = await obtenerHorariosPanaderia(pool);
-    // Piso/tope duro que rige CUALQUIER fecha, no solo hoy: el rango
-    // efectivo según qué franjas de recojo (mañana/tarde) están activas
-    // — nunca se recoge antes de que abra la franja ni después de que
-    // cierre, ni dentro de una franja que el dueño apagó por falta de
-    // stock, sin importar qué día sea.
-    if (fueraDeHorarioAtencion({ hora, minuto }, horarios)) {
-      const franja = franjaAjustada(horarios);
+    // Piso/tope duro que rige CUALQUIER fecha, no solo hoy: nunca se
+    // recoge antes de que abra ni después de que cierre. Los interruptores
+    // de franja (mañana/tarde) solo achican ese rango cuando la fecha
+    // propuesta es HOY — son la señal de "hoy no queda stock de esa
+    // hornada", no una decisión de horario que deba seguir aplicando a un
+    // pedido de mañana (ver franjaEfectiva).
+    if (fueraDeHorarioAtencion({ anio, mes, dia, hora, minuto }, horarios)) {
+      const franja = franjaEfectiva({ anio, mes, dia }, horarios);
       const mensaje = franja
         ? `Atendemos de ${formatearHora12(franja.piso)} a ${formatearHora12(franja.tope)}. Elige una hora dentro de ese horario.`
         : 'Por ahora no estamos recibiendo pedidos nuevos. Intenta de nuevo más tarde.';

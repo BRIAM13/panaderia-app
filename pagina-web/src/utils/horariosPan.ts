@@ -216,16 +216,42 @@ export function hayVentanaHoy(horarios: HorariosPanaderia, ahora = new Date()): 
   return minutosDesdeAhoraMasTolerancia(horarios, ahora) <= topeEfectivo;
 }
 
+/** `franjaAjustada`, pero solo aplicada al día de HOY. Los 2 interruptores
+ * de franja representan que el dueño se quedó sin stock de UNA hornada
+ * concreta — una situación de hoy, no una decisión permanente de horario.
+ * Antes se aplicaban igual a cualquier fecha futura elegida: si a las 11am
+ * se apagaban las dos franjas de hoy (porque ya no quedaba nada que
+ * hornear), el selector de hora se quedaba sin ninguna hora válida incluso
+ * para un pedido de MAÑANA, que empieza de cero con stock nuevo. Un día
+ * que no es hoy (o cuando todavía no se eligió fecha) siempre usa el
+ * horario completo de apertura/cierre, sin importar el estado de los
+ * interruptores — mismo cálculo que `franjaEfectiva` en
+ * horariosPanaderia.js (backend). */
+export function franjaEfectiva(
+  fechaElegida: string,
+  horarios: HorariosPanaderia,
+  ahora = new Date(),
+): FranjaAjustada | null {
+  if (fechaElegida && fechaElegida !== hoyISO(ahora)) {
+    return { piso: horarios.horaApertura, tope: horarios.horaCierre };
+  }
+  return franjaAjustada(horarios);
+}
+
 /** Piso/tope duro que aplica a CUALQUIER fecha (hoy o un día futuro), a
  * diferencia de `esMuyProntoHoy`/`esMuyTardeHoy` que solo rigen si la
- * fecha elegida es hoy: el rango efectivo según qué franjas de recojo
- * están activas (ver `franjaAjustada`). Ninguna hora de recojo puede caer
- * fuera de ese rango, sin importar qué día sea, ni dentro de una franja
- * que el dueño apagó por falta de stock. Refleja del lado del cliente la
- * misma regla que el backend vuelve a exigir (fueraDeHorarioAtencion en
- * horariosPanaderia.js). */
-export function fueraDeHorarioAtencion(horaElegida: string, horarios: HorariosPanaderia): boolean {
-  const franja = franjaAjustada(horarios);
+ * fecha elegida es hoy: el rango efectivo según la fecha elegida y (solo
+ * si es hoy) qué franjas de recojo están activas — ver `franjaEfectiva`.
+ * Ninguna hora de recojo puede caer fuera de ese rango, sin importar qué
+ * día sea. Refleja del lado del cliente la misma regla que el backend
+ * vuelve a exigir (fueraDeHorarioAtencion en horariosPanaderia.js). */
+export function fueraDeHorarioAtencion(
+  fechaElegida: string,
+  horaElegida: string,
+  horarios: HorariosPanaderia,
+  ahora = new Date(),
+): boolean {
+  const franja = franjaEfectiva(fechaElegida, horarios, ahora);
   if (!franja) return true;
   const minutos = horaAMinutos(horaElegida);
   return minutos < horaAMinutos(franja.piso) || minutos > horaAMinutos(franja.tope);

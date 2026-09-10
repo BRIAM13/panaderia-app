@@ -187,16 +187,36 @@ function hayVentanaHoy(horarios) {
 }
 
 /**
+ * `franjaAjustada`, pero solo aplicada al día de HOY. Los 2 interruptores
+ * de franja representan que el dueño se quedó sin stock de UNA hornada
+ * concreta — una situación de hoy, no una decisión permanente de horario.
+ * Antes se aplicaban igual a cualquier fecha futura: si a las 11am se
+ * apagaban las dos franjas de hoy (porque ya no quedaba nada que hornear),
+ * un pedido para MAÑANA también se quedaba sin ninguna hora válida, aunque
+ * mañana empiece de cero con stock nuevo. Un día que no es hoy siempre usa
+ * el horario completo de apertura/cierre, sin importar el estado de los
+ * interruptores.
+ */
+function franjaEfectiva({ anio, mes, dia }, horarios) {
+  const hoyPeru = diaCalendarioPeru(new Date());
+  const fechaPropuesta = Date.UTC(anio, mes - 1, dia);
+  if (fechaPropuesta !== hoyPeru) {
+    return { piso: horarios.horaApertura, tope: horarios.horaCierre };
+  }
+  return franjaAjustada(horarios);
+}
+
+/**
  * Piso/tope duro que aplica a CUALQUIER fecha de recojo (hoy o un día
  * futuro), a diferencia de esMuyProntoParaHoy/esMuyTardeParaHoy que solo
  * rigen si la fecha propuesta es exactamente hoy: el rango efectivo según
- * qué franjas de recojo están activas (ver franjaAjustada). Sin esto, un
- * cliente podía elegir una fecha futura a cualquier hora del día (ej.
- * 12:05am), aunque la tienda ya llevara horas cerrada, o seguir eligiendo
- * una franja que el dueño ya apagó por falta de stock.
+ * la fecha propuesta y (solo si es hoy) qué franjas de recojo están
+ * activas — ver franjaEfectiva. Sin esto, un cliente podía elegir una
+ * fecha futura a cualquier hora del día (ej. 12:05am), aunque la tienda ya
+ * llevara horas cerrada.
  */
-function fueraDeHorarioAtencion({ hora, minuto }, horarios) {
-  const franja = franjaAjustada(horarios);
+function fueraDeHorarioAtencion({ anio, mes, dia, hora, minuto }, horarios) {
+  const franja = franjaEfectiva({ anio, mes, dia }, horarios);
   if (!franja) return true;
   const minutosPropuestos = hora * 60 + minuto;
   return minutosPropuestos < horaAMinutos(franja.piso) || minutosPropuestos > horaAMinutos(franja.tope);
@@ -222,4 +242,5 @@ module.exports = {
   hayVentanaHoy,
   fueraDeHorarioAtencion,
   franjaAjustada,
+  franjaEfectiva,
 };
