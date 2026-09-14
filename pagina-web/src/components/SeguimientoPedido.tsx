@@ -3,12 +3,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertCircle,
   Ban,
+  BadgeCheck,
   CheckCircle2,
   ChevronDown,
   Clock,
   Loader2,
   PackageSearch,
   SearchX,
+  Smartphone,
   Truck,
   X,
   XCircle,
@@ -20,8 +22,10 @@ import {
   type PedidoPublicoConsultaResultado,
 } from "../services/api";
 import { formatearHora12 } from "../utils/horariosPan";
+import { avisoPagoAdelanto, esperaCodigoDePago } from "../utils/pagoAdelanto";
 import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
 import { LONGITUD_DOCUMENTO, type TipoDocumento } from "../hooks/useVerificacionDocumento";
+import { PagoYape } from "./PagoYape";
 import { SelectorTipoDocumento } from "./SelectorTipoDocumento";
 
 const ESTADO_INFO = {
@@ -34,6 +38,14 @@ const ESTADO_INFO = {
     etiqueta: "Confirmado, por entregar",
     icono: Truck,
     clases: "bg-blue-100 text-blue-800",
+  },
+  // Estado nuevo: pedido de Panadería cuyo pago por adelantado ya verificó
+  // la tienda. Está tan listo para recogerse como un PENDIENTE, solo que
+  // llegó por el camino del pago con Yape.
+  CONFIRMADO: {
+    etiqueta: "Pagado, por recoger",
+    icono: BadgeCheck,
+    clases: "bg-emerald-100 text-emerald-800",
   },
   ENTREGADO: {
     etiqueta: "Entregado",
@@ -55,14 +67,21 @@ const ESTADO_INFO = {
 // Mientras algún pedido siga en un estado que todavía puede cambiar, el
 // panel se refresca solo — una vez que todos quedaron en un estado final
 // (entregado/rechazado/cancelado) ya no hay nada más que esperar.
-const ESTADOS_ACTIVOS = new Set(["SOLICITADO", "PENDIENTE"]);
+const ESTADOS_ACTIVOS = new Set(["SOLICITADO", "PENDIENTE", "CONFIRMADO"]);
 const INTERVALO_REFRESCO_MS = 20000;
 
 // Orden fijo de los grupos, sin importar el orden en que llegaron del
 // servidor — primero lo ya resuelto a favor del cliente (entregado),
 // después lo confirmado en camino, luego lo que todavía espera respuesta,
 // y al final lo que no llegó a concretarse.
-const ORDEN_ESTADOS = ["ENTREGADO", "PENDIENTE", "SOLICITADO", "RECHAZADO", "CANCELADO"] as const;
+const ORDEN_ESTADOS = [
+  "ENTREGADO",
+  "CONFIRMADO",
+  "PENDIENTE",
+  "SOLICITADO",
+  "RECHAZADO",
+  "CANCELADO",
+] as const;
 
 function agruparPedidos(pedidos: PedidoPublicoConsultaItem[]) {
   return ORDEN_ESTADOS.map((estado) => ({
@@ -89,6 +108,29 @@ function formatearFechaHora(fechaIso: string): string {
   return `${formatearFechaCorta(fechaIso)}, ${formatearHora12(horaTexto)}`;
 }
 
+/** Tono visual de cada aviso de pago. "atencion" es ámbar porque siempre
+ * implica algo que el cliente todavía tiene que hacer o cobrar; "espera"
+ * azul (informativo, no hay nada que hacer) y "bien" verde. */
+const CLASES_AVISO_PAGO = {
+  espera: "border-blue-200 bg-blue-50 text-blue-800",
+  bien: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  atencion: "border-amber-300 bg-amber-50 text-amber-800",
+} as const;
+
+/** La línea de "en qué quedó tu pago" de un pedido: "te debemos S/ 3.00 de
+ * vuelto", "aún debes S/ 2.00", "estamos verificando"… No dibuja nada en un
+ * pedido que no se paga por adelantado (pan de hamburguesa, o cualquier
+ * pedido anterior a esta función). */
+function AvisoPagoPedido({ pedido }: { pedido: PedidoPublicoConsultaItem }) {
+  const aviso = avisoPagoAdelanto(pedido);
+  if (!aviso) return null;
+  return (
+    <div className={`mt-2.5 rounded-xl border px-3 py-2 text-xs leading-relaxed font-medium ${CLASES_AVISO_PAGO[aviso.tono]}`}>
+      {aviso.texto}
+    </div>
+  );
+}
+
 /** Búsqueda pública y sin login: DNI o RUC (el cliente elige cuál), y los
  * pedidos recientes del cliente en cualquier estado. Es una consulta pura
  * contra nuestra propia base — nunca gasta un consumo de la API paga de
@@ -106,6 +148,13 @@ export function SeguimientoPedido() {
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<PedidoPublicoConsultaResultado | null>(null);
   const documentoConsultadoRef = useRef("");
+  // Segunda vía para meter el código de pago: la de siempre es la pantalla
+  // de pago que queda guardada en localStorage al crear el pedido, pero eso
+  // no sirve si el cliente pagó desde otro celular, borró los datos del
+  // navegador o usa incógnito. Acá se llega buscando por documento, que es
+  // lo mismo con lo que hizo el pedido.
+  const [pedidoPagando, setPedidoPagando] = useState<PedidoPublicoConsultaItem | null>(null);
+  const [avisoCodigoEnviado, setAvisoCodigoEnviado] = useState(false);
   // Qué grupos (por estado) están desplegados — arrancan todos plegados;
   // el cliente elige cuál abrir. Un refresco del sondeo no toca esto, así
   // que un grupo que ya abrió no se le vuelve a cerrar solo.
@@ -125,6 +174,25 @@ export function SeguimientoPedido() {
     setError(null);
     setResultado(null);
     setGruposAbiertos(new Set());
+    setPedidoPagando(null);
+    setAvisoCodigoEnviado(false);
+  }
+
+  /** Vuelve a consultar ya mismo (sin esperar al sondeo de 20s) para que el
+   * pedido al que se le acaba de meter el código aparezca al toque como
+   * "estamos verificando tu pago". */
+  async function refrescarAhora() {
+    try {
+      setResultado(await consultarPedidosPublicos(documentoConsultadoRef.current));
+    } catch {
+      // Silencioso: el sondeo de igual forma lo va a traer.
+    }
+  }
+
+  async function alRegistrarCodigoDesdeSeguimiento() {
+    setPedidoPagando(null);
+    setAvisoCodigoEnviado(true);
+    await refrescarAhora();
   }
 
   function elegirTipoDocumento(tipo: TipoDocumento) {
@@ -166,6 +234,8 @@ export function SeguimientoPedido() {
     setError(null);
     setDocumento("");
     setGruposAbiertos(new Set());
+    setPedidoPagando(null);
+    setAvisoCodigoEnviado(false);
   }
 
   // Sondeo en tiempo real: solo mientras el panel está abierto, hay un
@@ -265,7 +335,28 @@ export function SeguimientoPedido() {
             >
               <div className="border-t border-pan-crema/15 bg-pan-crema px-4 py-6 sm:px-8 sm:py-8">
                 <AnimatePresence mode="wait">
-                  {resultado ? (
+                  {/* Meter el código de un pedido que ya existe ocupa todo el
+                      panel: es una tarea completa, no un campo dentro de una
+                      lista. Al terminar se vuelve a la lista, ya refrescada. */}
+                  {pedidoPagando ? (
+                    <motion.div
+                      key="pago"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mx-auto max-w-md"
+                    >
+                      <PagoYape
+                        idPedido={pedidoPagando.idPedido}
+                        numeroPedidoDia={pedidoPagando.numeroPedidoDia}
+                        total={pedidoPagando.total}
+                        documento={documentoConsultadoRef.current}
+                        onCodigoRegistrado={alRegistrarCodigoDesdeSeguimiento}
+                        onCancelar={() => setPedidoPagando(null)}
+                        etiquetaCancelar="Volver a mis pedidos"
+                        compacto
+                      />
+                    </motion.div>
+                  ) : resultado ? (
                     <motion.div
                       key="resultado"
                       initial={{ opacity: 0, y: 8 }}
@@ -297,6 +388,20 @@ export function SeguimientoPedido() {
                             <p className="mb-4 text-center text-sm font-medium text-pan-carbon-suave">
                               Hola, {resultado.nombre}
                             </p>
+                          )}
+
+                          {avisoCodigoEnviado && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mb-4 flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3"
+                            >
+                              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" strokeWidth={1.75} />
+                              <p className="text-xs leading-relaxed font-medium text-blue-800">
+                                Recibimos tu código de operación. Estamos verificando el pago con la
+                                tienda; el estado de tu pedido se actualiza solo acá.
+                              </p>
+                            </motion.div>
                           )}
 
                           {/* A simple vista, sin tener que desplegar nada —
@@ -430,6 +535,23 @@ export function SeguimientoPedido() {
                                                   S/ {pedido.total.toFixed(2)}
                                                 </span>
                                               </div>
+                                              {/* Pago por adelantado: en qué
+                                                  quedó, y —si todavía falta
+                                                  el código— el botón para
+                                                  mandarlo desde acá. Nada de
+                                                  esto aparece en un pedido
+                                                  de pan de hamburguesa. */}
+                                              <AvisoPagoPedido pedido={pedido} />
+                                              {esperaCodigoDePago(pedido) && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setPedidoPagando(pedido)}
+                                                  className="mt-2.5 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-pan-terracota px-4 text-sm font-semibold text-pan-crema shadow-sm shadow-pan-terracota/25 transition-transform hover:scale-[1.02]"
+                                                >
+                                                  <Smartphone className="h-3.5 w-3.5" strokeWidth={2} />
+                                                  Pagar / ingresar código
+                                                </button>
+                                              )}
                                             </li>
                                           ))}
                                         </ul>

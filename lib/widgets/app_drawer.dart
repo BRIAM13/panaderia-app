@@ -29,12 +29,14 @@ class AppDrawerContenido extends StatefulWidget {
     required this.onAbrirPedidosPanaderia,
     required this.onAbrirNuevoPedidoPanaderia,
     required this.onAbrirDeudasPanaderia,
+    required this.onAbrirAjustesPagoPanaderia,
     required this.onAbrirAjustePreciosPanaderia,
     required this.onAbrirHorariosPanaderia,
     required this.onAbrirMiPerfil,
     required this.onAbrirMisPedidos,
     required this.onAbrirMisDeudas,
     required this.onAbrirAnalitica,
+    required this.onAbrirDescuentosClientes,
     required this.onAbrirTrabajadores,
     required this.onAbrirTokenApiPeru,
     required this.onAbrirVersionApp,
@@ -54,12 +56,14 @@ class AppDrawerContenido extends StatefulWidget {
   final VoidCallback onAbrirPedidosPanaderia;
   final VoidCallback onAbrirNuevoPedidoPanaderia;
   final VoidCallback onAbrirDeudasPanaderia;
+  final VoidCallback onAbrirAjustesPagoPanaderia;
   final VoidCallback onAbrirAjustePreciosPanaderia;
   final VoidCallback onAbrirHorariosPanaderia;
   final VoidCallback onAbrirMiPerfil;
   final VoidCallback onAbrirMisPedidos;
   final VoidCallback onAbrirMisDeudas;
   final VoidCallback onAbrirAnalitica;
+  final VoidCallback onAbrirDescuentosClientes;
   final VoidCallback onAbrirTrabajadores;
   final VoidCallback onAbrirTokenApiPeru;
   final VoidCallback onAbrirVersionApp;
@@ -176,6 +180,16 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
         icono: PhosphorIconsRegular.wallet,
         titulo: 'Deudas',
         onTap: widget.onAbrirDeudasPanaderia,
+        delay: 0,
+      ),
+      // Hermana de "Deudas", no de "Pedidos": las dos son plata pendiente de
+      // moverse. La diferencia es que una deuda nace al ENTREGAR fiado y un
+      // ajuste nace al VERIFICAR un pago por Yape que no cuadró — y, sobre
+      // todo, que un ajuste sobrevive a su pedido (ver AjustesPagoPage).
+      _FilaMenu(
+        icono: PhosphorIconsRegular.arrowsLeftRight,
+        titulo: 'Vueltos y saldos',
+        onTap: widget.onAbrirAjustesPagoPanaderia,
         delay: 0,
       ),
       if (esSuperAdmin)
@@ -427,6 +441,19 @@ class _AppDrawerContenidoState extends State<AppDrawerContenido> {
                         titulo: 'Analítica',
                         onTap: widget.onAbrirAnalitica,
                         delay: 120,
+                      ),
+                      // Va acá arriba, junto a Analítica, y NO dentro de
+                      // una tienda: los porcentajes son del cliente (su
+                      // segmento del CRM es uno solo para todo el negocio)
+                      // y la propia pantalla deja elegir en qué tiendas
+                      // aplica. Meterla bajo "Panadería" —la única tienda
+                      // habilitada hoy— haría creer que es un ajuste de esa
+                      // tienda y la escondería el día que se habilite otra.
+                      _FilaMenu(
+                        icono: PhosphorIconsRegular.percent,
+                        titulo: 'Descuentos por cliente',
+                        onTap: widget.onAbrirDescuentosClientes,
+                        delay: 125,
                       ),
                       _FilaMenu(
                         icono: PhosphorIconsRegular.usersThree,

@@ -26,6 +26,12 @@ export interface ProductoPublico {
   /** true: se vende por paquete de 12 a precio fijo (pan de hamburguesa),
    * no por unidad suelta como el resto del catálogo. */
   esPaquete: boolean;
+  /** Slug de la tienda dueña del producto ("panaderia", "hamburguesas").
+   * Se usa para preguntarle al backend si hay descuento por fidelidad en
+   * esa tienda: la lista de tiendas con descuento la decide el dueño desde
+   * la app, así que no se puede deducir de `esPaquete`. Puede faltar si el
+   * backend todavía no está actualizado. */
+  tiendaSlug?: string;
 }
 
 /** Horario de pedido/recojo del pan vendido por unidad (Pan de Agua/
@@ -86,10 +92,116 @@ export interface PedidoPublicoInput {
   fechaEntrega?: string;
 }
 
+/** Descuento por fidelidad que el backend calculó para un cliente en una
+ * tienda concreta, a partir de su segmento del CRM (ver
+ * utils/descuentosCliente.js). `porcentaje` viene en forma decimal-porciento
+ * (5 = 5%). Siempre null cuando la tienda no tiene el descuento habilitado. */
+export interface DescuentoCliente {
+  segmento: "NUEVO" | "EN_RIESGO" | "REGULAR" | "FRECUENTE" | "VIP";
+  porcentaje: number;
+}
+
+/** Estado del pago por adelantado con Yape de un pedido (solo Panadería;
+ * en cualquier otro pedido vale "NO_APLICA"). Los mismos 5 valores que
+ * acepta `CK_Pedidos_EstadoPagoAdelanto` en la base — ver
+ * backend_server/utils/pagoAdelanto.js. */
+export type EstadoPagoAdelanto =
+  | "NO_APLICA"
+  | "VERIFICANDO"
+  | "PAGADO"
+  | "DEUDA_PARCIAL"
+  | "VUELTO_PENDIENTE";
+
+/** Saldo o vuelto que quedó pendiente después de que la tienda verificó el
+ * pago. `monto` SIEMPRE es positivo: quién le debe a quién lo dice `tipo`. */
+export interface AjustePagoPublico {
+  tipo: "DEUDA" | "VUELTO";
+  monto: number;
+  estado: "PENDIENTE" | "RESUELTO";
+}
+
 export interface PedidoPublicoResultado {
   mensaje: string;
+  /** El pedido YA existe con este id apenas se envía el formulario, incluso
+   * en Panadería, donde todavía falta pagar — así una pestaña que se muera
+   * mientras el cliente está en Yape no pierde nada (ver
+   * `registrarCodigoPago`). Puede faltar con un backend viejo. */
+  idPedido?: number;
   numeroPedidoDia: number;
+  /** Lo que el cliente realmente paga: YA con el descuento aplicado. */
   total: number;
+  /** Antes del descuento. Puede faltar si el backend todavía no está
+   * actualizado — en ese caso no hay desglose que mostrar. */
+  subtotal?: number;
+  /** El descuento que el SERVIDOR aplicó de verdad al guardar el pedido, no
+   * el que la web había estimado. null cuando no hubo. */
+  descuentoCliente?: DescuentoCliente | null;
+  /** "VERIFICANDO" en Panadería (falta pagar), "NO_APLICA" en el resto. */
+  estadoPagoAdelanto?: EstadoPagoAdelanto;
+  /** Lo único de la respuesta que no se le muestra al cliente: sirve para
+   * mandar después el código de operación sin tener login. null/ausente
+   * cuando el pedido no se paga por adelantado. */
+  tokenConfirmacionPago?: string | null;
+}
+
+/** A dónde yapear: el medio de pago activo de una tienda. `null` cuando el
+ * dueño todavía no cargó ninguno (ver `MediosPagoTienda`) — la pantalla de
+ * pago tiene un estado propio para eso, no muestra una caja vacía. */
+export interface MedioPagoPublico {
+  tipo: string;
+  titular: string;
+  numeroDestino: string;
+  notas: string | null;
+  /** PNG en base64 del QR REAL descargado de la app de Yape, sin el prefijo
+   * `data:`. null si el dueño no lo subió: ahí solo se muestra el número. */
+  imagenQrBase64: string | null;
+}
+
+export async function obtenerMedioPagoPublico(tiendaSlug: string): Promise<MedioPagoPublico | null> {
+  const respuesta = await fetch(
+    `${API_BASE_URL}/publico/medio-pago?tiendaSlug=${encodeURIComponent(tiendaSlug)}`,
+  );
+  const data = await manejarRespuesta<{ medioPago: MedioPagoPublico | null }>(respuesta);
+  return data.medioPago ?? null;
+}
+
+export interface RegistrarCodigoPagoInput {
+  idPedido: number;
+  /** El que devolvió `crearPedidoPublico`. Se omite cuando se llega desde el
+   * seguimiento por DNI en otro dispositivo, donde no hay token guardado. */
+  token?: string;
+  /** Alternativa al token: el mismo documento con el que se hizo el pedido. */
+  documento?: string;
+  /** Solo dígitos, tal como lo emitió Yape. */
+  codigoOperacionYape: string;
+  /** Cuánto dice el cliente haber pagado. El servidor exige que sea >= total. */
+  montoDeclaradoCliente: number;
+}
+
+export interface RegistrarCodigoPagoResultado {
+  mensaje: string;
+  idPedido: number;
+  numeroPedidoDia: number;
+  estadoPagoAdelanto: EstadoPagoAdelanto;
+  codigoOperacionYape: string;
+  montoDeclaradoCliente: number;
+  total: number;
+}
+
+/** Segundo paso del pedido de Panadería: el cliente ya yapeó y manda el
+ * código de operación. El pedido ya existe desde `crearPedidoPublico`; esto
+ * solo le agrega el código y el monto, y lo deja esperando que la tienda lo
+ * verifique. Se puede hacer UNA sola vez por pedido. */
+export async function registrarCodigoPago(
+  input: RegistrarCodigoPagoInput,
+): Promise<RegistrarCodigoPagoResultado> {
+  const { idPedido, ...cuerpo } = input;
+  const respuesta = await fetch(`${API_BASE_URL}/publico/pedidos/${idPedido}/codigo-pago`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cuerpo),
+  });
+  return manejarRespuesta<RegistrarCodigoPagoResultado>(respuesta);
 }
 
 async function manejarRespuesta<T>(respuesta: Response): Promise<T> {
@@ -137,11 +249,25 @@ export interface PedidoPublicoConsultaItem {
    * conveniencia para no reconstruirlo acá. */
   productoResumen: string;
   total: number;
-  estado: "SOLICITADO" | "PENDIENTE" | "RECHAZADO" | "ENTREGADO" | "CANCELADO";
+  /** "CONFIRMADO" es el estado nuevo de un pedido de Panadería cuyo pago por
+   * adelantado ya fue verificado por la tienda: está listo para recogerse,
+   * igual que un "PENDIENTE", solo que llegó por el otro camino. */
+  estado: "SOLICITADO" | "PENDIENTE" | "CONFIRMADO" | "RECHAZADO" | "ENTREGADO" | "CANCELADO";
   fechaCreacion: string;
   /** null en pedidos de pan de hamburguesa (por paquete), que no usan el
    * flujo de recojo con fecha/hora — solo lo tienen los de pan por unidad. */
   fechaEntrega: string | null;
+  /** "NO_APLICA" en todo pedido que no sea de Panadería por la web. Puede
+   * faltar con un backend viejo — se trata como "NO_APLICA". */
+  estadoPagoAdelanto?: EstadoPagoAdelanto;
+  /** null mientras el cliente no haya mandado su código de operación: es lo
+   * que distingue "pedido creado, falta pagar" de "pagado, esperando que la
+   * tienda lo revise". */
+  codigoOperacionYape?: string | null;
+  montoDeclaradoCliente?: number | null;
+  /** Saldo o vuelto todavía sin resolver de ESTE pedido, si quedó alguno al
+   * verificar el pago. null (lo normal) cuando no hay nada pendiente. */
+  ajustePago?: AjustePagoPublico | null;
 }
 
 export interface PedidoPublicoConsultaResultado {
@@ -179,13 +305,28 @@ export interface VerificarDocumentoResultado {
    * backend todavía no está actualizado — el hook lo trata como "nada
    * guardado", que es el comportamiento de siempre. */
   contacto?: ContactoDocumento;
+  /** Descuento por fidelidad de ESTE documento en la tienda que se pasó por
+   * `tiendaSlug`. null (o ausente) cuando no se pidió tienda, cuando esa
+   * tienda no tiene el descuento habilitado, o con un backend viejo.
+   *
+   * Es solo para mostrárselo al cliente antes de enviar: el monto que se
+   * cobra lo vuelve a calcular el servidor al crear el pedido. */
+  descuentoCliente?: DescuentoCliente | null;
   /** Presente solo cuando existe:false, ya explica el motivo (RENIEC/SUNAT
    * no lo tienen registrado). */
   mensaje?: string;
 }
 
-export async function verificarDocumentoPublico(documento: string): Promise<VerificarDocumentoResultado> {
-  const respuesta = await fetch(`${API_BASE_URL}/publico/verificar-documento?documento=${encodeURIComponent(documento)}`);
+/** `tiendaSlug` es opcional: sin él el backend responde igual que siempre,
+ * solo que sin `descuentoCliente`. Se manda en cuanto el visitante ya eligió
+ * un pan, que es cuando se sabe de qué tienda estamos hablando. */
+export async function verificarDocumentoPublico(
+  documento: string,
+  tiendaSlug?: string,
+): Promise<VerificarDocumentoResultado> {
+  const parametros = new URLSearchParams({ documento });
+  if (tiendaSlug) parametros.set("tiendaSlug", tiendaSlug);
+  const respuesta = await fetch(`${API_BASE_URL}/publico/verificar-documento?${parametros.toString()}`);
   return manejarRespuesta<VerificarDocumentoResultado>(respuesta);
 }
 

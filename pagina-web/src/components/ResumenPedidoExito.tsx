@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, BadgePercent, CheckCircle2, Clock, Smartphone } from "lucide-react";
 import type { PedidoPublicoResultado } from "../services/api";
 import { formatearFechaBonita, formatearHora12 } from "../utils/horariosPan";
+import { montoDescontado, textoDescuento } from "../utils/descuentos";
 import { EASE_PREMIUM } from "../utils/animacion";
 
 export interface DetallePedidoEnviado {
@@ -24,6 +25,11 @@ interface ResumenPedidoExitoProps {
   /** El horario elegido ya había cerrado al enviar: se avisa que la
    * confirmación depende de que quede stock. */
   fueraDeVentana: boolean;
+  /** Solo en Panadería (pago por adelantado con Yape): true si el cliente
+   * ya mandó su código de operación, false si salió de la pantalla de pago
+   * sin mandarlo. Se ignora en los pedidos que no se pagan por adelantado
+   * (`estadoPagoAdelanto` distinto de "VERIFICANDO"). */
+  codigoPagoRegistrado?: boolean;
   onPedirDeNuevo: () => void;
 }
 
@@ -34,6 +40,7 @@ export function ResumenPedidoExito({
   resultado,
   detalle,
   fueraDeVentana,
+  codigoPagoRegistrado = false,
   onPedirDeNuevo,
 }: ResumenPedidoExitoProps) {
   // El foco salta al título: quien navega con teclado o lector de pantalla
@@ -44,6 +51,14 @@ export function ResumenPedidoExito({
     const id = window.setTimeout(() => tituloRef.current?.focus(), 250);
     return () => window.clearTimeout(id);
   }, []);
+
+  // Ausente con un backend viejo (o cuando el pedido no llevó descuento):
+  // en ese caso la pantalla queda exactamente como era antes.
+  const descuento = resultado.descuentoCliente ?? null;
+  // Solo los pedidos de Panadería pasan por el pago con Yape. En cualquier
+  // otro ("NO_APLICA", o ausente con un backend viejo) esta pantalla es
+  // exactamente la de siempre.
+  const esperaVerificacionPago = resultado.estadoPagoAdelanto === "VERIFICANDO";
 
   return (
     <motion.div
@@ -76,9 +91,54 @@ export function ResumenPedidoExito({
         Pedido #{resultado.numeroPedidoDia} recibido
       </h3>
       <p className="mt-2 text-pan-carbon-suave">{resultado.mensaje}</p>
+      {/* Todo lo de acá sale de la respuesta del SERVIDOR, no de lo que la
+          web había estimado: si por lo que sea el descuento que se aplicó
+          terminó siendo otro (el historial del cliente se calcula de nuevo
+          al guardar el pedido), lo que el cliente ve es lo que de verdad se
+          guardó. */}
+      {descuento && resultado.subtotal != null && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: EASE_PREMIUM, delay: 0.25 }}
+          className="mx-auto mt-4 flex max-w-sm items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5"
+        >
+          <BadgePercent className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={1.75} />
+          <p className="text-xs font-medium text-emerald-800">
+            {textoDescuento(descuento)}: ahorraste S/{" "}
+            {montoDescontado(resultado.subtotal, descuento.porcentaje).toFixed(2)}
+          </p>
+        </motion.div>
+      )}
       <p className="mt-3 text-lg font-semibold text-pan-terracota">
         Total: S/ {resultado.total.toFixed(2)}
       </p>
+
+      {/* Estado del pago por adelantado. NO se vuelve a decir "recibido"
+          (ya lo dice el título de arriba): lo que falta contar acá es en qué
+          quedó el pago, que es lo único que el cliente todavía no sabe. */}
+      {esperaVerificacionPago && (
+        <div
+          className={`mx-auto mt-4 flex max-w-sm items-start gap-2.5 rounded-xl border px-4 py-3 text-left ${
+            codigoPagoRegistrado ? "border-blue-200 bg-blue-50" : "border-amber-300 bg-amber-50"
+          }`}
+        >
+          {codigoPagoRegistrado ? (
+            <Clock className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" strokeWidth={1.75} />
+          ) : (
+            <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={1.75} />
+          )}
+          <p
+            className={`text-xs leading-relaxed font-medium ${
+              codigoPagoRegistrado ? "text-blue-800" : "text-amber-800"
+            }`}
+          >
+            {codigoPagoRegistrado
+              ? "Recibimos tu código de operación. Estamos verificando el pago con la tienda y te avisamos apenas lo revisen — puedes seguirlo desde “Ver mi pedido”."
+              : "Tu pedido está guardado, pero todavía nos falta tu pago. Cuando yapees, vuelve a “Ver mi pedido”, busca tu documento y escribe ahí tu código de operación."}
+          </p>
+        </div>
+      )}
 
       <div className="mx-auto mt-5 max-w-sm space-y-2.5 rounded-2xl border border-pan-borde/25 bg-pan-crema px-5 py-4 text-left text-sm">
         <FilaDetallePedido etiqueta="Producto" valor={detalle.producto} />

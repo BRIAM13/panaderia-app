@@ -13,6 +13,7 @@ import '../../widgets/ad_banner.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/page_transitions.dart';
 import '../auth/login_page.dart';
+import '../clientes/descuentos_clientes_page.dart';
 import '../hamburguesas/ajuste_costos_page.dart';
 import '../hamburguesas/analitica_page.dart';
 import '../hamburguesas/clientes_page.dart';
@@ -24,6 +25,7 @@ import '../hamburguesas/pedidos_page.dart';
 import '../hamburguesas/trabajadores_page.dart';
 import '../horneados/horneados_home_page.dart';
 import '../panaderia/ajuste_precios_page.dart';
+import '../panaderia/ajustes_pago_page.dart';
 import '../panaderia/horarios_pedido_page.dart';
 import '../perfil/mi_perfil_page.dart';
 import '../sistema/token_api_peru_page.dart';
@@ -190,6 +192,12 @@ class _HomePageState extends State<HomePage> {
     pushSlideUpFade(context, (context) => DeudasPage(tienda: tienda));
   }
 
+  void _abrirAjustesPagoPanaderia() {
+    final tienda = _buscarMiTienda('panaderia');
+    if (tienda == null) return;
+    pushSlideUpFade(context, (context) => AjustesPagoPage(tienda: tienda));
+  }
+
   void _abrirAjustePreciosPanaderia() {
     final tienda = _buscarMiTienda('panaderia');
     if (tienda == null) return;
@@ -231,6 +239,13 @@ class _HomePageState extends State<HomePage> {
       context,
       (context) => AnaliticaPage(usuario: widget.usuario),
     );
+  }
+
+  /// No recibe tienda a propósito: el descuento se decide por el segmento
+  /// del cliente (uno solo para todo el negocio) y la propia pantalla elige
+  /// en qué tiendas aplica.
+  void _abrirDescuentosClientes() {
+    pushSlideUpFade(context, (context) => const DescuentosClientesPage());
   }
 
   void _abrirTrabajadores() {
@@ -318,12 +333,14 @@ class _HomePageState extends State<HomePage> {
       onAbrirPedidosPanaderia: _abrirPedidosPanaderia,
       onAbrirNuevoPedidoPanaderia: _abrirNuevoPedidoPanaderia,
       onAbrirDeudasPanaderia: _abrirDeudasPanaderia,
+      onAbrirAjustesPagoPanaderia: _abrirAjustesPagoPanaderia,
       onAbrirAjustePreciosPanaderia: _abrirAjustePreciosPanaderia,
       onAbrirHorariosPanaderia: _abrirHorariosPanaderia,
       onAbrirMiPerfil: _abrirMiPerfil,
       onAbrirMisPedidos: _abrirMisPedidos,
       onAbrirMisDeudas: _abrirMisDeudas,
       onAbrirAnalitica: _abrirAnalitica,
+      onAbrirDescuentosClientes: _abrirDescuentosClientes,
       onAbrirTrabajadores: _abrirTrabajadores,
       onAbrirTokenApiPeru: _abrirTokenApiPeru,
       onAbrirVersionApp: _abrirVersionApp,

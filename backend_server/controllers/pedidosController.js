@@ -3,6 +3,7 @@ const { registrarAuditoria } = require('../utils/auditLog');
 const { enviarPush } = require('../services/pushService');
 const { obtenerIdTrabajador, obtenerTiendasAsignadas, tieneAccesoATienda } = require('../utils/tiendaAcceso');
 const { obtenerSiguienteNumeroPedidoDia } = require('../utils/numeracionPedidos');
+const { ESTADO_VERIFICANDO } = require('../utils/pagoAdelanto');
 
 /**
  * Registra un pedido con UNO O VARIOS productos (carrito). `Pedidos` es la
@@ -481,6 +482,12 @@ async function crearMiPedido(req, res, next) {
 const SELECT_PEDIDOS_BASE = `
   SELECT pd.IdPedido, pd.NumeroPedidoDia, pd.IdCliente, pd.IdTienda, pd.Total, pd.FechaEntrega,
          pd.Estado, pd.EstadoPago, pd.FechaEntregaReal, pd.Notas, pd.FechaCreacion,
+         -- Pago por adelantado con Yape (solo el pedido web de Panadería; en
+         -- cualquier otro pedido EstadoPagoAdelanto vale 'NO_APLICA' y las
+         -- otras tres columnas son NULL). Nada que ver con EstadoPago, que es
+         -- el fiado posterior a la entrega — ver la migración
+         -- 2026_09_pago_adelanto_panaderia.sql.
+         pd.EstadoPagoAdelanto, pd.CodigoOperacionYape, pd.MontoDeclaradoCliente, pd.MontoConfirmadoStaff,
          per.DNI AS ClienteDni, per.Nombres AS ClienteNombres,
          per.ApellidoPaterno AS ClienteApellidoPaterno, per.ApellidoMaterno AS ClienteApellidoMaterno,
          c.DescripcionNegocio AS ClienteDescripcionNegocio,
@@ -538,6 +545,55 @@ async function obtenerItemsPorPedidos(pool, idsPedidos) {
   return mapa;
 }
 
+/**
+ * Los ajustes de pago TODAVÍA SIN RESOLVER de varios pedidos, indexados por
+ * IdPedido — mismo patrón por lote que [obtenerItemsPorPedidos], una sola
+ * consulta para toda la lista y no una por pedido.
+ *
+ * Solo los PENDIENTE a propósito: un ajuste ya saldado es historia y no
+ * tiene por qué seguir apareciendo como una alerta en la tarjeta del
+ * pedido. Un pedido puede llegar a tener varios a lo largo del tiempo (si
+ * se rehiciera la verificación), así que se queda con el más reciente: es
+ * el que vale.
+ *
+ * La inmensa mayoría de los pedidos no tiene ninguno, así que esto casi
+ * siempre devuelve un mapa vacío tras una consulta trivial por índice
+ * (IX_AjustesPago_Pedido).
+ */
+async function obtenerAjustesPendientesPorPedidos(pool, idsPedidos) {
+  if (idsPedidos.length === 0) return new Map();
+  // .map(Number) antes de interpolar: mismo criterio anti-inyección que el
+  // resto del archivo (los IDs vienen de un recordset, no del request, pero
+  // no se interpola nada sin convertirlo primero).
+  const resultado = await pool.request().query(`
+    SELECT IdAjuste, IdPedido, Tipo, Monto, Estado, Notas, FechaCreacion, FechaResolucion
+    FROM AjustesPago
+    WHERE Estado = 'PENDIENTE' AND IdPedido IN (${idsPedidos.map(Number).join(',')})
+    ORDER BY IdAjuste ASC
+  `);
+  const mapa = new Map();
+  for (const fila of resultado.recordset) {
+    mapa.set(fila.IdPedido, fila);
+  }
+  return mapa;
+}
+
+function mapearFilaAjuste(fila) {
+  if (!fila) return null;
+  return {
+    idAjuste: fila.IdAjuste,
+    idPedido: fila.IdPedido,
+    // 'DEUDA' = el cliente nos debe esa diferencia; 'VUELTO' = se la
+    // debemos nosotros. El monto es siempre positivo, el signo no existe.
+    tipo: fila.Tipo,
+    monto: Number(fila.Monto),
+    estado: fila.Estado,
+    notas: fila.Notas ?? null,
+    fechaCreacion: fila.FechaCreacion,
+    fechaResolucion: fila.FechaResolucion ?? null,
+  };
+}
+
 function mapearFilaItem(fila) {
   return {
     idPedidoItem: fila.IdPedidoItem,
@@ -564,8 +620,12 @@ function mapearFilaItem(fila) {
  *
  * `itemsFilas` son las líneas de ESTE pedido, tal como las devolvió
  * [obtenerItemsPorPedidos].
+ *
+ * `ajusteFila` es su ajuste de pago sin resolver, si tiene uno (ver
+ * [obtenerAjustesPendientesPorPedidos]) — null en la enorme mayoría de los
+ * pedidos.
  */
-function mapearFilaPedido(fila, itemsFilas = [], incluirAuditoria = false) {
+function mapearFilaPedido(fila, itemsFilas = [], incluirAuditoria = false, ajusteFila = null) {
   const items = itemsFilas.map(mapearFilaItem);
   const base = {
     idPedido: fila.IdPedido,
@@ -582,6 +642,19 @@ function mapearFilaPedido(fila, itemsFilas = [], incluirAuditoria = false) {
     fechaEntrega: fila.FechaEntrega,
     estado: fila.Estado,
     estadoPago: fila.EstadoPago,
+    // Pago por adelantado con Yape — 'NO_APLICA' en todo pedido que no sea
+    // uno web de Panadería. `codigoOperacionYape` es el código real que
+    // emitió Yape y que el personal usa para buscar el movimiento en su
+    // app; `montoDeclaradoCliente` es lo que el cliente DIJO haber pagado
+    // (pista, nunca cuenta) y `montoConfirmadoStaff` lo que el personal vio
+    // llegar de verdad.
+    estadoPagoAdelanto: fila.EstadoPagoAdelanto ?? null,
+    codigoOperacionYape: fila.CodigoOperacionYape ?? null,
+    montoDeclaradoCliente: fila.MontoDeclaradoCliente != null ? Number(fila.MontoDeclaradoCliente) : null,
+    montoConfirmadoStaff: fila.MontoConfirmadoStaff != null ? Number(fila.MontoConfirmadoStaff) : null,
+    // Saldo o vuelto pendiente de ESTE pedido, si quedó alguno al verificar
+    // el pago. null (lo normal) cuando no hay nada que resolver.
+    ajustePago: mapearFilaAjuste(ajusteFila),
     fechaEntregaReal: fila.FechaEntregaReal,
     notas: fila.Notas,
     fechaCreacion: fila.FechaCreacion,
@@ -661,8 +734,21 @@ async function listarPedidos(req, res, next) {
  * también lo usan horneadosController.js y publicoController.js.
  */
 async function armarPedidosConItems(pool, filas, incluirAuditoria = false) {
-  const itemsPorPedido = await obtenerItemsPorPedidos(pool, filas.map((f) => f.IdPedido));
-  return filas.map((fila) => mapearFilaPedido(fila, itemsPorPedido.get(fila.IdPedido) ?? [], incluirAuditoria));
+  const idsPedidos = filas.map((f) => f.IdPedido);
+  const itemsPorPedido = await obtenerItemsPorPedidos(pool, idsPedidos);
+  // Segunda consulta por lote, no una por pedido — y una sola para toda la
+  // lista, igual que los items. Sin esto, el personal vería "confirmado" en
+  // un pedido al que todavía le falta cobrar S/ 2, y el cliente no tendría
+  // dónde enterarse de su vuelto desde el seguimiento público.
+  const ajustesPorPedido = await obtenerAjustesPendientesPorPedidos(pool, idsPedidos);
+  return filas.map((fila) =>
+    mapearFilaPedido(
+      fila,
+      itemsPorPedido.get(fila.IdPedido) ?? [],
+      incluirAuditoria,
+      ajustesPorPedido.get(fila.IdPedido) ?? null,
+    ),
+  );
 }
 
 /**
@@ -734,7 +820,11 @@ async function cancelarMiPedido(req, res, next) {
     }
     const pedido = pedidoResult.recordset[0];
 
-    if (pedido.Estado !== 'SOLICITADO' && pedido.Estado !== 'PENDIENTE') {
+    // 'CONFIRMADO' (pedido web de Panadería con el pago ya verificado) entra
+    // igual que 'PENDIENTE': mientras no se haya entregado, se puede
+    // cancelar. Lo que se le deba devolver al cliente se resuelve por su
+    // `AjustesPago`, no borrando el pedido.
+    if (!['SOLICITADO', 'PENDIENTE', 'CONFIRMADO'].includes(pedido.Estado)) {
       return res.status(400).json({ mensaje: 'Este pedido ya no se puede cancelar.' });
     }
 
@@ -785,7 +875,8 @@ async function cancelarPedido(req, res, next) {
   try {
     const pedido = await obtenerPedidoConAcceso(req, res);
     if (!pedido) return;
-    if (pedido.Estado !== 'SOLICITADO' && pedido.Estado !== 'PENDIENTE') {
+    // Ídem cancelarMiPedido: 'CONFIRMADO' sigue siendo cancelable.
+    if (!['SOLICITADO', 'PENDIENTE', 'CONFIRMADO'].includes(pedido.Estado)) {
       return res.status(400).json({ mensaje: 'Este pedido ya no se puede cancelar' });
     }
 
@@ -838,7 +929,9 @@ async function obtenerPedidoConAcceso(req, res) {
   const result = await pool
     .request()
     .input('IdPedido', sql.Int, id)
-    .query('SELECT IdPedido, NumeroPedidoDia, IdCliente, IdTienda, Estado, Total FROM Pedidos WHERE IdPedido = @IdPedido');
+    .query(
+      'SELECT IdPedido, NumeroPedidoDia, IdCliente, IdTienda, Estado, Total, EstadoPagoAdelanto FROM Pedidos WHERE IdPedido = @IdPedido',
+    );
 
   if (result.recordset.length === 0) {
     res.status(404).json({ mensaje: 'Pedido no encontrado' });
@@ -863,6 +956,17 @@ async function aprobarPedido(req, res, next) {
     if (!pedido) return;
     if (pedido.Estado !== 'SOLICITADO') {
       return res.status(400).json({ mensaje: 'Este pedido ya no está pendiente de aprobación' });
+    }
+    // Un pedido web de Panadería se paga por adelantado: aceptarlo sin
+    // haber mirado el Yape sería darlo por bueno sin saber si entró la
+    // plata. Su camino es "Verificar pago" (que además lo pasa a
+    // CONFIRMADO), no este botón. Solo puede dispararse en pedidos nacidos
+    // del flujo nuevo — cualquier otro tiene 'NO_APLICA' y sigue
+    // aprobándose igual que siempre.
+    if (pedido.EstadoPagoAdelanto === ESTADO_VERIFICANDO) {
+      return res.status(400).json({
+        mensaje: 'Este pedido se pagó por adelantado: primero verifica el pago de Yape con el código de operación.',
+      });
     }
 
     const pool = await getPool();
@@ -1035,8 +1139,9 @@ async function marcarDeudaPagada(req, res, next) {
   }
 }
 
-/** El personal marca un pedido PENDIENTE como entregado, indicando si se
- * pagó al momento o quedó como deuda del cliente. */
+/** El personal marca un pedido PENDIENTE (o CONFIRMADO, ver abajo) como
+ * entregado, indicando si se pagó al momento o quedó como deuda del
+ * cliente. */
 async function entregarPedido(req, res, next) {
   const { pagado } = req.body;
   if (typeof pagado !== 'boolean') {
@@ -1046,11 +1151,24 @@ async function entregarPedido(req, res, next) {
   try {
     const pedido = await obtenerPedidoConAcceso(req, res);
     if (!pedido) return;
-    if (pedido.Estado !== 'PENDIENTE') {
+    // 'CONFIRMADO' es el estado al que llega un pedido web de Panadería una
+    // vez verificado su pago por adelantado (ver confirmarPagoAdelanto en
+    // pagoAdelantoController.js): está tan listo para entregarse como uno
+    // 'PENDIENTE', solo que llegó por el otro camino. Sin aceptarlo acá, el
+    // pedido quedaría atrapado sin forma de marcarse entregado.
+    if (pedido.Estado !== 'PENDIENTE' && pedido.Estado !== 'CONFIRMADO') {
       return res.status(400).json({ mensaje: 'Este pedido no está pendiente de entrega' });
     }
 
-    const estadoPago = pagado ? 'PAGADO' : 'DEUDA';
+    // Un pedido que se pagó por adelantado NUNCA puede quedar como 'DEUDA',
+    // aunque el personal marque "queda como deuda" por costumbre:
+    // `EstadoPago = 'DEUDA'` significa, en todos los reportes de deuda del
+    // sistema, que el cliente debe el `Total` COMPLETO
+    // (`SUM(CASE WHEN EstadoPago = 'DEUDA' THEN Total ELSE 0 END)`), y acá
+    // el cliente ya adelantó su plata. Si le faltó algo, esa diferencia
+    // vive en su fila de `AjustesPago` — el lugar donde sí sabe cuánto es.
+    const pagoAdelantado = pedido.EstadoPagoAdelanto && pedido.EstadoPagoAdelanto !== 'NO_APLICA';
+    const estadoPago = pagado || pagoAdelantado ? 'PAGADO' : 'DEUDA';
     const pool = await getPool();
     await pool
       .request()
@@ -1093,7 +1211,10 @@ async function entregarPedido(req, res, next) {
     await notificarCliente({
       idCliente: pedido.IdCliente,
       titulo: 'Tu pedido fue entregado',
-      cuerpo: pagado
+      // Sobre `estadoPago` y no sobre `pagado`: en un pedido pagado por
+      // adelantado los dos pueden discrepar (ver arriba), y lo que hay que
+      // contarle al cliente es lo que de verdad se guardó.
+      cuerpo: estadoPago === 'PAGADO'
         ? `Tu pedido #${pedido.NumeroPedidoDia} fue entregado y pagado. ¡Gracias por tu compra!`
         : `Tu pedido #${pedido.NumeroPedidoDia} fue entregado. Queda una deuda pendiente de S/ ${Number(pedido.Total).toFixed(2)}.`,
       datos: { tipo: 'PEDIDO_ENTREGADO', idPedido: String(pedido.IdPedido) },
@@ -1128,9 +1249,14 @@ module.exports = {
   SELECT_PEDIDOS_BASE,
   mapearFilaPedido,
   obtenerItemsPorPedidos,
+  obtenerAjustesPendientesPorPedidos,
+  mapearFilaAjuste,
   armarPedidosConItems,
   insertarItemsPedido,
   resumirProductos,
+  // Reexportado para pagoAdelantoController.js — necesita el mismo candado
+  // de tienda que aprobar/rechazar/entregar antes de tocar un pedido.
+  obtenerPedidoConAcceso,
   // Reexportado para publicoController.js (avisa al personal de un pedido
   // web nuevo, igual que un pedido solicitado desde la app).
   notificarPersonalTienda,

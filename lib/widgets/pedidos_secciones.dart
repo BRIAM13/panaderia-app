@@ -85,12 +85,18 @@ class ListaPedidosPorSeccion extends StatelessWidget {
     this.mostrarNombreCliente = true,
     this.onEntregar,
     this.onCancelar,
+    this.onVerificarPago,
   });
 
   final List<Pedido> pedidos;
   final bool mostrarNombreCliente;
   final ValueChanged<Pedido>? onEntregar;
   final ValueChanged<Pedido>? onCancelar;
+
+  /// Solo la vista de personal lo pasa: abre el diálogo de verificación del
+  /// pago adelantado por Yape. Solo aparece en pedidos que ya reportaron su
+  /// código de operación.
+  final ValueChanged<Pedido>? onVerificarPago;
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +117,7 @@ class ListaPedidosPorSeccion extends StatelessWidget {
           mostrarNombreCliente: mostrarNombreCliente,
           onEntregar: onEntregar,
           onCancelar: onCancelar,
+          onVerificarPago: onVerificarPago,
         ),
         SeccionPedidos(
           titulo: 'Hoy',
@@ -121,6 +128,7 @@ class ListaPedidosPorSeccion extends StatelessWidget {
           mostrarNombreCliente: mostrarNombreCliente,
           onEntregar: onEntregar,
           onCancelar: onCancelar,
+          onVerificarPago: onVerificarPago,
         ),
         SeccionPedidos(
           titulo: 'Próximos',
@@ -131,6 +139,7 @@ class ListaPedidosPorSeccion extends StatelessWidget {
           mostrarNombreCliente: mostrarNombreCliente,
           onEntregar: onEntregar,
           onCancelar: onCancelar,
+          onVerificarPago: onVerificarPago,
         ),
         SeccionPedidos(
           titulo: 'Sin fecha programada',
@@ -141,6 +150,7 @@ class ListaPedidosPorSeccion extends StatelessWidget {
           mostrarNombreCliente: mostrarNombreCliente,
           onEntregar: onEntregar,
           onCancelar: onCancelar,
+          onVerificarPago: onVerificarPago,
         ),
       ],
     );
@@ -158,6 +168,7 @@ class SeccionPedidos extends StatelessWidget {
     this.mostrarNombreCliente = true,
     this.onEntregar,
     this.onCancelar,
+    this.onVerificarPago,
   });
 
   final String titulo;
@@ -168,6 +179,7 @@ class SeccionPedidos extends StatelessWidget {
   final bool mostrarNombreCliente;
   final ValueChanged<Pedido>? onEntregar;
   final ValueChanged<Pedido>? onCancelar;
+  final ValueChanged<Pedido>? onVerificarPago;
 
   @override
   Widget build(BuildContext context) {
@@ -243,6 +255,9 @@ class SeccionPedidos extends StatelessWidget {
                           onCancelar: onCancelar == null
                               ? null
                               : () => onCancelar!(entry.value),
+                          onVerificarPago: onVerificarPago == null
+                              ? null
+                              : () => onVerificarPago!(entry.value),
                         )
                         .animate(delay: (40 * entry.key).ms)
                         .fadeIn(duration: 250.ms)
@@ -309,11 +324,44 @@ class _EstadoPedidoInfo {
 _EstadoPedidoInfo _infoEstado(Pedido pedido) {
   switch (pedido.estado) {
     case 'SOLICITADO':
+      // Un pedido web de Panadería empieza SOLICITADO igual que cualquier
+      // otro, pero lo que espera no es que alguien decida por stock: espera
+      // plata. Decirle "Por confirmar" mandaría al personal al botón
+      // equivocado.
+      if (pedido.esperaVerificacionPago) {
+        return const _EstadoPedidoInfo(
+          'Pago por verificar',
+          Color(0xFF7B3FB5),
+          PhosphorIconsRegular.currencyCircleDollar,
+        );
+      }
+      if (pedido.esperaPagoDelCliente) {
+        return const _EstadoPedidoInfo(
+          'Esperando su pago',
+          Color(0xFF8D6E63),
+          PhosphorIconsRegular.hourglassLow,
+        );
+      }
       return const _EstadoPedidoInfo(
         'Por confirmar',
         Color(0xFFEA8C1B),
         PhosphorIconsRegular.hourglassHigh,
       );
+    case 'CONFIRMADO':
+      // Los tres resultados de la verificación llegan acá: en los tres el
+      // pago existe y hay que preparar el pan. Lo que cambia es si quedó
+      // algo por saldar, y eso lo dice el bloque de pago de la tarjeta.
+      return pedido.ajustePago != null
+          ? const _EstadoPedidoInfo(
+              'Pagado · con ajuste',
+              Color(0xFFEA8C1B),
+              PhosphorIconsRegular.warningCircle,
+            )
+          : const _EstadoPedidoInfo(
+              'Pagado · por recoger',
+              Color(0xFF2E7D32),
+              PhosphorIconsFill.checkCircle,
+            );
     case 'RECHAZADO':
       return const _EstadoPedidoInfo(
         'Rechazado',
@@ -357,6 +405,7 @@ class PedidoCard extends StatelessWidget {
     this.onRechazar,
     this.onEntregar,
     this.onCancelar,
+    this.onVerificarPago,
   });
 
   final Pedido pedido;
@@ -377,16 +426,28 @@ class PedidoCard extends StatelessWidget {
   /// PENDIENTE, no si ya fue entregado).
   final VoidCallback? onCancelar;
 
+  /// Solo en la vista de personal, y solo tiene efecto en un pedido web de
+  /// Panadería que YA reportó su código de operación: abre el diálogo para
+  /// escribir cuánto llegó de verdad al Yape del negocio.
+  final VoidCallback? onVerificarPago;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cliente = pedido.cliente;
     final nombreComercial = cliente.nombreComercial;
     final estadoInfo = _infoEstado(pedido);
+    // Un pedido pagado por adelantado no se acepta/rechaza a mano: su
+    // camino es "Verificar pago", que además lo confirma. El backend
+    // rechaza aprobarlo de todos modos (ver aprobarPedido), acá solo se
+    // evita ofrecer un botón que va a fallar.
+    final mostrarAccionVerificarPago =
+        pedido.esperaVerificacionPago && onVerificarPago != null;
     final mostrarAccionesSolicitud =
-        pedido.esSolicitado && (onAprobar != null || onRechazar != null);
-    final mostrarAccionEntregar =
-        pedido.estado == 'PENDIENTE' && onEntregar != null;
+        pedido.esSolicitado &&
+        !pedido.usaPagoAdelanto &&
+        (onAprobar != null || onRechazar != null);
+    final mostrarAccionEntregar = pedido.sePuedeEntregar && onEntregar != null;
     final mostrarAccionCancelar = pedido.sePuedeCancelar && onCancelar != null;
 
     return Padding(
@@ -517,8 +578,23 @@ class PedidoCard extends StatelessWidget {
                   ),
                 ],
               ),
+              PagoAdelantoPedido(pedido: pedido),
               NotaPedido(pedido: pedido),
               InfoAuditoriaPedido(pedido: pedido),
+              if (mostrarAccionVerificarPago) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: onVerificarPago,
+                    icon: const PhosphorIcon(
+                      PhosphorIconsRegular.currencyCircleDollar,
+                      size: 18,
+                    ),
+                    label: const Text('Verificar pago'),
+                  ),
+                ),
+              ],
               if (mostrarAccionesSolicitud) ...[
                 const SizedBox(height: 10),
                 Row(
@@ -636,6 +712,114 @@ String _descripcionRegistro(Pedido pedido) {
   final rol = _etiquetaRolAuditoria(pedido.registradoPorRol);
   if (nombre == null) return rol;
   return '$nombre ($rol)';
+}
+
+/// El bloque de pago por adelantado con Yape de un pedido web de Panadería:
+/// el código de operación que el personal tiene que buscar en su app, lo que
+/// el cliente declaró haber pagado, y —una vez verificado— el saldo o el
+/// vuelto que haya quedado.
+///
+/// No dibuja nada en ningún otro pedido (pan de hamburguesa, personal,
+/// autoservicio, Horneados): todos esos tienen `estadoPagoAdelanto` en
+/// 'NO_APLICA' (o null con un backend viejo).
+class PagoAdelantoPedido extends StatelessWidget {
+  const PagoAdelantoPedido({super.key, required this.pedido});
+
+  final Pedido pedido;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!pedido.usaPagoAdelanto) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final ajuste = pedido.ajustePago;
+    // El color lo manda lo que el personal tiene que HACER, no el estado en
+    // abstracto: morado = te toca verificar, ámbar = queda plata por mover,
+    // verde = no hay nada pendiente.
+    final (Color color, IconData icono, String titulo) = switch (pedido.estadoPagoAdelanto) {
+      'VERIFICANDO' when pedido.codigoOperacionYape != null => (
+        const Color(0xFF7B3FB5),
+        PhosphorIconsRegular.currencyCircleDollar,
+        'Pago por verificar',
+      ),
+      'VERIFICANDO' => (
+        const Color(0xFF8D6E63),
+        PhosphorIconsRegular.hourglassLow,
+        'El cliente aún no envía su pago',
+      ),
+      'DEUDA_PARCIAL' => (
+        const Color(0xFFC62828),
+        PhosphorIconsRegular.warningCircle,
+        'Pagó de menos',
+      ),
+      'VUELTO_PENDIENTE' => (
+        const Color(0xFFEA8C1B),
+        PhosphorIconsRegular.arrowUUpLeft,
+        'Pagó de más',
+      ),
+      _ => (
+        const Color(0xFF2E7D32),
+        PhosphorIconsFill.checkCircle,
+        'Pago verificado',
+      ),
+    };
+
+    final lineas = <String>[
+      if (pedido.codigoOperacionYape != null)
+        'Código Yape: ${pedido.codigoOperacionYape}',
+      if (pedido.montoDeclaradoCliente != null)
+        'Dice haber pagado: S/ ${pedido.montoDeclaradoCliente!.toStringAsFixed(2)} · Total S/ ${pedido.total.toStringAsFixed(2)}',
+      if (pedido.montoConfirmadoStaff != null)
+        'Llegó de verdad: S/ ${pedido.montoConfirmadoStaff!.toStringAsFixed(2)}',
+      if (ajuste != null && ajuste.esPendiente) ajuste.descripcion,
+      if (pedido.esperaPagoDelCliente)
+        'Todavía no mandó su código de operación.',
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.22)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                PhosphorIcon(icono, size: 15, color: color),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    titulo,
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            for (final linea in lineas)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, left: 21),
+                child: Text(
+                  linea,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Nota que dejó el cliente al registrar el pedido — si vino de la página

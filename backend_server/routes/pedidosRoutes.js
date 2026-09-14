@@ -12,6 +12,7 @@ const {
   listarDeudas,
   marcarDeudaPagada,
 } = require('../controllers/pedidosController');
+const { confirmarPagoAdelanto } = require('../controllers/pagoAdelantoController');
 const { validatePedido, validateMiPedido } = require('../middlewares/validators');
 const { verificarToken, autorizarRoles } = require('../middlewares/authMiddleware');
 
@@ -39,6 +40,13 @@ router.post('/', validatePedido, crearPedido);
 router.put('/:id/aprobar', aprobarPedido);
 router.put('/:id/rechazar', rechazarPedido);
 router.put('/:id/entregar', entregarPedido);
+// El personal verifica el pago adelantado por Yape de un pedido web de
+// Panadería: escribe cuánto llegó DE VERDAD y el sistema deduce si fue
+// justo, de menos o de más (ver pagoAdelantoController.js). Vive acá, al
+// lado de las demás acciones de estado de un pedido, aunque el controller
+// sea otro: es lo que se busca cuando se busca "qué le puedo hacer a un
+// pedido".
+router.post('/:id/confirmar-pago-adelanto', confirmarPagoAdelanto);
 router.put('/:id/cancelar', cancelarPedido);
 router.put('/:id/marcar-deuda-pagada', marcarDeudaPagada);
 

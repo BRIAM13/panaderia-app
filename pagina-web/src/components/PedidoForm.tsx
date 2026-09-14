@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
+  BadgePercent,
   CalendarClock,
   CheckCircle2,
   Loader2,
@@ -33,9 +34,24 @@ import {
   horaMinimaHoy,
   hoyISO,
 } from "../utils/horariosPan";
+import {
+  descuentoVigente,
+  etiquetaSegmento,
+  formatearPorcentaje,
+  montoDescontado,
+  textoDescuento,
+  totalConDescuento,
+} from "../utils/descuentos";
+import {
+  borrarPagoPendiente,
+  guardarPagoPendiente,
+  leerPagoPendiente,
+  type PagoPendienteGuardado,
+} from "../utils/pagoAdelanto";
 import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
 import { EncabezadoSeccion } from "./EncabezadoSeccion";
 import { MascotaPanadero } from "./MascotaPanadero";
+import { PagoYape } from "./PagoYape";
 import { ResumenPedidoExito, type DetallePedidoEnviado } from "./ResumenPedidoExito";
 import type { SelectorFechaHandle } from "./SelectorFecha";
 import type { SelectorHoraHandle } from "./SelectorHora";
@@ -104,12 +120,30 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   // medio tapar (`j***@gmail.com`), que sería imposible de completar bien.
   const [cambiandoTelefono, setCambiandoTelefono] = useState(false);
   const [cambiandoEmail, setCambiandoEmail] = useState(false);
+
+  // El pan elegido se resuelve acá arriba (y no junto al resto del cálculo
+  // del total, más abajo) porque la verificación del documento necesita
+  // saber de qué TIENDA es: el descuento por fidelidad se habilita por
+  // tienda desde la app, así que el backend no puede responderlo sin ese
+  // dato. Mientras no haya pan elegido, se verifica igual que siempre —
+  // solo que sin descuento.
+  const productoSeleccionado = productos.find((p) => p.idProducto === idProducto);
+  const tiendaSlugProducto = productoSeleccionado?.tiendaSlug;
+
   const {
     valido: documentoValido,
     verificando: verificandoDocumento,
     aviso: avisoDocumento,
     contacto,
-  } = useVerificacionDocumento(numeroDocumento, tipoDocumento);
+    descuento: descuentoDelDocumento,
+    tiendaSlugConsultada,
+  } = useVerificacionDocumento(numeroDocumento, tipoDocumento, tiendaSlugProducto);
+
+  // El descuento solo vale si el pan que hay elegido AHORA es de la misma
+  // tienda por la que se consultó: si el visitante escribe su DNI y después
+  // cambia de pan, el resultado anterior deja de aplicar hasta que el hook
+  // vuelva a consultar con la tienda nueva.
+  const descuento = descuentoVigente(descuentoDelDocumento, tiendaSlugConsultada, tiendaSlugProducto);
 
   // Tres estados por canal (correo y celular), según lo que el backend ya
   // tenga guardado de este documento:
@@ -136,9 +170,31 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   const [fueraDeVentanaAlEnviar, setFueraDeVentanaAlEnviar] = useState(false);
   const [anunciarMascota, setAnunciarMascota] = useState(false);
 
+  // ---- Pago por adelantado (solo Panadería) --------------------------
+  // El pedido se crea al terminar el formulario, ANTES de que el cliente
+  // pague: pagar obliga a salir a la app de Yape, y al volver el navegador
+  // muy a menudo recargó la pestaña. Con el pedido ya registrado, lo único
+  // que hay que recuperar es la pantalla de pago, y para eso está esto.
+  const [pasoPago, setPasoPago] = useState<PagoPendienteGuardado | null>(null);
+  // true una vez que el cliente ya mandó su código de operación: cambia lo
+  // que dice la pantalla final ("estamos verificando" vs "falta tu pago").
+  const [codigoRegistrado, setCodigoRegistrado] = useState(false);
+
+  // Retomar un pago a medias: si la pestaña murió mientras el cliente estaba
+  // en Yape, al volver aterriza directo en la pantalla de pago de SU pedido,
+  // sin volver a elegir pan, fecha ni escribir su documento.
   useEffect(() => {
-    onPedidoEnviado(resultado !== null);
-  }, [resultado, onPedidoEnviado]);
+    const pendiente = leerPagoPendiente();
+    if (!pendiente) return;
+    setPasoPago(pendiente);
+    setDetalleEnviado(detalleDesdePendiente(pendiente));
+  }, []);
+
+  useEffect(() => {
+    // El sondeo del catálogo también se detiene en la pantalla de pago: el
+    // precio ya quedó congelado en el pedido que se acaba de crear.
+    onPedidoEnviado(resultado !== null || pasoPago !== null);
+  }, [resultado, pasoPago, onPedidoEnviado]);
 
   // Reloj vivo: el piso de "minutos de tolerancia" depende del minuto
   // actual, así que si el cliente se queda mucho rato en la pantalla (por
@@ -151,10 +207,19 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
     return () => window.clearInterval(id);
   }, []);
 
-  const productoSeleccionado = productos.find((p) => p.idProducto === idProducto);
   const esPaquete = productoSeleccionado?.esPaquete ?? false;
   const cantidadNum = Number(cantidad) || 0;
-  const total = productoSeleccionado ? productoSeleccionado.precioUnitario * cantidadNum : 0;
+  // `subtotal` = precio de lista por cantidad; `total` = lo que de verdad
+  // se paga. Son el MISMO número mientras no haya descuento, y esa es la
+  // razón de que en pantalla haya un solo total: el desglose aparece
+  // recién cuando el descuento se conoce, y siempre dentro del mismo
+  // recuadro (ver "Total estimado" más abajo). Nunca hay dos cifras
+  // distintas compitiendo por ser "el total".
+  //
+  // Esto es solo el anticipo honesto: el monto que se cobra lo recalcula el
+  // servidor al crear el pedido, con el historial real del cliente.
+  const subtotal = productoSeleccionado ? productoSeleccionado.precioUnitario * cantidadNum : 0;
+  const total = totalConDescuento(subtotal, descuento?.porcentaje ?? 0);
 
   // Pan de Agua/Francés (no paquete) muestra el recojo — el pan de
   // hamburguesa (paquete) no lo usa. Solo aparece una vez que el cliente
@@ -408,7 +473,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
       // El detalle se congela acá, con lo que realmente se envió: la
       // pantalla de confirmación no debe cambiar si después se limpian los
       // campos o si el sondeo del catálogo trae otro precio.
-      setDetalleEnviado({
+      const detalle: DetallePedidoEnviado = {
         producto: productoSeleccionado?.nombre ?? "—",
         cantidad,
         esPaquete,
@@ -419,9 +484,38 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
         fechaRecojo,
         horaRecojo: horaRecojoFinal,
         notas: notas.trim(),
-      });
+      };
+      setDetalleEnviado(detalle);
       setFueraDeVentanaAlEnviar(!esPaquete && fueraDeVentanaActual);
       setResultado(respuesta);
+
+      // Panadería: el pedido ya existe, pero todavía falta pagarlo. Se pasa
+      // a la pantalla de pago en vez de a la de "listo". El pan de
+      // hamburguesa no entra acá y sigue terminando como siempre.
+      if (
+        respuesta.estadoPagoAdelanto === "VERIFICANDO" &&
+        typeof respuesta.idPedido === "number" &&
+        respuesta.tokenConfirmacionPago
+      ) {
+        const pendiente: PagoPendienteGuardado = {
+          idPedido: respuesta.idPedido,
+          token: respuesta.tokenConfirmacionPago,
+          numeroPedidoDia: respuesta.numeroPedidoDia,
+          total: respuesta.total,
+          producto: detalle.producto,
+          cantidad: detalle.cantidad,
+          documento: detalle.documento,
+          telefono: detalle.telefono,
+          fechaRecojo: detalle.fechaRecojo,
+          horaRecojo: detalle.horaRecojo,
+          notas: detalle.notas,
+          guardadoEn: Date.now(),
+        };
+        // Se guarda ANTES de mostrar la pantalla de pago, no después: entre
+        // las dos cosas el cliente ya podría estar saliendo a Yape.
+        guardarPagoPendiente(pendiente);
+        setPasoPago(pendiente);
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.errores?.join(" ") || err.message);
@@ -433,7 +527,46 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
     }
   }
 
+  /**
+   * Sale de la pantalla de pago hacia la de confirmación. Se usa en los dos
+   * finales posibles: cuando el código ya quedó registrado, y cuando el
+   * cliente elige pagar más tarde (su pedido igual existe, y puede volver a
+   * meter el código desde "Ver mi pedido" cuando quiera).
+   *
+   * En los dos casos se borra el pendiente de localStorage: si no, al
+   * recargar la página volvería a aterrizar en la pantalla de pago de un
+   * pedido que ya resolvió.
+   */
+  function cerrarPasoPago({ conCodigo }: { conCodigo: boolean }) {
+    const pendiente = pasoPago;
+    borrarPagoPendiente();
+    setCodigoRegistrado(conCodigo);
+    setPasoPago(null);
+    // `resultado` ya está puesto salvo que esta sesión haya arrancado
+    // retomando un pendiente de localStorage (la pestaña murió y el
+    // formulario nunca llegó a enviarse en ESTA carga). Ahí se arma uno con
+    // lo que se guardó, que es exactamente lo que la pantalla necesita.
+    setResultado(
+      (actual) =>
+        actual ??
+        (pendiente
+          ? {
+              mensaje: conCodigo
+                ? "Recibimos tu código. Estamos verificando el pago con la tienda."
+                : "Tu pedido está registrado. Cuando yapees, escribe tu código desde “Ver mi pedido”.",
+              idPedido: pendiente.idPedido,
+              numeroPedidoDia: pendiente.numeroPedidoDia,
+              total: pendiente.total,
+              estadoPagoAdelanto: "VERIFICANDO",
+            }
+          : null),
+    );
+  }
+
   function pedirOtroVez() {
+    borrarPagoPendiente();
+    setPasoPago(null);
+    setCodigoRegistrado(false);
     setResultado(null);
     setDetalleEnviado(null);
     setFueraDeVentanaAlEnviar(false);
@@ -514,7 +647,9 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
           }}
           className="relative mt-32 scroll-mt-52 sm:mt-36 sm:scroll-mt-60"
         >
-          <MascotaPanadero anunciar={anunciarMascota} celebrando={resultado !== null} />
+          {/* El panadero celebra desde que el pedido entró — que en
+              Panadería es ya en la pantalla de pago, no recién al final. */}
+          <MascotaPanadero anunciar={anunciarMascota} celebrando={resultado !== null || pasoPago !== null} />
 
           <motion.div
             // El escalón mínimo de la tarjeta ya no depende del scroll: la
@@ -531,13 +666,27 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
             }}
             className="relative z-10 rounded-3xl border border-pan-borde/50 bg-pan-crema-suave p-5 shadow-md shadow-pan-carbon/5 sm:p-8"
           >
+            {/* Tres vistas, en este orden: formulario → pago (solo
+                Panadería) → confirmación. El pedido ya existe desde que se
+                entra a la del medio. */}
             <AnimatePresence mode="wait">
-              {resultado && detalleEnviado ? (
+              {pasoPago ? (
+                <PagoYape
+                  key="pago"
+                  idPedido={pasoPago.idPedido}
+                  numeroPedidoDia={pasoPago.numeroPedidoDia}
+                  total={pasoPago.total}
+                  token={pasoPago.token}
+                  onCodigoRegistrado={() => cerrarPasoPago({ conCodigo: true })}
+                  onCancelar={() => cerrarPasoPago({ conCodigo: false })}
+                />
+              ) : resultado && detalleEnviado ? (
                 <ResumenPedidoExito
                   key="exito"
                   resultado={resultado}
                   detalle={detalleEnviado}
                   fueraDeVentana={fueraDeVentanaAlEnviar}
+                  codigoPagoRegistrado={codigoRegistrado}
                   onPedirDeNuevo={pedirOtroVez}
                 />
               ) : (
@@ -620,7 +769,17 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                         antes vivía al lado del botón de enviar, después de
                         todos los datos personales: el visitante tenía que
                         entregar su DNI para recién enterarse de cuánto le
-                        iba a costar. */}
+                        iba a costar.
+
+                        El descuento por fidelidad, en cambio, recién se
+                        conoce en el paso "Tus datos" (hace falta el
+                        documento para saber quién es). En vez de dejar acá
+                        un total viejo y poner el bueno abajo —dos cifras
+                        distintas peleando por ser "el total"—, este mismo
+                        recuadro se abre hacia atrás y muestra el desglose:
+                        el número grande de "Total estimado" sigue siendo el
+                        único total de toda la pantalla, y pasa a ser el ya
+                        descontado. */}
                     <AnimatePresence initial={false}>
                       {productoSeleccionado && cantidadNum > 0 && (
                         <motion.div
@@ -629,21 +788,53 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                           animate={{ opacity: 1, scale: 1, height: "auto" }}
                           exit={{ opacity: 0, scale: 0.96, height: 0 }}
                           transition={{ duration: 0.28, ease: EASE_PREMIUM }}
-                          className="flex items-center justify-between rounded-xl border border-pan-terracota/15 bg-pan-terracota-suave/40 px-4 py-3"
+                          className="rounded-xl border border-pan-terracota/15 bg-pan-terracota-suave/40 px-4 py-3"
                         >
-                          <span className="text-sm font-medium text-pan-carbon">Total estimado</span>
-                          {/* La cifra se reanima cada vez que cambia (`key`),
-                              así el cliente nota que se recalculó al escribir
-                              otra cantidad. */}
-                          <motion.span
-                            key={total}
-                            initial={{ opacity: 0, y: -6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.25, ease: EASE_PREMIUM }}
-                            className="text-lg font-semibold text-pan-terracota"
-                          >
-                            S/ {total.toFixed(2)}
-                          </motion.span>
+                          <AnimatePresence initial={false}>
+                            {descuento && (
+                              <motion.div
+                                key="desglose"
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.3, ease: EASE_PREMIUM }}
+                                className="overflow-hidden"
+                              >
+                                <div className="space-y-1.5 pb-2.5">
+                                  <div className="flex items-center justify-between gap-3 text-sm text-pan-carbon-suave">
+                                    <span>Subtotal</span>
+                                    <span className="tabular-nums">S/ {subtotal.toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex items-start justify-between gap-3 text-sm font-medium text-emerald-700">
+                                    <span className="flex min-w-0 items-center gap-1.5">
+                                      <BadgePercent className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                                      <span className="min-w-0">{textoDescuento(descuento)}</span>
+                                    </span>
+                                    <span className="shrink-0 tabular-nums">
+                                      − S/ {montoDescontado(subtotal, descuento.porcentaje).toFixed(2)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div aria-hidden="true" className="mb-2.5 h-px bg-pan-terracota/15" />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm font-medium text-pan-carbon">Total estimado</span>
+                            {/* La cifra se reanima cada vez que cambia (`key`),
+                                así el cliente nota que se recalculó al escribir
+                                otra cantidad — o al aparecer su descuento. */}
+                            <motion.span
+                              key={total}
+                              initial={{ opacity: 0, y: -6 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                              className="text-lg font-semibold tabular-nums text-pan-terracota"
+                            >
+                              S/ {total.toFixed(2)}
+                            </motion.span>
+                          </div>
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -844,6 +1035,41 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                           <p className="mt-1.5 text-xs font-medium text-emerald-700">Documento verificado.</p>
                         )}
                       </div>
+
+                      {/* El descuento se anuncia justo acá, en el momento
+                          exacto en que se conoce (al verificar el
+                          documento), aunque el total viva más arriba: a
+                          esta altura el recuadro del total ya quedó fuera
+                          de pantalla y, sin este aviso, el cliente no se
+                          enteraría de que le acaba de bajar el precio. No
+                          repite la cifra a propósito — el total sigue
+                          siendo uno solo, el de arriba. */}
+                      <AnimatePresence initial={false}>
+                        {descuento && !verificandoDocumento && (
+                          <motion.div
+                            key="aviso-descuento"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.28, ease: EASE_PREMIUM }}
+                            className="overflow-hidden"
+                            aria-live="polite"
+                          >
+                            <div className="mt-2 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                              <BadgePercent
+                                className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"
+                                strokeWidth={1.75}
+                              />
+                              <p className="text-xs leading-relaxed font-medium text-emerald-800">
+                                Tienes {formatearPorcentaje(descuento.porcentaje)}% de descuento por ser{" "}
+                                {etiquetaSegmento(descuento.segmento)}
+                                {descuento.segmento === "NUEVO" ? " — sí, desde tu primer pedido" : ""}. Ya está
+                                aplicado en el total de arriba.
+                              </p>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
 
                     <div>
@@ -966,6 +1192,26 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
       </div>
     </section>
   );
+}
+
+/** El resumen del pedido reconstruido desde lo que se guardó en
+ * localStorage al crearlo. Sirve para que, al retomar un pago después de
+ * que la pestaña se muriera, la pantalla de confirmación pueda mostrar el
+ * mismo detalle de siempre sin volver a preguntarle nada al servidor.
+ *
+ * `esPaquete` es siempre false: solo los pedidos de Panadería (pan por
+ * unidad) llegan a guardar un pendiente. */
+function detalleDesdePendiente(pendiente: PagoPendienteGuardado): DetallePedidoEnviado {
+  return {
+    producto: pendiente.producto,
+    cantidad: pendiente.cantidad,
+    esPaquete: false,
+    documento: pendiente.documento,
+    telefono: pendiente.telefono,
+    fechaRecojo: pendiente.fechaRecojo,
+    horaRecojo: pendiente.horaRecojo,
+    notas: pendiente.notas,
+  };
 }
 
 /** Un dato de contacto que ya teníamos guardado de este documento, mostrado

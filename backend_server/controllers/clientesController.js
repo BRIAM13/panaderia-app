@@ -1395,4 +1395,9 @@ module.exports = {
   // clonado de cuenta (usuario=DNI, password=DNI) que ya dispara un
   // registro de cliente hecho por el personal con DNI real verificado.
   intentarClonarUsuarioCliente,
+  // Reexportado para utils/descuentosCliente.js: el descuento por fidelidad
+  // se decide con el MISMO segmento y los MISMOS umbrales que ve el
+  // personal en la ficha del cliente, no con una copia paralela de las
+  // reglas que pudiera desincronizarse.
+  obtenerConfiguracionesCrm,
 };

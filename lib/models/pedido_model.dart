@@ -178,6 +178,86 @@ class PedidoResultado {
   final PedidoClienteResumen cliente;
 }
 
+/// Saldo o vuelto que quedó pendiente después de que el personal verificó
+/// un pago adelantado por Yape que no coincidió con el total.
+///
+/// [monto] es SIEMPRE positivo: quién le debe a quién lo dice [tipo], no el
+/// signo (`CK_AjustesPago_Monto` exige `Monto > 0`).
+class AjustePago {
+  const AjustePago({
+    required this.idAjuste,
+    required this.idPedido,
+    required this.tipo,
+    required this.monto,
+    required this.estado,
+    required this.notas,
+    required this.fechaCreacion,
+    required this.fechaResolucion,
+    this.numeroPedidoDia,
+    this.totalPedido,
+    this.estadoPedido,
+    this.codigoOperacionYape,
+    this.montoConfirmadoStaff,
+    this.cliente,
+  });
+
+  factory AjustePago.fromJson(Map<String, dynamic> json) => AjustePago(
+    idAjuste: json['idAjuste'] as int,
+    idPedido: json['idPedido'] as int,
+    tipo: json['tipo'] as String,
+    monto: (json['monto'] as num).toDouble(),
+    estado: json['estado'] as String? ?? 'PENDIENTE',
+    notas: json['notas'] as String?,
+    fechaCreacion: json['fechaCreacion'] != null
+        ? DateTime.parse(json['fechaCreacion'] as String).toLocal()
+        : null,
+    fechaResolucion: json['fechaResolucion'] != null
+        ? DateTime.parse(json['fechaResolucion'] as String).toLocal()
+        : null,
+    // Los de abajo solo vienen en `GET /ajustes-pago` (la lista dedicada),
+    // no cuando el ajuste llega colgado de un pedido: ahí esos datos ya los
+    // tiene el propio pedido.
+    numeroPedidoDia: json['numeroPedidoDia'] as int?,
+    totalPedido: (json['totalPedido'] as num?)?.toDouble(),
+    estadoPedido: json['estadoPedido'] as String?,
+    codigoOperacionYape: json['codigoOperacionYape'] as String?,
+    montoConfirmadoStaff: (json['montoConfirmadoStaff'] as num?)?.toDouble(),
+    cliente: json['cliente'] != null
+        ? PedidoClienteResumen.fromJson(json['cliente'] as Map<String, dynamic>)
+        : null,
+  );
+
+  final int idAjuste;
+  final int idPedido;
+
+  /// 'DEUDA' (el cliente nos debe) | 'VUELTO' (se lo debemos nosotros).
+  final String tipo;
+  final double monto;
+
+  /// 'PENDIENTE' | 'RESUELTO'.
+  final String estado;
+  final String? notas;
+  final DateTime? fechaCreacion;
+  final DateTime? fechaResolucion;
+
+  final int? numeroPedidoDia;
+  final double? totalPedido;
+  final String? estadoPedido;
+  final String? codigoOperacionYape;
+  final double? montoConfirmadoStaff;
+  final PedidoClienteResumen? cliente;
+
+  bool get esVuelto => tipo == 'VUELTO';
+  bool get esPendiente => estado == 'PENDIENTE';
+
+  /// "Te debemos S/ 3.00 de vuelto" / "Nos debe S/ 2.00" — la misma frase
+  /// que el personal ve en la tarjeta del pedido y en la lista de ajustes,
+  /// para que no haya dos redacciones del mismo hecho.
+  String get descripcion => esVuelto
+      ? 'Vuelto pendiente: devolver S/ ${monto.toStringAsFixed(2)}'
+      : 'Saldo pendiente: cobrar S/ ${monto.toStringAsFixed(2)}';
+}
+
 /// Un pedido ya registrado, tal como lo devuelven `GET /pedidos`,
 /// `/pedidos/mis-pedidos`, `/pedidos/deudas` y sus equivalentes de
 /// Horneados — un mismo shape para todas las tiendas.
@@ -199,6 +279,11 @@ class Pedido {
     required this.fechaCreacion,
     required this.cliente,
     required this.vendedor,
+    this.estadoPagoAdelanto,
+    this.codigoOperacionYape,
+    this.montoDeclaradoCliente,
+    this.montoConfirmadoStaff,
+    this.ajustePago,
     this.registradoPorRol,
     this.aprobadoPor,
     this.canceladoPor,
@@ -231,6 +316,15 @@ class Pedido {
     ),
     // null si lo registró el propio cliente (autoservicio), no el personal.
     vendedor: json['vendedor'] as String?,
+    // Pago por adelantado con Yape — solo los pedidos web de Panadería lo
+    // usan; el resto llega en 'NO_APLICA' (o null con un backend viejo).
+    estadoPagoAdelanto: json['estadoPagoAdelanto'] as String?,
+    codigoOperacionYape: json['codigoOperacionYape'] as String?,
+    montoDeclaradoCliente: (json['montoDeclaradoCliente'] as num?)?.toDouble(),
+    montoConfirmadoStaff: (json['montoConfirmadoStaff'] as num?)?.toDouble(),
+    ajustePago: json['ajustePago'] != null
+        ? AjustePago.fromJson(json['ajustePago'] as Map<String, dynamic>)
+        : null,
     // Estos 4 solo vienen del backend si quien pide la lista es
     // ADMIN/SUPERADMIN (ver pedidosController.js) — para TRABAJADOR o el
     // propio cliente siempre llegan null.
@@ -261,15 +355,44 @@ class Pedido {
 
   final double total;
   final DateTime? fechaEntrega;
-  // 'SOLICITADO' | 'PENDIENTE' | 'RECHAZADO' | 'ENTREGADO' | 'CANCELADO'
+  // 'SOLICITADO' | 'PENDIENTE' | 'CONFIRMADO' | 'RECHAZADO' | 'ENTREGADO' |
+  // 'CANCELADO'. 'CONFIRMADO' es el estado al que llega un pedido web de
+  // Panadería una vez que el personal verificó su pago adelantado por Yape:
+  // está listo para entregarse, igual que un 'PENDIENTE'.
   final String estado;
-  // 'PAGADO' | 'DEUDA' | null (null hasta que esté ENTREGADO)
+  // 'PAGADO' | 'DEUDA' | null (null hasta que esté ENTREGADO). OJO: esto es
+  // el FIADO posterior a la entrega, nada que ver con [estadoPagoAdelanto].
   final String? estadoPago;
   final DateTime? fechaEntregaReal;
   final String? notas;
   final DateTime fechaCreacion;
   final PedidoClienteResumen cliente;
   final String? vendedor;
+
+  /// Pago por adelantado con Yape: 'NO_APLICA' | 'VERIFICANDO' | 'PAGADO' |
+  /// 'DEUDA_PARCIAL' | 'VUELTO_PENDIENTE'. Solo los pedidos hechos desde la
+  /// página web para Panadería salen de 'NO_APLICA'. null con un backend
+  /// anterior a esta función — se trata igual que 'NO_APLICA'.
+  final String? estadoPagoAdelanto;
+
+  /// El código REAL que emitió Yape, tal como lo escribió el cliente: es lo
+  /// que el personal busca en su app de Yape para verificar el movimiento.
+  /// null mientras el cliente no lo haya mandado (pedido creado, sin pagar).
+  final String? codigoOperacionYape;
+
+  /// Lo que el cliente DIJO haber pagado. Es una pista para el personal,
+  /// nunca la base de ninguna cuenta: el monto que manda es el que el
+  /// personal ve llegar de verdad.
+  final double? montoDeclaradoCliente;
+
+  /// Lo que el personal confirmó que llegó realmente. De acá sale
+  /// [estadoPagoAdelanto] y el monto de [ajustePago].
+  final double? montoConfirmadoStaff;
+
+  /// Saldo o vuelto de ESTE pedido todavía sin resolver. null en la enorme
+  /// mayoría de los pedidos (y también cuando ya se resolvió: el backend
+  /// solo manda los pendientes).
+  final AjustePago? ajustePago;
 
   /// Visibles solo para ADMIN/SUPERADMIN (el backend ya filtra esto, no
   /// hace falta repetir el chequeo de rol acá — si no corresponde, llegan
@@ -282,6 +405,25 @@ class Pedido {
   bool get esSolicitado => estado == 'SOLICITADO';
   bool get esEntregado => estado == 'ENTREGADO';
   bool get esDeuda => estadoPago == 'DEUDA';
+
+  /// El pedido se pagó (o se está pagando) por adelantado con Yape — o sea,
+  /// es un pedido web de Panadería.
+  bool get usaPagoAdelanto =>
+      estadoPagoAdelanto != null && estadoPagoAdelanto != 'NO_APLICA';
+
+  /// El cliente ya mandó su código de operación y nadie lo revisó todavía:
+  /// es la cola de trabajo de "Pagos por verificar".
+  bool get esperaVerificacionPago =>
+      estadoPagoAdelanto == 'VERIFICANDO' && codigoOperacionYape != null;
+
+  /// El pedido existe pero el cliente todavía no yapeó (o no mandó su
+  /// código). No hay nada que el personal pueda verificar todavía.
+  bool get esperaPagoDelCliente =>
+      estadoPagoAdelanto == 'VERIFICANDO' && codigoOperacionYape == null;
+
+  /// Pago verificado y listo para entregarse — llegó por el camino del pago
+  /// adelantado en vez del "aceptar/rechazar" de siempre.
+  bool get esConfirmado => estado == 'CONFIRMADO';
 
   /// Cuántos productos distintos tiene el pedido.
   int get cantidadItems => items.length;
@@ -305,5 +447,13 @@ class Pedido {
       estado == 'ENTREGADO' || estado == 'RECHAZADO' || estado == 'CANCELADO';
 
   /// El cliente puede cancelarlo mientras no se haya entregado todavía.
-  bool get sePuedeCancelar => estado == 'SOLICITADO' || estado == 'PENDIENTE';
+  /// 'CONFIRMADO' entra igual que 'PENDIENTE': el pago ya está verificado,
+  /// pero el pan todavía no salió — lo que haya que devolverle al cliente se
+  /// resuelve por su [ajustePago], no dejando el pedido sin cancelar.
+  bool get sePuedeCancelar =>
+      estado == 'SOLICITADO' || estado == 'PENDIENTE' || estado == 'CONFIRMADO';
+
+  /// Listo para marcarse entregado: confirmado por el personal ('PENDIENTE')
+  /// o con su pago adelantado ya verificado ('CONFIRMADO').
+  bool get sePuedeEntregar => estado == 'PENDIENTE' || estado == 'CONFIRMADO';
 }

@@ -98,6 +98,59 @@ class ProductoAutoservicio {
   final bool esPaquete;
 }
 
+/// Lo que devuelve [PedidosService.confirmarPagoAdelanto]: en qué quedó el
+/// pago una vez que el personal escribió cuánto llegó de verdad.
+class ResultadoPagoAdelanto {
+  const ResultadoPagoAdelanto({
+    required this.mensaje,
+    required this.estadoPagoAdelanto,
+    required this.total,
+    required this.montoConfirmado,
+    required this.ajuste,
+  });
+
+  factory ResultadoPagoAdelanto.fromJson(Map<String, dynamic> json) =>
+      ResultadoPagoAdelanto(
+        // Ya viene redactado por el backend (describirResultadoPago), para
+        // que la app y la auditoría cuenten el mismo hecho con las mismas
+        // palabras.
+        mensaje: json['mensaje'] as String? ?? 'Pago verificado.',
+        estadoPagoAdelanto: json['estadoPagoAdelanto'] as String? ?? 'PAGADO',
+        total: (json['total'] as num?)?.toDouble() ?? 0,
+        montoConfirmado: (json['montoConfirmado'] as num?)?.toDouble() ?? 0,
+        ajuste: json['ajuste'] != null
+            ? AjustePagoCreado.fromJson(json['ajuste'] as Map<String, dynamic>)
+            : null,
+      );
+
+  final String mensaje;
+
+  /// 'PAGADO' | 'DEUDA_PARCIAL' | 'VUELTO_PENDIENTE'.
+  final String estadoPagoAdelanto;
+  final double total;
+  final double montoConfirmado;
+
+  /// null cuando el monto coincidió exacto: ahí no hay nada que saldar.
+  final AjustePagoCreado? ajuste;
+}
+
+/// El saldo/vuelto que se acaba de crear al verificar un pago disparejo.
+class AjustePagoCreado {
+  const AjustePagoCreado({required this.idAjuste, required this.tipo, required this.monto});
+
+  factory AjustePagoCreado.fromJson(Map<String, dynamic> json) => AjustePagoCreado(
+    idAjuste: json['idAjuste'] as int,
+    tipo: json['tipo'] as String,
+    monto: (json['monto'] as num).toDouble(),
+  );
+
+  final int idAjuste;
+
+  /// 'DEUDA' (el cliente nos debe) | 'VUELTO' (se lo debemos).
+  final String tipo;
+  final double monto;
+}
+
 class PedidosService {
   PedidosService({ApiClient? apiClient, SecureStorageService? secureStorage})
     : _api = apiClient ?? const ApiClient(),
@@ -197,6 +250,26 @@ class PedidosService {
     await _api.put('/pedidos/$idPedido/entregar', {
       'pagado': pagado,
     }, token: token);
+  }
+
+  /// Personal: verifica el pago adelantado por Yape de un pedido web de
+  /// Panadería. Se manda UN número — lo que de verdad llegó a la cuenta — y
+  /// el backend deduce el resultado: justo (PAGADO), de menos
+  /// (DEUDA_PARCIAL + un ajuste de saldo) o de más (VUELTO_PENDIENTE + un
+  /// ajuste de vuelto). En los tres casos el pedido pasa a CONFIRMADO.
+  ///
+  /// A propósito el personal NO elige el resultado de una lista: un menú
+  /// dejaría marcar "pagado" sobre un pago incompleto, que es justo el
+  /// error que esta pantalla existe para evitar.
+  Future<ResultadoPagoAdelanto> confirmarPagoAdelanto(
+    int idPedido, {
+    required double montoConfirmado,
+  }) async {
+    final token = await _storage.obtenerAccessToken();
+    final data = await _api.post('/pedidos/$idPedido/confirmar-pago-adelanto', {
+      'montoConfirmado': montoConfirmado,
+    }, token: token);
+    return ResultadoPagoAdelanto.fromJson(data);
   }
 
   /// Personal: cancela un pedido (SOLICITADO o PENDIENTE) de su tienda —

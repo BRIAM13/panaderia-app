@@ -15,7 +15,18 @@ const {
   resumirProductos,
 } = require('./pedidosController');
 const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy, fueraDeHorarioAtencion, franjaEfectiva } = require('../utils/horariosPanaderia');
+const {
+  ESTADO_NO_APLICA,
+  ESTADO_VERIFICANDO,
+  requierePagoAdelanto,
+  normalizarCodigoOperacion,
+  codigoOperacionValido,
+  validarMontoDeclarado,
+  LARGO_MAXIMO_CODIGO,
+} = require('../utils/pagoAdelanto');
+const { calcularDescuentoCliente, aplicarDescuento } = require('../utils/descuentosCliente');
 const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
+const crypto = require('crypto');
 const { RUC_PERU_REGEX, EMAIL_REGEX, CELULAR_PERU_REGEX } = require('../middlewares/validators');
 const { contactoEnmascarado, contactoVacio } = require('../utils/enmascarar');
 
@@ -102,9 +113,126 @@ function limiteVerificarExcedido(ip) {
   return intentos.length > INTENTOS_MAXIMOS_VERIFICAR;
 }
 
+/**
+ * El token que ata la segunda petición (el código de operación) al pedido
+ * recién creado. 32 caracteres hex de `crypto.randomBytes` — entra holgado
+ * en `Pedidos.TokenConfirmacionPago VARCHAR(40)`.
+ *
+ * No es una credencial y no pretende serlo: lo único que impide es que
+ * alguien adivine un `IdPedido` correlativo y le meta un código falso al
+ * pedido de otra persona. El candado real es la máquina de estados (un
+ * código se acepta UNA vez, solo mientras el pedido siga 'VERIFICANDO' y
+ * sin código). Por eso no hay expiración ni hash: el pedido queda abierto
+ * justamente hasta que su dueño vuelva de pagar, que puede ser mañana.
+ */
+function generarTokenConfirmacionPago() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+/**
+ * El medio de pago ACTIVO con el que el cliente web paga por adelantado en
+ * una tienda: el Yape del negocio, con su número y (si el dueño lo subió)
+ * la imagen del QR real. Se prefiere un YAPE; si no hay ninguno, se toma
+ * cualquier otro medio activo antes que dejar al cliente sin nada.
+ *
+ * Devuelve null cuando la tienda no tiene ni un medio de pago cargado —
+ * que es el estado de HOY: `MediosPagoTienda` está vacía para todas las
+ * tiendas. La página está preparada para ese null y muestra un aviso de
+ * "todavía no habilitamos el pago en línea" en vez de una caja rota.
+ */
+async function obtenerMedioPagoActivo(pool, tiendaSlug) {
+  const result = await pool
+    .request()
+    .input('Slug', sql.VarChar(50), tiendaSlug)
+    .query(`
+      SELECT TOP 1 mp.IdMedioPago, mp.Tipo, mp.Titular, mp.NumeroDestino, mp.Notas, mp.ImagenQrBase64
+      FROM MediosPagoTienda mp
+      INNER JOIN Tiendas t ON t.IdTienda = mp.IdTienda
+      WHERE t.Slug = @Slug AND t.Estado = 1 AND mp.Estado = 1
+      ORDER BY CASE WHEN mp.Tipo = 'YAPE' THEN 0 ELSE 1 END, mp.IdMedioPago
+    `);
+  if (result.recordset.length === 0) return null;
+  const medio = result.recordset[0];
+  return {
+    // `IdMedioPago` NO se expone: el visitante no tiene nada que hacer con
+    // él y este endpoint es público. Solo lo que necesita para pagar.
+    tipo: medio.Tipo,
+    titular: medio.Titular,
+    numeroDestino: medio.NumeroDestino,
+    notas: medio.Notas ?? null,
+    imagenQrBase64: medio.ImagenQrBase64 || null,
+  };
+}
+
+/**
+ * `GET /publico/medio-pago?tiendaSlug=panaderia` — a dónde yapear.
+ *
+ * Endpoint aparte y no un campo más del catálogo a propósito: la página
+ * sondea el catálogo cada cierto tiempo mientras el visitante arma su
+ * pedido, y el QR en base64 pesa cientos de KB. Esto se pide UNA vez, en el
+ * momento en que aparece la pantalla de pago.
+ */
+async function obtenerMedioPagoPublico(req, res, next) {
+  if (limiteConsultaExcedido(req.ip)) {
+    return res.status(429).json({ mensaje: 'Demasiados intentos. Intenta de nuevo en unos minutos.' });
+  }
+
+  const tiendaSlug = String(req.query.tiendaSlug || '').trim();
+  if (!SLUGS_TIENDA_PUBLICA.includes(tiendaSlug)) {
+    return res.status(400).json({ mensaje: 'Tienda no válida.' });
+  }
+
+  try {
+    const pool = await getPool();
+    return res.status(200).json({ medioPago: await obtenerMedioPagoActivo(pool, tiendaSlug) });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 async function obtenerPrecioPaquete(pool) {
   const result = await pool.request().query("SELECT Valor FROM Configuraciones WHERE Clave = 'PRECIO_PAQUETE'");
   return result.recordset.length > 0 ? Number(result.recordset[0].Valor) : null;
+}
+
+/**
+ * IdCliente a partir del IdPersona, con el mismo par de saltos
+ * Personas -> Clientes que ya usa `consultarPedidosPublicos`. Devuelve null
+ * cuando la persona existe pero todavía no es cliente (o cuando ni siquiera
+ * hay fila en Personas): un visitante así es, por definición, un cliente
+ * NUEVO — no un caso de error.
+ */
+async function buscarIdClientePorPersona(pool, idPersona) {
+  if (!idPersona) return null;
+  const result = await pool
+    .request()
+    .input('IdPersona', sql.Int, idPersona)
+    .query('SELECT IdCliente FROM Clientes WHERE IdPersona = @IdPersona');
+  return result.recordset.length > 0 ? result.recordset[0].IdCliente : null;
+}
+
+/**
+ * El descuento por fidelidad tal como lo consume la página web:
+ * `{ segmento, porcentaje }` o null.
+ *
+ * null cuando la tienda no vino en la petición, no es una tienda pública, o
+ * no está en `DESCUENTOS_TIENDAS_HABILITADAS` — nunca un objeto con
+ * porcentaje 0, para que el formulario no tenga que distinguir entre "no
+ * hay descuento acá" y "hay descuento, de 0%".
+ *
+ * OJO: esto es solo para MOSTRARLE el descuento al cliente antes de que
+ * envíe. El monto que de verdad se cobra lo recalcula el servidor en
+ * `crearPedidoPublico` con el IdCliente real; nada de lo que responda este
+ * endpoint se acepta de vuelta como entrada.
+ */
+async function resolverDescuentoPublico(pool, { idPersona, tiendaSlug }) {
+  if (!tiendaSlug || !SLUGS_TIENDA_PUBLICA.includes(tiendaSlug)) return null;
+
+  const idCliente = await buscarIdClientePorPersona(pool, idPersona);
+  const descuento = await calcularDescuentoCliente({ pool, idCliente, tiendaSlug });
+  if (!descuento.aplica || descuento.porcentaje <= 0) return null;
+
+  return { segmento: descuento.segmento, porcentaje: descuento.porcentaje };
 }
 
 /** Catálogo público: solo lo que un visitante sin cuenta puede pedir desde
@@ -136,6 +264,12 @@ async function listarCatalogoPublico(req, res, next) {
           nombre: p.Nombre,
           precioUnitario: esPaquete && precioPaquete != null ? precioPaquete : p.PrecioUnitario,
           esPaquete,
+          // A qué tienda pertenece el producto. Lo necesita el formulario
+          // para saber si el descuento por fidelidad aplica a lo que el
+          // visitante eligió: la lista de tiendas habilitadas
+          // (DESCUENTOS_TIENDAS_HABILITADAS) la decide el dueño desde la
+          // app, así que la web no puede deducirla de `esPaquete`.
+          tiendaSlug: p.Slug,
         };
       }),
       // Horario de pedido/recojo de los panes vendidos por unidad (Pan de
@@ -159,6 +293,16 @@ async function listarCatalogoPublico(req, res, next) {
  * cuenta. El pedido nace 'SOLICITADO' — igual que el autoservicio de la
  * app — porque nadie del personal lo revisó todavía; hay que llamar al
  * cliente a confirmar antes de darlo por bueno.
+ *
+ * PANADERÍA (pan por unidad) es la excepción: ahí el pedido se paga por
+ * adelantado con Yape, así que nace además con
+ * `EstadoPagoAdelanto = 'VERIFICANDO'` y un `TokenConfirmacionPago`. El
+ * código de operación NO llega acá: el cliente todavía no pagó cuando
+ * envía este formulario. Lo manda después, por
+ * `registrarCodigoPagoPublico` — ver el porqué de esa separación en el
+ * encabezado de `2026_09_pago_adelanto_panaderia.sql` (resumen: para pagar
+ * hay que salir a la app de Yape, y volver al navegador a menudo encuentra
+ * la pestaña recargada; con el pedido ya creado no se pierde nada).
  */
 async function crearPedidoPublico(req, res, next) {
   if (limiteExcedido(req.ip)) {
@@ -278,6 +422,10 @@ async function crearPedidoPublico(req, res, next) {
 
     const lineas = [];
     let idTienda = null;
+    // Slug de la tienda del pedido (todas las líneas comparten tienda, ver
+    // más abajo): lo necesita el descuento por fidelidad, que se habilita
+    // por slug desde Configuraciones.
+    let slugTienda = null;
 
     for (const item of items) {
       const productoResult = await new sql.Request(transaction)
@@ -300,6 +448,7 @@ async function crearPedidoPublico(req, res, next) {
       // (ver crearPedido en pedidosController.js).
       if (idTienda === null) {
         idTienda = producto.IdTienda;
+        slugTienda = producto.Slug;
       } else if (producto.IdTienda !== idTienda) {
         await transaction.rollback();
         return res.status(400).json({
@@ -503,21 +652,51 @@ async function crearPedidoPublico(req, res, next) {
         `);
     }
 
-    const total = Number(lineas.reduce((acc, l) => acc + l.subtotal, 0).toFixed(2));
+    const subtotal = Number(lineas.reduce((acc, l) => acc + l.subtotal, 0).toFixed(2));
+
+    // Descuento por fidelidad — ESTE es el cálculo que manda. El
+    // formulario ya le mostró un descuento al cliente cuando escribió su
+    // documento (ver verificarDocumentoPublico), pero eso fue solo
+    // informativo: acá se vuelve a calcular desde cero con el IdCliente
+    // real que se acaba de resolver, y el body del cliente HTTP no tiene
+    // forma de influir en el porcentaje.
+    //
+    // Se consulta con `pool` y no con la transacción abierta a propósito:
+    // lo que se mide es el historial YA COMMITEADO del cliente (pedidos
+    // entregados de antes), no nada de lo que está pasando en esta
+    // transacción — el pedido nuevo ni siquiera está insertado todavía, y
+    // aunque lo estuviera nace 'SOLICITADO', que no cuenta como compra.
+    const descuento = await calcularDescuentoCliente({ pool, idCliente, tiendaSlug: slugTienda });
+    const descuentoPorcentaje = descuento.aplica ? descuento.porcentaje : 0;
+    // `Total` guarda lo que el cliente DEBE PAGAR, ya descontado — mismo
+    // significado que en todo el resto del sistema (deudas, resúmenes,
+    // historial del CRM), así que nada río abajo necesita cambiar.
+    const total = aplicarDescuento(subtotal, descuentoPorcentaje);
+
     const numeroPedidoDia = await obtenerSiguienteNumeroPedidoDia(transaction, idTienda);
     const notaWeb = `PEDIDO WEB — Cel: ${telefonoLimpio}${notas ? ' — ' + String(notas).trim().toUpperCase() : ''}`;
+
+    // Pago por adelantado: solo Panadería con pan por unidad. Cualquier
+    // otro pedido web (el pan de hamburguesa por paquete) sigue como
+    // siempre, con 'NO_APLICA' y sin token — ver utils/pagoAdelanto.js.
+    const exigePagoAdelanto = requierePagoAdelanto({ tiendaSlug: slugTienda, hayPanPorUnidad });
+    const estadoPagoAdelanto = exigePagoAdelanto ? ESTADO_VERIFICANDO : ESTADO_NO_APLICA;
+    const tokenConfirmacionPago = exigePagoAdelanto ? generarTokenConfirmacionPago() : null;
 
     const insertPedido = await new sql.Request(transaction)
       .input('IdCliente', sql.Int, idCliente)
       .input('IdTienda', sql.Int, idTienda)
       .input('Total', sql.Decimal(10, 2), total)
+      .input('DescuentoPorcentaje', sql.Decimal(5, 2), descuentoPorcentaje)
       .input('Notas', sql.NVarChar(300), notaWeb.slice(0, 300))
       .input('NumeroPedidoDia', sql.Int, numeroPedidoDia)
       .input('FechaEntrega', sql.DateTime, fechaEntregaUtc)
+      .input('EstadoPagoAdelanto', sql.VarChar(20), estadoPagoAdelanto)
+      .input('TokenConfirmacionPago', sql.VarChar(40), tokenConfirmacionPago)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdTrabajador, Total, Notas, NumeroPedidoDia, FechaEntrega, Estado)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdTrabajador, Total, DescuentoPorcentaje, Notas, NumeroPedidoDia, FechaEntrega, Estado, EstadoPagoAdelanto, TokenConfirmacionPago)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, NULL, @Total, @Notas, @NumeroPedidoDia, @FechaEntrega, 'SOLICITADO')
+        VALUES (@IdCliente, @IdTienda, NULL, @Total, @DescuentoPorcentaje, @Notas, @NumeroPedidoDia, @FechaEntrega, 'SOLICITADO', @EstadoPagoAdelanto, @TokenConfirmacionPago)
       `);
     const { IdPedido: idPedido } = insertPedido.recordset[0];
 
@@ -547,7 +726,16 @@ async function crearPedidoPublico(req, res, next) {
       accion: 'CREAR_PEDIDO_WEB_PUBLICO',
       tablaAfectada: 'Pedidos',
       registroAfectadoId: String(idPedido),
-      datosNuevos: { documento: documentoLimpio, items: lineas, total, telefono: telefonoLimpio, email: emailNuevo },
+      datosNuevos: {
+        documento: documentoLimpio,
+        items: lineas,
+        subtotal,
+        descuentoPorcentaje,
+        segmentoCliente: descuento.segmento,
+        total,
+        telefono: telefonoLimpio,
+        email: emailNuevo,
+      },
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -555,17 +743,198 @@ async function crearPedidoPublico(req, res, next) {
     await notificarPersonalTienda({
       idTienda,
       titulo: 'Nuevo pedido desde la página web',
-      cuerpo: `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}. Cel: ${telefonoLimpio}. Confírmalo en la app.`,
+      cuerpo: exigePagoAdelanto
+        ? `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}. Está pagando por Yape; cuando mande su código, verifícalo en la app.`
+        : `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}. Cel: ${telefonoLimpio}. Confírmalo en la app.`,
       datos: { tipo: 'PEDIDO_SOLICITADO', idTienda: String(idTienda), idPedido: String(idPedido) },
     });
 
     return res.status(201).json({
-      mensaje: 'Recibimos tu pedido. Te llamaremos al número que dejaste para confirmarlo.',
+      mensaje: exigePagoAdelanto
+        ? 'Registramos tu pedido. Ahora paga por Yape y escribe tu código de operación para que lo confirmemos.'
+        : 'Recibimos tu pedido. Te llamaremos al número que dejaste para confirmarlo.',
+      // El pedido YA existe con estos dos datos, aunque todavía no se haya
+      // pagado: son lo que la página guarda en localStorage para poder
+      // retomar la pantalla de pago si la pestaña se muere mientras el
+      // cliente está en Yape (ver el encabezado de esta función).
+      idPedido,
       numeroPedidoDia,
+      // Solo en Panadería. `tokenConfirmacionPago` es lo único de toda la
+      // respuesta que no se le muestra al cliente: viaja para poder mandar
+      // después el código de operación (registrarCodigoPagoPublico).
+      estadoPagoAdelanto,
+      tokenConfirmacionPago,
+      // `total` sigue siendo lo que el cliente paga (ya descontado): la
+      // pantalla de confirmación no cambia de significado. `subtotal` y
+      // `descuentoCliente` se suman para poder mostrar el desglose de
+      // cuánto se ahorró, y son los valores REALES que se guardaron.
+      subtotal,
       total,
+      descuentoCliente: descuentoPorcentaje > 0
+        ? { segmento: descuento.segmento, porcentaje: descuentoPorcentaje }
+        : null,
     });
   } catch (err) {
     await transaction.rollback();
+    return next(err);
+  }
+}
+
+/**
+ * `POST /publico/pedidos/:idPedido/codigo-pago` — el segundo paso del pago
+ * por adelantado: el cliente ya yapeó y escribe el código de operación que
+ * le dio Yape, más cuánto pagó.
+ *
+ * Cómo se prueba que este pedido es suyo, sin login: o manda el
+ * `tokenConfirmacionPago` que recibió al crearlo (el caso normal, viene de
+ * localStorage), o manda el `documento` con el que lo hizo (el caso de
+ * "se me murió la pestaña y estoy en otro celular", desde el seguimiento
+ * por DNI que ya existe). Cualquiera de los dos alcanza: ninguno es una
+ * credencial fuerte —el DNI en Perú no es un secreto— y lo que de verdad
+ * limita el daño es que esto solo se puede hacer UNA vez, solo mientras el
+ * pedido siga 'VERIFICANDO' y sin código, y que lo único que se puede
+ * escribir es un código que después una persona va a contrastar contra el
+ * Yape real.
+ *
+ * El estado NO cambia acá: sigue 'VERIFICANDO'. Pasa a PAGADO /
+ * DEUDA_PARCIAL / VUELTO_PENDIENTE recién cuando el personal confirma
+ * (pagoAdelantoController.js).
+ */
+async function registrarCodigoPagoPublico(req, res, next) {
+  if (limiteExcedido(req.ip)) {
+    return res.status(429).json({ mensaje: 'Demasiados intentos. Intenta de nuevo en unos minutos, o contáctanos directamente.' });
+  }
+
+  const idPedido = Number(req.params.idPedido);
+  if (!Number.isInteger(idPedido) || idPedido <= 0) {
+    return res.status(400).json({ mensaje: 'Pedido no encontrado.' });
+  }
+
+  const { token, documento } = req.body || {};
+  const codigo = normalizarCodigoOperacion(req.body?.codigoOperacionYape);
+  if (!codigoOperacionValido(codigo)) {
+    return res.status(400).json({
+      mensaje: `El código de operación de Yape son solo números (hasta ${LARGO_MAXIMO_CODIGO} dígitos). Cópialo tal cual de tu constancia.`,
+    });
+  }
+
+  try {
+    const pool = await getPool();
+    const pedidoResult = await pool
+      .request()
+      .input('IdPedido', sql.Int, idPedido)
+      .query(`
+        SELECT pd.IdPedido, pd.NumeroPedidoDia, pd.IdTienda, pd.Total, pd.Estado,
+               pd.EstadoPagoAdelanto, pd.CodigoOperacionYape, pd.TokenConfirmacionPago,
+               per.DNI
+        FROM Pedidos pd
+        INNER JOIN Clientes c ON c.IdCliente = pd.IdCliente
+        INNER JOIN Personas per ON per.IdPersona = c.IdPersona
+        WHERE pd.IdPedido = @IdPedido
+      `);
+
+    if (pedidoResult.recordset.length === 0) {
+      return res.status(404).json({ mensaje: 'No encontramos ese pedido.' });
+    }
+    const pedido = pedidoResult.recordset[0];
+
+    // Mismo 404 que un pedido inexistente cuando ni el token ni el
+    // documento coinciden: sin esto, probar tokens al azar contra un
+    // `IdPedido` correlativo diría si ese pedido existe o no.
+    const tokenCoincide =
+      Boolean(pedido.TokenConfirmacionPago) &&
+      typeof token === 'string' &&
+      token.trim() === pedido.TokenConfirmacionPago;
+    const documentoCoincide =
+      typeof documento === 'string' && documento.trim().length > 0 && documento.trim() === String(pedido.DNI);
+    if (!tokenCoincide && !documentoCoincide) {
+      return res.status(404).json({ mensaje: 'No encontramos ese pedido.' });
+    }
+
+    if (pedido.EstadoPagoAdelanto !== ESTADO_VERIFICANDO) {
+      return res.status(400).json({
+        mensaje:
+          pedido.EstadoPagoAdelanto === ESTADO_NO_APLICA
+            ? 'Este pedido no se paga por adelantado.'
+            : 'El pago de este pedido ya fue verificado por la tienda.',
+      });
+    }
+    if (pedido.CodigoOperacionYape) {
+      return res.status(400).json({
+        mensaje: 'Ya registramos un código de operación para este pedido. Si te equivocaste, escríbenos por WhatsApp.',
+      });
+    }
+    if (['CANCELADO', 'RECHAZADO'].includes(pedido.Estado)) {
+      return res.status(400).json({ mensaje: 'Este pedido ya no está activo.' });
+    }
+
+    const total = Number(pedido.Total);
+    // Red blanda contra el error honesto, no contra la mentira: quien
+    // escriba un monto mayor al que pagó igual pasa por acá y lo descubre
+    // el personal al mirar el Yape real (ver validarMontoDeclarado).
+    const revision = validarMontoDeclarado(total, req.body?.montoDeclaradoCliente);
+    if (!revision.valido) {
+      return res.status(400).json({ mensaje: revision.mensaje });
+    }
+    const montoDeclarado = Number(req.body.montoDeclaradoCliente);
+
+    try {
+      await pool
+        .request()
+        .input('IdPedido', sql.Int, idPedido)
+        .input('CodigoOperacionYape', sql.VarChar(30), codigo)
+        .input('MontoDeclaradoCliente', sql.Decimal(10, 2), montoDeclarado)
+        .query(`
+          UPDATE Pedidos
+          SET CodigoOperacionYape = @CodigoOperacionYape, MontoDeclaradoCliente = @MontoDeclaradoCliente
+          WHERE IdPedido = @IdPedido AND CodigoOperacionYape IS NULL
+        `);
+    } catch (err) {
+      // UQ_Pedidos_CodigoOperacionYape: ese código ya está en otro pedido.
+      // ESTE es el mecanismo anti-doble-uso — un UNIQUE de base es atómico
+      // aunque dos personas envíen el mismo código en el mismo instante,
+      // cosa que un "consultar y después escribir" desde acá no puede
+      // garantizar. Se traduce a un 400 con un mensaje entendible en vez de
+      // dejarlo salir como un 500 genérico.
+      if (err && (err.code === 'ER_DUP_ENTRY' || err.errno === 1062)) {
+        return res.status(400).json({
+          mensaje: 'Ese código de operación ya fue usado en otro pedido. Revisa tu constancia de Yape y copia el código correcto.',
+        });
+      }
+      throw err;
+    }
+
+    await registrarAuditoria({
+      idUsuario: null,
+      accion: 'REGISTRAR_CODIGO_PAGO_WEB',
+      tablaAfectada: 'Pedidos',
+      registroAfectadoId: String(idPedido),
+      datosNuevos: { codigoOperacionYape: codigo, montoDeclaradoCliente: montoDeclarado, total },
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    await notificarPersonalTienda({
+      idTienda: pedido.IdTienda,
+      titulo: 'Pago por Yape para verificar',
+      cuerpo: `El pedido #${pedido.NumeroPedidoDia} reportó el código ${codigo} por S/ ${montoDeclarado.toFixed(2)} (total S/ ${total.toFixed(2)}). Revísalo en tu Yape y confírmalo.`,
+      datos: {
+        tipo: 'PAGO_ADELANTO_REPORTADO',
+        idTienda: String(pedido.IdTienda),
+        idPedido: String(idPedido),
+      },
+    });
+
+    return res.status(200).json({
+      mensaje: 'Recibimos tu código. Estamos verificando el pago con la tienda y te confirmamos apenas lo revisen.',
+      idPedido,
+      numeroPedidoDia: pedido.NumeroPedidoDia,
+      estadoPagoAdelanto: ESTADO_VERIFICANDO,
+      codigoOperacionYape: codigo,
+      montoDeclaradoCliente: montoDeclarado,
+      total,
+    });
+  } catch (err) {
     return next(err);
   }
 }
@@ -640,6 +1009,15 @@ async function consultarPedidosPublicos(req, res, next) {
  * prueba o alguien que dictó mal su número) NO cuenta como verificado acá
  * — su sola presencia en la base no prueba que el documento sea real, así
  * que igual se revalida contra RENIEC/SUNAT.
+ *
+ * Con `?tiendaSlug=panaderia` (opcional) además devuelve `descuentoCliente`:
+ * el descuento por fidelidad que le tocaría a ese documento en esa tienda,
+ * para que el formulario pueda mostrárselo antes de enviar el pedido. Sin
+ * el parámetro —o si esa tienda no tiene el descuento habilitado— el campo
+ * viaja en null y el formulario se comporta como siempre. El slug va en la
+ * consulta y no se deduce del documento porque este endpoint se llama
+ * apenas el visitante termina de teclear su DNI, cuando el servidor todavía
+ * no sabe nada del carrito.
  */
 async function verificarDocumentoPublico(req, res, next) {
   if (limiteVerificarExcedido(req.ip)) {
@@ -648,6 +1026,7 @@ async function verificarDocumentoPublico(req, res, next) {
 
   const documentoLimpio = String(req.query.documento || '').trim();
   const esRuc = RUC_PERU_REGEX.test(documentoLimpio);
+  const tiendaSlug = String(req.query.tiendaSlug || '').trim();
 
   try {
     const pool = await getPool();
@@ -674,10 +1053,18 @@ async function verificarDocumentoPublico(req, res, next) {
     // extraer el contacto real de cualquiera con solo saber su documento
     // (ver utils/enmascarar.js).
     const contacto = filaPersona ? contactoEnmascarado(filaPersona) : contactoVacio();
+    // Se calcula una sola vez y sirve para las dos salidas de "documento
+    // válido" de abajo. Un documento que todavía no tiene fila en Personas
+    // igual recibe su descuento: `idPersona` null -> sin Cliente -> sin
+    // historial -> segmento NUEVO, que también descuenta.
+    const descuentoCliente = await resolverDescuentoPublico(pool, {
+      idPersona: filaPersona ? filaPersona.IdPersona : null,
+      tiendaSlug,
+    });
 
     const esCacheValida = filaPersona && ['RENIEC', 'SUNAT'].includes(filaPersona.OrigenValidacion);
     if (esCacheValida) {
-      return res.status(200).json({ existe: true, contacto });
+      return res.status(200).json({ existe: true, contacto, descuentoCliente });
     }
 
     const datosDocumento = esRuc
@@ -688,6 +1075,9 @@ async function verificarDocumentoPublico(req, res, next) {
       return res.status(200).json({
         existe: false,
         contacto: contactoVacio(),
+        // Un documento que RENIEC/SUNAT no reconoce no va a poder pedir
+        // nada, así que tampoco tiene sentido anunciarle un descuento.
+        descuentoCliente: null,
         mensaje: esRuc
           ? 'No encontramos ese RUC en SUNAT. Verifica el número.'
           : 'No encontramos ese DNI en RENIEC. Verifica el número.',
@@ -697,10 +1087,17 @@ async function verificarDocumentoPublico(req, res, next) {
     // Documento confirmado por RENIEC/SUNAT. `contacto` va vacío si nunca
     // pidió por acá (no hay fila en Personas), o con lo que ya tuviéramos
     // guardado si la fila existía pero era 'MANUAL'.
-    return res.status(200).json({ existe: true, contacto });
+    return res.status(200).json({ existe: true, contacto, descuentoCliente });
   } catch (err) {
     return next(err);
   }
 }
 
-module.exports = { listarCatalogoPublico, crearPedidoPublico, consultarPedidosPublicos, verificarDocumentoPublico };
+module.exports = {
+  listarCatalogoPublico,
+  crearPedidoPublico,
+  registrarCodigoPagoPublico,
+  consultarPedidosPublicos,
+  verificarDocumentoPublico,
+  obtenerMedioPagoPublico,
+};
