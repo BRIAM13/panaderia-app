@@ -6,10 +6,13 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { getPool } = require('../config/db');
 
-const USUARIO = 'briam_workbench';
-const PASSWORD = 'Panaderia2026';
+const USUARIO = process.env.WORKBENCH_USER;
+const PASSWORD = process.env.WORKBENCH_PASSWORD;
 
 async function main() {
+  if (!USUARIO || !PASSWORD) {
+    throw new Error('Faltan WORKBENCH_USER / WORKBENCH_PASSWORD en el .env');
+  }
   const pool = await getPool();
 
   await pool.request().query(`DROP USER IF EXISTS '${USUARIO}'@'%'`);
