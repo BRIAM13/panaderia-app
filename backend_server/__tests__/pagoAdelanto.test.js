@@ -22,9 +22,12 @@ const {
  * vuelto, que es la parte del feature donde un error se traduce en plata.
  */
 
-describe('requierePagoAdelanto — solo Panadería con pan por unidad', () => {
-  test('Panadería con pan por unidad sí exige pagar por adelantado', () => {
-    expect(requierePagoAdelanto({ tiendaSlug: 'panaderia', hayPanPorUnidad: true })).toBe(true);
+describe('requierePagoAdelanto — apagado (se dio de baja el pago con código de Yape)', () => {
+  test('Panadería con pan por unidad YA NO exige pagar por adelantado', () => {
+    // SLUGS_PAGO_ADELANTO quedó vacía a propósito: el pago con código de
+    // operación de Yape se dio de baja. Panadería vuelve a "paga al
+    // recoger" hasta que se integre Culqi.
+    expect(requierePagoAdelanto({ tiendaSlug: 'panaderia', hayPanPorUnidad: true })).toBe(false);
   });
 
   test('Hamburguesas NUNCA entra, ni aunque llegara con pan por unidad', () => {

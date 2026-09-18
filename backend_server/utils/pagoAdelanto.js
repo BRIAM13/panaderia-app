@@ -24,14 +24,20 @@ const AJUSTE_DEUDA = 'DEUDA';
 const AJUSTE_VUELTO = 'VUELTO';
 
 /**
- * Tiendas donde el pedido web exige pagar por adelantado. Hardcodeada a
- * `panaderia` a propósito, a diferencia de los descuentos (que se habilitan
- * por tienda desde Configuraciones): esto no es una promoción que el dueño
- * prenda y apague, es el modelo de cobro de ESE negocio. El pan de
- * hamburguesa, según el dueño, es un negocio aparte y sigue cobrándose al
- * recoger.
+ * Tiendas donde el pedido web exige pagar por adelantado.
+ *
+ * VACÍA A PROPÓSITO: el pago por adelantado con código de operación de Yape
+ * se dio de baja (el dueño va a integrar Culqi como pasarela real en su
+ * lugar). El resto de este archivo, `AjustesPago` y las columnas de
+ * `Pedidos` (`EstadoPagoAdelanto`, etc.) se dejan tal cual, en reposo: son
+ * infraestructura reutilizable para Culqi (el estado `VERIFICANDO` mientras
+ * se espera confirmación, `PAGADO`/`DEUDA_PARCIAL`/`VUELTO_PENDIENTE` como
+ * resultado, `AjustesPago` para rastrear saldos) y así hay menos código que
+ * tocar cuando la pasarela esté lista. Con la lista vacía,
+ * `requierePagoAdelanto` es `false` siempre y Panadería vuelve a "paga al
+ * recoger", igual que Hamburguesas.
  */
-const SLUGS_PAGO_ADELANTO = ['panaderia'];
+const SLUGS_PAGO_ADELANTO = [];
 
 /** Largo máximo aceptado para el código de operación de Yape.
  *
