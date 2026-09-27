@@ -28,19 +28,26 @@ import 'nuevo_pedido_page.dart';
 /// existe porque en escritorio el mismo perfil se muestra EMBEBIDO en el
 /// panel derecho de la lista de Clientes, sin navegar a otra ruta.
 class ClientePerfilPage extends StatefulWidget {
-  const ClientePerfilPage({super.key, required Cliente this.cliente})
+  const ClientePerfilPage({super.key, required Cliente this.cliente, this.rolUsuario})
     : _idCliente = null;
 
   /// Entrada desde pantallas que solo conocen el id (ver `AnaliticaPage`,
   /// que carga un resumen liviano de toda la cartera y no la ficha completa
   /// de cada cliente). La ficha llega igual en la primera carga: el propio
   /// endpoint de perfil ya la devuelve.
-  const ClientePerfilPage.porId({super.key, required int idCliente})
+  const ClientePerfilPage.porId({super.key, required int idCliente, this.rolUsuario})
     : cliente = null,
       _idCliente = idCliente;
 
   final Cliente? cliente;
   final int? _idCliente;
+
+  /// Rol de quien está mirando la ficha. Solo se usa para decidir si se
+  /// dibuja el permiso de "pedir sin pagar primero", que es exclusivo del
+  /// SUPERADMIN. null (nadie lo pasó) = no se dibuja: el candado de verdad lo
+  /// pone el backend en la ruta, esto solo evita mostrar un control que va a
+  /// responder 403.
+  final String? rolUsuario;
 
   int get idCliente => cliente?.idCliente ?? _idCliente!;
 
@@ -73,6 +80,7 @@ class _ClientePerfilPageState extends State<ClientePerfilPage> {
           key: _vistaKey,
           idCliente: widget.idCliente,
           clienteInicial: widget.cliente,
+          rolUsuario: widget.rolUsuario,
         ),
       ),
     );
@@ -88,10 +96,14 @@ class ClientePerfilVista extends StatefulWidget {
     this.clienteInicial,
     this.embebido = false,
     this.onCambio,
+    this.rolUsuario,
   });
 
   final int idCliente;
   final Cliente? clienteInicial;
+
+  /// Rol de quien mira la ficha — ver [ClientePerfilPage.rolUsuario].
+  final String? rolUsuario;
 
   /// true cuando la vista vive dentro del panel derecho de Clientes: como
   /// ahí no hay AppBar, se dibuja su propia barra de acciones arriba.
@@ -114,6 +126,16 @@ class ClientePerfilVistaState extends State<ClientePerfilVista> {
   bool _cargando = true;
   bool _guardandoNota = false;
   String? _error;
+
+  /// El switch de "puede pedir sin pagar primero" mientras la petición viaja.
+  bool _guardandoExcepcionPago = false;
+
+  /// Valor que el SUPERADMIN acaba de elegir, antes de que el servidor
+  /// conteste. null = mostrar el del perfil cargado. Existe para que el switch
+  /// se mueva en el acto al tocarlo (si no, se queda en la posición anterior
+  /// hasta que termine la ida y vuelta y parece que no registró el toque), y se
+  /// limpia si el backend rechaza el cambio.
+  bool? _excepcionPagoOptimista;
 
   @override
   void initState() {
@@ -365,6 +387,55 @@ class ClientePerfilVistaState extends State<ClientePerfilVista> {
     }
   }
 
+  /// Enciende o apaga el permiso de "pedir sin pagar primero" de ESTE cliente.
+  ///
+  /// Se aplica de una, sin diálogo de confirmación, pero con vuelta atrás
+  /// visible: el switch se pinta optimista (para que responda al toque), y si
+  /// el backend rechaza se vuelve al valor anterior y se dice por qué. Un
+  /// diálogo acá sobraría — es reversible con un toque y no destruye nada.
+  Future<void> _cambiarExcepcionPagoAdelanto(bool valor) async {
+    final perfil = _perfil;
+    if (perfil == null) return;
+
+    setState(() {
+      _guardandoExcepcionPago = true;
+      _excepcionPagoOptimista = valor;
+    });
+
+    try {
+      await _clientesService.actualizarExcepcionPagoAdelanto(
+        widget.idCliente,
+        pideSinPagarAdelanto: valor,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            valor
+                ? 'Este cliente ya puede pedir sin pagar primero.'
+                : 'Este cliente vuelve a tener que pagar antes de que se confirme su pedido.',
+          ),
+        ),
+      );
+      // Se recarga desde el servidor en vez de quedarse con el valor optimista:
+      // así el switch refleja lo que de verdad quedó guardado.
+      await _cargar();
+      widget.onCambio?.call();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _excepcionPagoOptimista = null);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _excepcionPagoOptimista = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo cambiar el permiso. Intenta nuevamente.')),
+      );
+    } finally {
+      if (mounted) setState(() => _guardandoExcepcionPago = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => _construirCuerpo();
 
@@ -429,6 +500,23 @@ class ClientePerfilVistaState extends State<ClientePerfilVista> {
               .fadeIn(duration: 250.ms)
               .moveY(begin: 8, end: 0),
           const SizedBox(height: 16),
+          // Solo SUPERADMIN: es una línea de crédito, no un dato de la ficha.
+          // El backend además lo exige en la ruta, así que esconderlo acá no es
+          // la seguridad — es no mostrarle al personal un control que le va a
+          // responder 403.
+          if (widget.rolUsuario == 'SUPERADMIN') ...[
+            _TarjetaPagoAdelantado(
+                  // El optimista gana mientras dura la petición, para que el
+                  // switch responda al toque.
+                  valor: _excepcionPagoOptimista ?? perfil.cliente.pideSinPagarAdelanto,
+                  guardando: _guardandoExcepcionPago,
+                  onCambiar: _cambiarExcepcionPagoAdelanto,
+                )
+                .animate(delay: 120.ms)
+                .fadeIn(duration: 250.ms)
+                .moveY(begin: 8, end: 0),
+            const SizedBox(height: 16),
+          ],
           _SeccionNotas(
                 notas: _notas,
                 controller: _notaController,
@@ -811,6 +899,120 @@ class _EstadisticaChica extends StatelessWidget {
             etiqueta,
             style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// El permiso de "pedir sin pagar primero" de ESTE cliente (solo SUPERADMIN).
+///
+/// Es la excepción al cobro por adelantado con tarjeta que el dueño enciende
+/// globalmente en "Descuentos por cliente": este cliente puede seguir pidiendo
+/// sin pagar antes, porque paga su deuda semanal o mensual completa.
+///
+/// A propósito NO se pinta con el degradado de [_TarjetaPuntos] ni con ningún
+/// color de "premio": los puntos son algo que el cliente ganó, esto es un
+/// riesgo que el negocio asume. Encendido se pinta en ámbar (atención: hay pan
+/// saliendo sin cobrar), apagado en gris neutro — nunca en verde de "todo
+/// bien", que invitaría a encenderlo sin pensarlo.
+class _TarjetaPagoAdelantado extends StatelessWidget {
+  const _TarjetaPagoAdelantado({
+    required this.valor,
+    required this.guardando,
+    required this.onCambiar,
+  });
+
+  final bool valor;
+  final bool guardando;
+  final ValueChanged<bool> onCambiar;
+
+  static const _ambar = Color(0xFFB45309);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final acento = valor ? _ambar : theme.colorScheme.outline;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: const EdgeInsets.fromLTRB(18, 16, 12, 16),
+      decoration: BoxDecoration(
+        color: acento.withValues(alpha: valor ? 0.07 : 0.04),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: acento.withValues(alpha: valor ? 0.32 : 0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                valor ? Icons.credit_score_rounded : Icons.credit_card_rounded,
+                color: acento,
+                size: 28,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Puede pedir sin pagar primero',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      valor
+                          ? 'Sus pedidos de la web se registran al instante, '
+                                'aunque el pago por adelantado esté encendido '
+                                'para todos los demás.'
+                          : 'Si enciendes el pago por adelantado, a este '
+                                'cliente también se le va a exigir pagar con '
+                                'tarjeta antes de confirmarle el pedido.',
+                      style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // El indicador de carga reemplaza al switch mientras la petición
+              // viaja: deshabilitar el switch a secas dejaría al dueño sin
+              // saber si su toque se registró.
+              guardando
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : Switch(value: valor, onChanged: onCambiar),
+            ],
+          ),
+          if (valor) ...[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded, size: 15, color: acento),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Su deuda se cobra como siempre al entregar. Revísala en '
+                    'Deudas para que no se le acumule más de lo acordado.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontSize: 11,
+                      color: acento,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

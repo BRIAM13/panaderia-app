@@ -101,10 +101,16 @@ export interface DescuentoCliente {
   porcentaje: number;
 }
 
-/** Estado del pago por adelantado con Yape de un pedido (solo Panadería;
- * en cualquier otro pedido vale "NO_APLICA"). Los mismos 5 valores que
- * acepta `CK_Pedidos_EstadoPagoAdelanto` en la base — ver
- * backend_server/utils/pagoAdelanto.js. */
+/** Estado del pago por adelantado de un pedido — hoy con tarjeta vía Culqi
+ * (solo Panadería, y solo si el dueño tiene el cobro encendido; en cualquier
+ * otro pedido vale "NO_APLICA"). Los mismos 5 valores que acepta
+ * `CK_Pedidos_EstadoPagoAdelanto` en la base — ver
+ * backend_server/utils/pagoAdelanto.js.
+ *
+ * Con Culqi, en la práctica solo se ven tres: "NO_APLICA", "VERIFICANDO"
+ * (creado, esperando el cobro) y "PAGADO". Los otros dos vienen del flujo
+ * anterior (Yape, con el monto declarado por el cliente) y se conservan para
+ * los pedidos viejos y para un eventual reembolso parcial. */
 export type EstadoPagoAdelanto =
   | "NO_APLICA"
   | "VERIFICANDO"
@@ -202,6 +208,73 @@ export async function registrarCodigoPago(
     body: JSON.stringify(cuerpo),
   });
   return manejarRespuesta<RegistrarCodigoPagoResultado>(respuesta);
+}
+
+export interface PagarConCulqiInput {
+  idPedido: number;
+  /** El que devolvió `crearPedidoPublico`. Se omite cuando se llega desde el
+   * seguimiento por DNI en otro dispositivo, donde no hay token guardado. */
+  token?: string;
+  /** Alternativa al token: el mismo documento con el que se hizo el pedido. */
+  documento?: string;
+  /** El token de UN SOLO USO que devolvió Culqi.js en el navegador
+   * (`tkn_live_...`). Es lo ÚNICO que viaja de la tarjeta: el número, el CVV y
+   * la fecha nunca pasan por nuestro backend. */
+  culqiTokenId: string;
+  /** A dónde manda Culqi el comprobante del pago. Lo exige la pasarela. */
+  email: string;
+}
+
+/** Saldo o vuelto que quedó del cobro, con su id. En la práctica siempre es
+ * null: al servidor le pedimos cobrar el total EXACTO, así que no hay
+ * diferencia que ajustar. Existe porque la lógica de saldos se conserva del
+ * flujo anterior (Yape), para el día que haya un reembolso parcial. */
+export interface AjustePagoCulqi extends AjustePagoPublico {
+  idAjuste: number;
+}
+
+export interface PagarConCulqiResultado {
+  mensaje: string;
+  idPedido: number;
+  numeroPedidoDia: number;
+  /** Siempre "CONFIRMADO": si el cobro pasó, el pedido queda confirmado en la
+   * misma petición — no espera a que nadie lo revise a mano. */
+  estado: "CONFIRMADO";
+  /** "PAGADO" en la práctica (ver `AjustePagoCulqi`). */
+  estadoPagoAdelanto: EstadoPagoAdelanto;
+  total: number;
+  /** Lo que Culqi cobró de verdad, según su propia respuesta. */
+  montoCobrado: number;
+  /** La referencia del cargo (`chr_...`). Es lo que el cliente necesita tener
+   * a mano si algún día hay que reclamar algo sobre este pago. */
+  culqiChargeId: string;
+  ajuste: AjustePagoCulqi | null;
+}
+
+/**
+ * Segundo paso del pedido de Panadería cuando el cobro por adelantado está
+ * encendido: el navegador ya tokenizó la tarjeta con Culqi.js y acá se le pide
+ * al SERVIDOR que cree el cargo con su llave secreta.
+ *
+ * El monto NO viaja: lo saca el backend de `Pedidos.Total`. Si viniera de acá,
+ * cualquiera podría pedir S/ 200 de pan y cobrarse S/ 1.
+ *
+ * Los errores llegan como `ApiError` con un mensaje ya redactado en español
+ * (Culqi devuelve el suyo y el backend lo traduce cuando falta) — se puede
+ * mostrar tal cual. Un 400 es un rechazo y el pedido sigue en pie para
+ * reintentar con otra tarjeta; un 503 significa que el dueño todavía no
+ * configuró la pasarela.
+ */
+export async function pagarConCulqi(
+  input: PagarConCulqiInput,
+): Promise<PagarConCulqiResultado> {
+  const { idPedido, ...cuerpo } = input;
+  const respuesta = await fetch(`${API_BASE_URL}/publico/pedidos/${idPedido}/pagar-culqi`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cuerpo),
+  });
+  return manejarRespuesta<PagarConCulqiResultado>(respuesta);
 }
 
 async function manejarRespuesta<T>(respuesta: Response): Promise<T> {

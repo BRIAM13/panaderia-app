@@ -1,16 +1,34 @@
-// Pago por adelantado con Yape en el pedido web de Panadería.
+// Pago por adelantado del pedido web de Panadería.
 //
-// Todo lo de este archivo es PURO a propósito (ni una consulta, ni un
-// `require` de la base): la cuenta de "¿pagó justo, de menos o de más?" es
-// la que decide si al cliente le queda un saldo o un vuelto, y tiene que
-// poder probarse sola, sin levantar nada. Mismo criterio que
-// `descuentosCliente.js` y `horariosPanaderia.js`, donde el cálculo vive
-// aparte del controlador que toca la base.
+// Toda la CUENTA de este archivo es pura (`resolverPagoAdelanto`,
+// `validarMontoDeclarado`, `aCentimos`): la cuenta de "¿pagó justo, de menos
+// o de más?" es la que decide si al cliente le queda un saldo o un vuelto, y
+// tiene que poder probarse sola, sin levantar nada. Mismo criterio que
+// `descuentosCliente.js` y `horariosPanaderia.js`.
+//
+// La ÚNICA excepción es el portón de entrada (`requierePagoAdelanto` y las
+// dos funciones que lo alimentan): desde que el dueño puede encender y apagar
+// el cobro por adelantado desde la app, ese portón depende de una clave de
+// `Configuraciones` y de un flag por cliente, así que necesita la base. Se
+// mantiene acá y no en el controlador porque es la MISMA decisión de negocio
+// que el resto del archivo, y porque así hay un solo lugar que responde
+// "¿este pedido tiene que pagarse antes?".
 //
 // Ver `database_migrations/2026_09_pago_adelanto_panaderia.sql` para el
 // porqué de cada columna, y en particular por qué esto NO reutiliza
 // `Pedidos.EstadoPago` (que significa el fiado posterior a la entrega y
 // alimenta todos los reportes de deuda del sistema).
+// Ver `database_migrations/2026_09_excepcion_pago_adelanto.sql` por la
+// columna `Clientes.PideSinPagarAdelanto` y el toggle global.
+//
+// ⚠️ A propósito SIN `require('../config/db')`, aunque las dos consultas de
+//    abajo lo pedirían: ese módulo crea el pool de mysql2 al importarse, y
+//    este archivo lo importan las pruebas puras (`__tests__/pagoAdelanto.test.js`),
+//    que no deben levantar nada. El `pool` llega por parámetro —siempre el de
+//    quien llama— y los `.input()` usan la forma de DOS argumentos
+//    (nombre, valor), que la capa de compatibilidad soporta igual: los
+//    marcadores `sql.Int`/`sql.VarChar(n)` son decorativos ahí, mysql2 deduce
+//    el tipo del valor JS (ver `RequestCompat.input` en config/db.js).
 
 /** Los 5 valores de `Pedidos.EstadoPagoAdelanto` (CK_Pedidos_EstadoPagoAdelanto). */
 const ESTADO_NO_APLICA = 'NO_APLICA';
@@ -24,20 +42,47 @@ const AJUSTE_DEUDA = 'DEUDA';
 const AJUSTE_VUELTO = 'VUELTO';
 
 /**
- * Tiendas donde el pedido web exige pagar por adelantado.
+ * Tiendas CANDIDATAS a exigir pago por adelantado.
  *
- * VACÍA A PROPÓSITO: el pago por adelantado con código de operación de Yape
- * se dio de baja (el dueño va a integrar Culqi como pasarela real en su
- * lugar). El resto de este archivo, `AjustesPago` y las columnas de
- * `Pedidos` (`EstadoPagoAdelanto`, etc.) se dejan tal cual, en reposo: son
- * infraestructura reutilizable para Culqi (el estado `VERIFICANDO` mientras
- * se espera confirmación, `PAGADO`/`DEUDA_PARCIAL`/`VUELTO_PENDIENTE` como
- * resultado, `AjustesPago` para rastrear saldos) y así hay menos código que
- * tocar cuando la pasarela esté lista. Con la lista vacía,
- * `requierePagoAdelanto` es `false` siempre y Panadería vuelve a "paga al
- * recoger", igual que Hamburguesas.
+ * Ojo con lo que esta lista significa hoy: es un filtro de "qué tiendas
+ * podrían llegar a cobrar por adelantado", NO el interruptor. El interruptor
+ * real es [CLAVE_EXIGE_PAGO_ADELANTADO] en `Configuraciones`, que el dueño
+ * prende y apaga desde la app sin redeploy. Las dos condiciones se exigen
+ * juntas (ver `requierePagoAdelanto`), y son dos cosas distintas a propósito:
+ * esta lista es una decisión de ARQUITECTURA (el pan de hamburguesa es otro
+ * negocio y nunca entra en esto, pase lo que pase con la configuración),
+ * mientras la clave de Configuraciones es una decisión OPERATIVA del día a
+ * día ("hoy cobro antes" / "hoy no").
+ *
+ * Volvió a `['panaderia']` con la integración de Culqi: estuvo vacía entre el
+ * 2026-09-17 y el 2026-09-26, mientras el pago con código de operación de
+ * Yape estaba dado de baja y no había pasarela que lo reemplazara.
  */
-const SLUGS_PAGO_ADELANTO = [];
+const SLUGS_PAGO_ADELANTO = ['panaderia'];
+
+/**
+ * Clave de `Configuraciones` que enciende y apaga el cobro por adelantado.
+ *
+ * '1' = el pedido web de Panadería no se confirma hasta que Culqi cobre.
+ * '0' (o cualquier otro valor, o la clave ausente) = se registra como
+ * siempre y se paga al recoger.
+ *
+ * Mismo patrón que `DESCUENTOS_TIENDAS_HABILITADAS`: se lee de la base EN
+ * CADA pedido, sin caché en memoria, así el cambio hecho desde la app aplica
+ * en el pedido siguiente sin reiniciar nada.
+ */
+const CLAVE_EXIGE_PAGO_ADELANTADO = 'EXIGE_PAGO_ADELANTADO_PANADERIA';
+
+/**
+ * Qué pasa si la clave no existe todavía en `Configuraciones`.
+ *
+ * Falla APAGADO, y no es un detalle: encendido por defecto, una base sin
+ * sembrar convertiría todos los pedidos de pan en pedidos que exigen tarjeta
+ * — con la cuenta de Culqi del dueño todavía en trámite, o sea con el cobro
+ * respondiendo 503. Nadie podría pedir pan. Apagado, lo peor que pasa es que
+ * se siga cobrando al recoger, que es como funcionó siempre.
+ */
+const EXIGE_PAGO_ADELANTADO_POR_DEFECTO = false;
 
 /** Largo máximo aceptado para el código de operación de Yape.
  *
@@ -67,16 +112,96 @@ function aSoles(centimos) {
 }
 
 /**
- * ¿Este pedido web exige pagar por adelantado?
+ * ¿La tienda y el producto son de los que PODRÍAN exigir pago por adelantado?
  *
- * Las dos condiciones juntas, no una sola: la tienda tiene que estar en la
- * lista Y el pedido tiene que ser de pan por unidad. Hoy las dos dicen lo
- * mismo (en Panadería todo se vende por unidad), pero el día que Panadería
- * sume un producto por paquete, el pedido mínimo de 50 unidades y este
- * cobro por adelantado tienen que seguir yendo del mismo lado.
+ * La parte pura y sin base del portón, separada para poder probarla sola:
+ * la tienda tiene que estar en [SLUGS_PAGO_ADELANTO] Y el pedido tiene que
+ * ser de pan por unidad. Hoy las dos dicen casi lo mismo (en Panadería todo
+ * se vende por unidad), pero el día que Panadería sume un producto por
+ * paquete, el pedido mínimo de 50 unidades y este cobro por adelantado tienen
+ * que seguir yendo del mismo lado.
  */
-function requierePagoAdelanto({ tiendaSlug, hayPanPorUnidad }) {
+function esCandidatoAPagoAdelanto({ tiendaSlug, hayPanPorUnidad }) {
   return SLUGS_PAGO_ADELANTO.includes(String(tiendaSlug || '').trim()) && Boolean(hayPanPorUnidad);
+}
+
+/**
+ * El interruptor global, leído de `Configuraciones` en cada llamada.
+ *
+ * Sin caché a propósito (ver [CLAVE_EXIGE_PAGO_ADELANTADO]). Si la consulta
+ * falla o la clave no existe, cae a [EXIGE_PAGO_ADELANTADO_POR_DEFECTO]
+ * (apagado) en vez de propagar el error: que la base de configuración esté
+ * incompleta no puede ser motivo para que nadie pueda pedir pan.
+ */
+async function exigePagoAdelantadoConfigurado(pool) {
+  try {
+    const result = await pool
+      .request()
+      .input('Clave', CLAVE_EXIGE_PAGO_ADELANTADO)
+      .query('SELECT Valor FROM Configuraciones WHERE Clave = @Clave');
+    const valor = result.recordset[0]?.Valor;
+    if (valor === undefined || valor === null) return EXIGE_PAGO_ADELANTADO_POR_DEFECTO;
+    // Solo '1' enciende. Cualquier otra cosa ('0', '', 'true', basura) apaga:
+    // el valor lo edita un humano desde la app y un "sí" ambiguo no puede
+    // terminar en un cobro obligatorio.
+    return String(valor).trim() === '1';
+  } catch (err) {
+    console.warn('No se pudo leer EXIGE_PAGO_ADELANTADO_PANADERIA, se asume apagado:', err.message);
+    return EXIGE_PAGO_ADELANTADO_POR_DEFECTO;
+  }
+}
+
+/**
+ * ¿Este cliente en concreto tiene permiso para pedir SIN pagar primero?
+ *
+ * `Clientes.PideSinPagarAdelanto` — la excepción que pidió el dueño para los
+ * clientes de siempre, los que le pagan la semana o el mes completo de una
+ * vez (bodegas, puestos de mercado). Para ellos exigir tarjeta pedido por
+ * pedido sería romperles la forma de trabajar que ya tenían acordada.
+ *
+ * `idCliente` puede venir null (un visitante que todavía no existe como
+ * cliente en la base): sin fila no hay excepción posible, así que se
+ * responde false sin consultar nada.
+ *
+ * También falla CERRADO al revés que el toggle: si la consulta revienta, se
+ * asume que NO tiene la excepción (o sea, se le exige pagar). Regalar la
+ * excepción por un error de base sería regalar pan al fiado.
+ */
+async function clientePideSinPagarAdelanto(pool, idCliente) {
+  if (idCliente === null || idCliente === undefined) return false;
+  try {
+    const result = await pool
+      .request()
+      .input('IdCliente', idCliente)
+      .query('SELECT PideSinPagarAdelanto FROM Clientes WHERE IdCliente = @IdCliente');
+    return Boolean(result.recordset[0]?.PideSinPagarAdelanto);
+  } catch (err) {
+    // Incluye el caso "la migración 2026_09_excepcion_pago_adelanto todavía
+    // no se corrió" (Unknown column): el sistema sigue funcionando como
+    // antes de la excepción, sin tumbar el pedido.
+    console.warn('No se pudo leer Clientes.PideSinPagarAdelanto, se asume sin excepción:', err.message);
+    return false;
+  }
+}
+
+/**
+ * ¿Este pedido web exige pagar por adelantado? EL portón, las tres
+ * condiciones juntas:
+ *
+ *   1. la tienda y el producto son candidatos (Panadería, pan por unidad);
+ *   2. el dueño tiene el cobro ENCENDIDO en Configuraciones;
+ *   3. este cliente NO tiene la excepción de "paga después".
+ *
+ * El orden importa por costo: la condición 1 es pura y descarta de una todos
+ * los pedidos de hamburguesa sin gastar ni una consulta. La 3 solo se
+ * consulta si la 2 dio verdadero, porque con el cobro apagado la excepción
+ * es irrelevante.
+ */
+async function requierePagoAdelanto({ pool, tiendaSlug, hayPanPorUnidad, idCliente }) {
+  if (!esCandidatoAPagoAdelanto({ tiendaSlug, hayPanPorUnidad })) return false;
+  if (!pool) return false;
+  if (!(await exigePagoAdelantadoConfigurado(pool))) return false;
+  return !(await clientePideSinPagarAdelanto(pool, idCliente));
 }
 
 /**
@@ -198,7 +323,12 @@ module.exports = {
   AJUSTE_DEUDA,
   AJUSTE_VUELTO,
   SLUGS_PAGO_ADELANTO,
+  CLAVE_EXIGE_PAGO_ADELANTADO,
+  EXIGE_PAGO_ADELANTADO_POR_DEFECTO,
   LARGO_MAXIMO_CODIGO,
+  esCandidatoAPagoAdelanto,
+  exigePagoAdelantadoConfigurado,
+  clientePideSinPagarAdelanto,
   requierePagoAdelanto,
   normalizarCodigoOperacion,
   codigoOperacionValido,

@@ -6,7 +6,7 @@ import {
   avisoPagoAdelanto,
   borrarPagoPendiente,
   codigoOperacionValido,
-  esperaCodigoDePago,
+  esperaPagoDelCliente,
   guardarPagoPendiente,
   leerPagoPendiente,
   limpiarCodigoOperacion,
@@ -170,33 +170,35 @@ describe("pendiente guardado — retomar el pago tras una pestaña muerta", () =
   });
 });
 
-describe("esperaCodigoDePago — a qué pedidos se les ofrece meter el código", () => {
-  test("Panadería sin código todavía: sí", () => {
+describe("esperaPagoDelCliente — a qué pedidos se les ofrece pagar con tarjeta", () => {
+  test("Panadería esperando su pago: sí", () => {
     expect(
-      esperaCodigoDePago(pedido({ estadoPagoAdelanto: "VERIFICANDO", codigoOperacionYape: null })),
+      esperaPagoDelCliente(pedido({ estadoPagoAdelanto: "VERIFICANDO", codigoOperacionYape: null })),
     ).toBe(true);
   });
 
-  test("ya mandó su código: no (una sola vez por pedido)", () => {
+  test("un pedido VIEJO que alcanzó a mandar su código de Yape: no", () => {
+    // Ese ya pagó, por el camino de antes, y está esperando que una persona lo
+    // verifique. Ofrecerle pagar de nuevo sería cobrarle dos veces.
     expect(
-      esperaCodigoDePago(pedido({ estadoPagoAdelanto: "VERIFICANDO", codigoOperacionYape: "1234567" })),
+      esperaPagoDelCliente(pedido({ estadoPagoAdelanto: "VERIFICANDO", codigoOperacionYape: "1234567" })),
     ).toBe(false);
   });
 
   test("un pedido de hamburguesa nunca lo pide", () => {
-    expect(esperaCodigoDePago(pedido({ estadoPagoAdelanto: "NO_APLICA" }))).toBe(false);
+    expect(esperaPagoDelCliente(pedido({ estadoPagoAdelanto: "NO_APLICA" }))).toBe(false);
     // Backend viejo (sin el campo) se comporta igual que NO_APLICA.
-    expect(esperaCodigoDePago(pedido())).toBe(false);
+    expect(esperaPagoDelCliente(pedido())).toBe(false);
   });
 
   test("un pedido cancelado o rechazado ya no acepta pagos", () => {
     expect(
-      esperaCodigoDePago(
+      esperaPagoDelCliente(
         pedido({ estadoPagoAdelanto: "VERIFICANDO", codigoOperacionYape: null, estado: "CANCELADO" }),
       ),
     ).toBe(false);
     expect(
-      esperaCodigoDePago(
+      esperaPagoDelCliente(
         pedido({ estadoPagoAdelanto: "VERIFICANDO", codigoOperacionYape: null, estado: "RECHAZADO" }),
       ),
     ).toBe(false);
@@ -209,22 +211,24 @@ describe("avisoPagoAdelanto — qué se le dice al cliente sobre su pago", () =>
     expect(avisoPagoAdelanto(pedido())).toBeNull();
   });
 
-  test("falta el código: se le pide, en tono de que hay algo por hacer", () => {
+  test("falta pagar: se le pide, en tono de que hay algo por hacer", () => {
     const aviso = avisoPagoAdelanto(pedido({ estadoPagoAdelanto: "VERIFICANDO", codigoOperacionYape: null }));
     expect(aviso).toEqual({
-      texto: "Falta tu código de operación de Yape para confirmar el pedido.",
+      texto: "Falta pagar tu pedido con tarjeta para confirmarlo.",
       tono: "atencion",
     });
   });
 
-  test("código mandado, sin verificar todavía: solo informa", () => {
+  test("pedido viejo con código de Yape mandado, sin verificar todavía: solo informa", () => {
+    // El único caso en que este aviso sigue hablando del flujo anterior: no
+    // hay nada que el cliente pueda hacer, lo tiene que revisar la tienda.
     const aviso = avisoPagoAdelanto(
       pedido({ estadoPagoAdelanto: "VERIFICANDO", codigoOperacionYape: "1234567" }),
     );
     expect(aviso?.tono).toBe("espera");
   });
 
-  test("pago verificado exacto: nada pendiente", () => {
+  test("pago confirmado exacto: nada pendiente", () => {
     const aviso = avisoPagoAdelanto(pedido({ estadoPagoAdelanto: "PAGADO", estado: "CONFIRMADO" }));
     expect(aviso?.tono).toBe("bien");
   });

@@ -212,7 +212,10 @@ class _AnaliticaPageState extends State<AnaliticaPage> {
   void _abrirPerfil(ClienteResumenLigero cliente) {
     pushSlideUpFade(
       context,
-      (_) => ClientePerfilPage.porId(idCliente: cliente.idCliente),
+      (_) => ClientePerfilPage.porId(
+        idCliente: cliente.idCliente,
+        rolUsuario: widget.usuario.rol,
+      ),
     );
   }
 

@@ -198,6 +198,12 @@ function mapearCliente(fila) {
     activo: fila.Estado === undefined ? true : Boolean(fila.Estado),
     telefonoVerificado: Boolean(fila.TelefonoVerificado),
     emailVerificado: Boolean(fila.EmailVerificado),
+    // La excepción al cobro por adelantado con tarjeta (ver
+    // `actualizarExcepcionPagoAdelanto`). `Boolean()` de un undefined da
+    // false, así que un SELECT que no traiga la columna —o una base donde la
+    // migración 2026_09_excepcion_pago_adelanto todavía no corrió— responde
+    // "sin excepción", que es el valor seguro.
+    pideSinPagarAdelanto: Boolean(fila.PideSinPagarAdelanto),
   };
 }
 
@@ -219,6 +225,7 @@ async function obtenerPerfilCliente(req, res, next) {
       .input('IdCliente', sql.Int, id)
       .query(`
         SELECT c.IdCliente, c.DescripcionNegocio, c.NombreComercialOficial, c.PuntosFidelidad, c.Estado,
+               c.PideSinPagarAdelanto,
                p.IdPersona, p.DNI, p.Nombres, p.ApellidoPaterno, p.ApellidoMaterno,
                p.Telefono, p.Email, p.Direccion, p.OrigenValidacion, p.TelefonoVerificado, p.EmailVerificado
         FROM Clientes c
@@ -602,6 +609,7 @@ async function listarClientes(req, res, next) {
     const pool = await getPool();
     const result = await pool.request().query(`
       SELECT c.IdCliente, c.DescripcionNegocio, c.NombreComercialOficial, c.PuntosFidelidad, c.Estado,
+             c.PideSinPagarAdelanto,
              p.IdPersona, p.DNI, p.Nombres, p.ApellidoPaterno, p.ApellidoMaterno,
              p.Telefono, p.Email, p.Direccion, p.OrigenValidacion, p.TelefonoVerificado, p.EmailVerificado
       FROM Clientes c
@@ -955,6 +963,76 @@ async function actualizarCliente(req, res, next) {
     return res.status(200).json({ mensaje: 'Cliente actualizado correctamente', cuentaClonada: clonacion.creado });
   } catch (err) {
     await transaction.rollback();
+    return next(err);
+  }
+}
+
+/**
+ * `PUT /clientes/:id/pago-adelanto` — el SUPERADMIN marca (o desmarca) a un
+ * cliente como "puede pedir sin pagar primero".
+ *
+ * POR QUÉ EXISTE. Cuando el cobro por adelantado con tarjeta está encendido
+ * (ver `EXIGE_PAGO_ADELANTADO_PANADERIA` en utils/pagoAdelanto.js), un pedido
+ * de pan no se confirma hasta que Culqi cobre. Eso está bien para el cliente
+ * que pide una vez, pero rompe el acuerdo que el dueño ya tenía con sus
+ * clientes de siempre —bodegas, puestos de mercado— que le pagan la semana o
+ * el mes COMPLETOS de una vez. A ellos exigirles la tarjeta pedido por pedido
+ * los sacaría del negocio. Esta marca los deja pedir como siempre, con el
+ * cobro global encendido para todos los demás.
+ *
+ * SOLO SUPERADMIN, más estricto que el resto de este archivo (que se abre a
+ * TRABAJADOR/ADMIN): esto es una línea de crédito. Quien la enciende está
+ * autorizando a alguien a llevarse pan sin pagarlo en el momento, y esa
+ * decisión es del dueño, no del personal de piso.
+ *
+ * El candado real está en la ruta (`autorizarRoles('SUPERADMIN')`); acá NO se
+ * repite el chequeo de rol, igual que el resto de los controladores de este
+ * archivo, para no tener dos fuentes de verdad sobre quién puede qué.
+ */
+async function actualizarExcepcionPagoAdelanto(req, res, next) {
+  const { id } = req.params;
+  const { pideSinPagarAdelanto } = req.body || {};
+
+  // Solo un booleano de verdad. Un `"false"` en texto es `true` al pasarlo por
+  // Boolean(), y ese descuido acá significaría regalar la excepción a un
+  // cliente al que se la querían quitar.
+  if (typeof pideSinPagarAdelanto !== 'boolean') {
+    return res.status(400).json({ mensaje: 'Indica si el cliente puede pedir sin pagar primero (true o false).' });
+  }
+
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input('IdCliente', sql.Int, id)
+      .input('PideSinPagarAdelanto', sql.Bit, pideSinPagarAdelanto)
+      .query(`
+        UPDATE Clientes
+        SET PideSinPagarAdelanto = @PideSinPagarAdelanto
+        WHERE IdCliente = @IdCliente
+      `);
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ mensaje: 'Cliente no encontrado' });
+    }
+
+    await registrarAuditoria({
+      idUsuario: req.usuario.idUsuario,
+      accion: 'ACTUALIZAR_EXCEPCION_PAGO_ADELANTO',
+      tablaAfectada: 'Clientes',
+      registroAfectadoId: String(id),
+      datosNuevos: { pideSinPagarAdelanto },
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return res.status(200).json({
+      mensaje: pideSinPagarAdelanto
+        ? 'Este cliente ya puede registrar sus pedidos sin pagar primero.'
+        : 'Este cliente vuelve a tener que pagar antes de que se confirme su pedido.',
+      pideSinPagarAdelanto,
+    });
+  } catch (err) {
     return next(err);
   }
 }
@@ -1367,6 +1445,7 @@ module.exports = {
   listarClientes,
   crearCliente,
   actualizarCliente,
+  actualizarExcepcionPagoAdelanto,
   desactivarCliente,
   reactivarCliente,
   obtenerMiPerfil,

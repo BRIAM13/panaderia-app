@@ -3,6 +3,7 @@ const {
   listarClientes,
   crearCliente,
   actualizarCliente,
+  actualizarExcepcionPagoAdelanto,
   desactivarCliente,
   reactivarCliente,
   obtenerMiPerfil,
@@ -70,6 +71,12 @@ router.post('/', validateCliente, crearCliente);
 router.put('/:id', validateCliente, actualizarCliente);
 router.delete('/:id', desactivarCliente);
 router.put('/:id/reactivar', reactivarCliente);
+
+// Excepción al cobro por adelantado con tarjeta: este cliente puede pedir sin
+// pagar primero porque paga su deuda semanal/mensual completa. EXCLUSIVO
+// SUPERADMIN, más estricto que el resto del CRUD de arriba — es una línea de
+// crédito, y quién la recibe lo decide el dueño, no el personal de piso.
+router.put('/:id/pago-adelanto', autorizarRoles('SUPERADMIN'), actualizarExcepcionPagoAdelanto);
 
 // Analítica de la cartera completa (conteo por segmento + clientes en
 // riesgo + top por gasto) — exclusivo ADMIN/SUPERADMIN, igual que la

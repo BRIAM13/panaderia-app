@@ -23,6 +23,16 @@ const _claveDescuentoFrecuente = 'DESCUENTO_SEGMENTO_FRECUENTE';
 const _claveDescuentoVip = 'DESCUENTO_SEGMENTO_VIP';
 const _claveTiendasHabilitadas = 'DESCUENTOS_TIENDAS_HABILITADAS';
 
+/// El interruptor del cobro por adelantado con tarjeta (Culqi) del pedido web
+/// de Panadería — misma clave que lee `utils/pagoAdelanto.js` en CADA pedido.
+///
+/// Vive en esta pantalla y no en una propia porque es la otra mitad de la
+/// misma conversación: acá se decide qué se le descuenta al cliente cuando
+/// pide por la web, y acá también si tiene que pagarlo antes de que el pedido
+/// se confirme. Son las dos condiciones comerciales del pedido web, y el dueño
+/// las ajusta en la misma sesión.
+const _claveExigePagoAdelantado = 'EXIGE_PAGO_ADELANTADO_PANADERIA';
+
 const _verdeExito = Color(0xFF16A34A);
 const _porcentajeMaximo = 100.0;
 
@@ -87,9 +97,19 @@ final _segmentos = <_Segmento>[
   ),
 ];
 
-/// Descuento por fidelidad de la página web pública: qué porcentaje recibe
-/// cada segmento del CRM (el mismo que ya se ve en la ficha de cada cliente
-/// y en Analítica) y en qué tiendas está activo.
+/// Las condiciones comerciales del pedido web público, todas en una pantalla:
+///
+///   * el descuento por fidelidad — qué porcentaje recibe cada segmento del
+///     CRM (el mismo que ya se ve en la ficha de cada cliente y en Analítica)
+///     y en qué tiendas está activo;
+///   * el cobro por adelantado con tarjeta — si el pedido de pan se confirma
+///     recién cuando la pasarela cobra, o si se registra al instante y se paga
+///     al recoger (ver [_claveExigePagoAdelantado]).
+///
+/// Los dos viven juntos porque son la misma conversación ("cómo le cobro al
+/// que pide por la web") y el dueño los ajusta en la misma sesión. La
+/// EXCEPCIÓN por cliente del cobro por adelantado no está acá: es un atributo
+/// de cada cliente y vive en su perfil (ver `ClientePerfilVista`).
 ///
 /// Todo vive en `Configuraciones`, así que esta pantalla no tiene ningún
 /// endpoint propio: usa el genérico `GET/PUT /configuraciones/:clave` — el
@@ -141,6 +161,20 @@ class _DescuentosClientesPageState extends State<DescuentosClientesPage> {
   /// silencio.
   final Set<String> _slugsHabilitados = {};
 
+  /// El interruptor del cobro por adelantado con tarjeta (ver
+  /// [_claveExigePagoAdelantado]).
+  bool _exigePagoAdelantado = false;
+
+  /// true cuando [_claveExigePagoAdelantado] todavía NO existe en la base (o
+  /// sea, falta correr `2026_09_excepcion_pago_adelanto.sql`).
+  ///
+  /// Se guarda aparte en vez de dejar que el 404 tumbe la pantalla entera: los
+  /// descuentos son un feature viejo y ya funcionando, y no pueden quedar
+  /// ineditables porque falte la clave de un feature nuevo. Con esto, la
+  /// tarjeta del interruptor se dibuja deshabilitada y explicando qué falta,
+  /// mientras el resto de la pantalla sigue en pie.
+  bool _faltaClavePagoAdelantado = false;
+
   @override
   void dispose() {
     for (final controlador in _porcentajes.values) {
@@ -169,6 +203,23 @@ class _DescuentosClientesPageState extends State<DescuentosClientesPage> {
       ]);
       final tiendas = await _tiendasService.listar();
 
+      // El interruptor del cobro por adelantado se lee APARTE y tolerando el
+      // 404, a propósito: si se metiera en el `Future.wait` de arriba, una base
+      // donde todavía no se corrió `2026_09_excepcion_pago_adelanto.sql`
+      // dejaría los descuentos —un feature viejo y funcionando— sin poder
+      // editarse. Ver [_faltaClavePagoAdelantado].
+      var exigePago = false;
+      var faltaClave = false;
+      try {
+        exigePago = (await _configuracionesService.obtener(_claveExigePagoAdelantado)).trim() == '1';
+      } on ApiException catch (e) {
+        if (e.statusCode == 404) {
+          faltaClave = true;
+        } else {
+          rethrow;
+        }
+      }
+
       setState(() {
         for (var i = 0; i < _segmentos.length; i++) {
           _porcentajes[_segmentos[i].clave]!.text = _textoPorcentaje(valores[i]);
@@ -182,6 +233,8 @@ class _DescuentosClientesPageState extends State<DescuentosClientesPage> {
                 .map((slug) => slug.trim())
                 .where((slug) => slug.isNotEmpty),
           );
+        _exigePagoAdelantado = exigePago;
+        _faltaClavePagoAdelantado = faltaClave;
       });
     } on ApiException catch (e) {
       setState(() {
@@ -247,6 +300,14 @@ class _DescuentosClientesPageState extends State<DescuentosClientesPage> {
     });
   }
 
+  void _alternarPagoAdelantado(bool activa) {
+    setState(() {
+      _exigePagoAdelantado = activa;
+      _mensajeExito = null;
+      _error = null;
+    });
+  }
+
   Future<void> _guardar() async {
     // Se validan TODOS los campos antes de mandar el primero: guardar a
     // medias dejaría tres segmentos con el valor nuevo y dos con el viejo,
@@ -270,6 +331,13 @@ class _DescuentosClientesPageState extends State<DescuentosClientesPage> {
     final slugsOrdenados = _slugsHabilitados.toList()..sort();
     aGuardar[_claveTiendasHabilitadas] = slugsOrdenados.join(',');
 
+    // El interruptor solo se manda si la clave existe: si falta, el PUT
+    // respondería 404 y tumbaría el guardado de los descuentos, que sí se
+    // pueden guardar.
+    if (!_faltaClavePagoAdelantado) {
+      aGuardar[_claveExigePagoAdelantado] = _exigePagoAdelantado ? '1' : '0';
+    }
+
     setState(() {
       _guardando = true;
       _error = null;
@@ -280,11 +348,7 @@ class _DescuentosClientesPageState extends State<DescuentosClientesPage> {
         await _configuracionesService.actualizar(entrada.key, entrada.value);
       }
       setState(() {
-        _mensajeExito = slugsOrdenados.isEmpty
-            ? 'Guardado. Ojo: no dejaste ninguna tienda con descuento, así que '
-                  'por ahora la página web no descuenta nada.'
-            : 'Descuentos actualizados. Los próximos pedidos desde la página '
-                  'web ya los usan.';
+        _mensajeExito = _mensajeGuardado(slugsOrdenados);
       });
     } on ApiException catch (e) {
       setState(() => _error = e.mensaje);
@@ -293,6 +357,51 @@ class _DescuentosClientesPageState extends State<DescuentosClientesPage> {
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  /// Qué se le dice al dueño después de guardar.
+  ///
+  /// Lo que se prioriza es lo que puede sorprenderlo. Encender el cobro por
+  /// adelantado es el cambio de más consecuencia de esta pantalla —a partir de
+  /// ese momento NINGÚN pedido web de pan se confirma sin tarjeta— así que ese
+  /// aviso va primero y nombra explícitamente la excepción por cliente, que es
+  /// el escape que va a necesitar en cuanto una bodega le reclame.
+  String _mensajeGuardado(List<String> slugsOrdenados) {
+    if (!_faltaClavePagoAdelantado && _exigePagoAdelantado) {
+      return 'Guardado. Desde ahora los pedidos de pan de la página web NO se '
+          'registran hasta que el cliente los pague con tarjeta. Los clientes '
+          'que te pagan por semana o por mes los marcas uno por uno en su '
+          'perfil, con "Puede pedir sin pagar primero".';
+    }
+    if (slugsOrdenados.isEmpty) {
+      return 'Guardado. Ojo: no dejaste ninguna tienda con descuento, así que '
+          'por ahora la página web no descuenta nada.';
+    }
+    return 'Guardado. Los próximos pedidos desde la página web ya usan estos '
+        'descuentos, y se siguen pagando al recoger.';
+  }
+
+  /// La tarjeta del interruptor global del cobro por adelantado. Es una lista
+  /// de un solo elemento para poder alimentar igual el layout de celular
+  /// (columna) y el de escritorio (paneles), como las otras dos.
+  List<Widget> _tarjetasPagoAdelantado() {
+    if (_faltaClavePagoAdelantado) {
+      return const [
+        _AvisoSuave(
+          texto:
+              'Todavía no se puede usar: falta correr la migración '
+              'database_migrations/2026_09_excepcion_pago_adelanto.sql en la '
+              'base de datos. Esa migración crea esta configuración y la '
+              'columna del permiso por cliente.',
+        ),
+      ];
+    }
+    return [
+      _TarjetaInterruptorPago(
+        valor: _exigePagoAdelantado,
+        onCambiar: _alternarPagoAdelantado,
+      ),
+    ];
   }
 
   @override
@@ -445,6 +554,23 @@ class _DescuentosClientesPageState extends State<DescuentosClientesPage> {
             if (i > 0) const SizedBox(height: 12),
             tarjeta.animate().fadeIn(delay: (400 + i * 40).ms, duration: 250.ms),
           ],
+          const SizedBox(height: 28),
+          Text(
+            'Pago por adelantado',
+            style: theme.textTheme.titleLarge,
+          ).animate().fadeIn(delay: 480.ms, duration: 250.ms),
+          const SizedBox(height: 6),
+          Text(
+            'Si lo enciendes, los pedidos de pan hechos desde la página web no '
+            'se registran hasta que el cliente los pague con tarjeta. Apagado, '
+            'se registran al instante y se pagan al recoger, como siempre.',
+            style: theme.textTheme.bodyMedium,
+          ).animate().fadeIn(delay: 500.ms, duration: 250.ms),
+          const SizedBox(height: 20),
+          for (final (i, tarjeta) in _tarjetasPagoAdelantado().indexed) ...[
+            if (i > 0) const SizedBox(height: 12),
+            tarjeta.animate().fadeIn(delay: (540 + i * 40).ms, duration: 250.ms),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 16),
             Text(
@@ -500,6 +626,20 @@ class _DescuentosClientesPageState extends State<DescuentosClientesPage> {
             'mundo.',
         hijos: _tarjetasTiendas(),
       ),
+      // Panel propio y no una tarjeta más dentro de "Tiendas con descuento":
+      // es otra decisión (cuándo se cobra, no cuánto se descuenta) y mezclarla
+      // ahí invitaría a leerla como si fuera algo por tienda, cuando es un
+      // interruptor único de todo el pedido web de pan.
+      PanelEscritorio(
+        icono: PhosphorIconsRegular.creditCard,
+        titulo: 'Pago por adelantado',
+        acento: AppColors.primary,
+        subtitulo:
+            'Si lo enciendes, los pedidos de pan hechos desde la página web no '
+            'se registran hasta que el cliente los pague con tarjeta. Apagado, '
+            'se registran al instante y se pagan al recoger, como siempre.',
+        hijos: _tarjetasPagoAdelantado(),
+      ),
     ];
 
     Widget columna(List<Widget> paneles, int desfase) => Column(
@@ -526,8 +666,9 @@ class _DescuentosClientesPageState extends State<DescuentosClientesPage> {
                   icono: PhosphorIconsDuotone.percent,
                   titulo: 'Descuentos por cliente',
                   subtitulo:
-                      'El descuento automático que reciben los clientes al '
-                      'pedir desde la página web, según su segmento. Los '
+                      'Las dos condiciones del pedido web: cuánto se le '
+                      'descuenta a cada cliente según su segmento, y si tiene '
+                      'que pagar por adelantado con tarjeta o al recoger. Los '
                       'cambios se aplican al guardar, sin necesidad de volver '
                       'a publicar la web.',
                 )
@@ -731,6 +872,142 @@ class _TarjetaPorcentaje extends StatelessWidget {
           color: AppColors.primary.withValues(alpha: 0.03),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.primary.withValues(alpha: 0.10)),
+        ),
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        child: contenido,
+      );
+    }
+
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+        child: contenido,
+      ),
+    );
+  }
+}
+
+/// El interruptor del cobro por adelantado con tarjeta.
+///
+/// A diferencia de los interruptores de tienda, este dice en pantalla QUÉ VA A
+/// PASAR en cada posición, con las palabras del negocio y no con las del
+/// sistema. Es el ajuste de más consecuencia de toda la pantalla —encendido,
+/// ningún pedido de pan de la web se confirma sin tarjeta— y el dueño tiene
+/// que poder confirmar de un vistazo que entendió bien antes de guardar, sin
+/// tener que probarlo con un pedido real.
+class _TarjetaInterruptorPago extends StatelessWidget {
+  const _TarjetaInterruptorPago({required this.valor, required this.onCambiar});
+
+  final bool valor;
+  final ValueChanged<bool> onCambiar;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final acento = valor ? AppColors.primary : theme.colorScheme.outline;
+
+    final contenido = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    acento.withValues(alpha: valor ? 0.20 : 0.18),
+                    acento.withValues(alpha: valor ? 0.08 : 0.06),
+                  ],
+                ),
+                border: Border.all(
+                  color: acento.withValues(alpha: valor ? 0.35 : 0.30),
+                  width: 1.4,
+                ),
+              ),
+              child: PhosphorIcon(
+                PhosphorIconsRegular.creditCard,
+                color: acento,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    valor ? 'Cobrar antes de registrar' : 'Registrar y cobrar al recoger',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    valor
+                        ? 'El pedido queda esperando y solo se confirma cuando '
+                              'la pasarela cobra la tarjeta.'
+                        : 'El pedido se registra al instante y el cliente paga '
+                              'cuando viene a recogerlo.',
+                    style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Switch(value: valor, onChanged: onCambiar),
+          ],
+        ),
+        // La excepción por cliente solo se nombra cuando el cobro está
+        // encendido: apagado no existe nada de lo que haya que exceptuar, y
+        // decirlo igual sería ruido.
+        if (valor) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.14)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                PhosphorIcon(
+                  PhosphorIconsRegular.userCheck,
+                  color: AppColors.primary,
+                  size: 16,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'A los clientes que te pagan por semana o por mes los '
+                    'exceptúas uno por uno: entra a su perfil desde Clientes y '
+                    'enciende "Puede pedir sin pagar primero". Esos siguen '
+                    'pidiendo sin pagar antes, aunque este interruptor esté '
+                    'encendido.',
+                    style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+
+    if (esEscritorio(context)) {
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: acento.withValues(alpha: valor ? 0.06 : 0.03),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: acento.withValues(alpha: valor ? 0.30 : 0.14)),
         ),
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
         child: contenido,

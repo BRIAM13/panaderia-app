@@ -8,6 +8,7 @@ const {
   enviarCorreoActivacion,
 } = require('../services/activacionService');
 const {
+  notificarCliente,
   notificarPersonalTienda,
   SELECT_PEDIDOS_BASE,
   armarPedidosConItems,
@@ -22,8 +23,17 @@ const {
   normalizarCodigoOperacion,
   codigoOperacionValido,
   validarMontoDeclarado,
+  resolverPagoAdelanto,
+  describirResultadoPago,
   LARGO_MAXIMO_CODIGO,
 } = require('../utils/pagoAdelanto');
+const {
+  culqiConfigurado,
+  aCentimosCulqi,
+  tokenCulqiValido,
+  montoCobradoEnSoles,
+  crearCargoCulqi,
+} = require('../utils/pagoCulqi');
 const { calcularDescuentoCliente, aplicarDescuento } = require('../utils/descuentosCliente');
 const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
 const crypto = require('crypto');
@@ -676,10 +686,21 @@ async function crearPedidoPublico(req, res, next) {
     const numeroPedidoDia = await obtenerSiguienteNumeroPedidoDia(transaction, idTienda);
     const notaWeb = `PEDIDO WEB — Cel: ${telefonoLimpio}${notas ? ' — ' + String(notas).trim().toUpperCase() : ''}`;
 
-    // Pago por adelantado: solo Panadería con pan por unidad. Cualquier
-    // otro pedido web (el pan de hamburguesa por paquete) sigue como
-    // siempre, con 'NO_APLICA' y sin token — ver utils/pagoAdelanto.js.
-    const exigePagoAdelanto = requierePagoAdelanto({ tiendaSlug: slugTienda, hayPanPorUnidad });
+    // Pago por adelantado con tarjeta (Culqi): solo Panadería con pan por
+    // unidad, solo si el dueño lo tiene ENCENDIDO en Configuraciones, y solo
+    // si este cliente no tiene la excepción de "paga su deuda después".
+    // Cualquier otro pedido web (el pan de hamburguesa por paquete) sigue
+    // como siempre, con 'NO_APLICA' y sin token — ver utils/pagoAdelanto.js.
+    //
+    // Se consulta con `pool` y no con la transacción abierta, igual que el
+    // descuento de arriba: lo que se lee es configuración y el flag del
+    // cliente, datos ya commiteados que nada de esta transacción toca.
+    const exigePagoAdelanto = await requierePagoAdelanto({
+      pool,
+      tiendaSlug: slugTienda,
+      hayPanPorUnidad,
+      idCliente,
+    });
     const estadoPagoAdelanto = exigePagoAdelanto ? ESTADO_VERIFICANDO : ESTADO_NO_APLICA;
     const tokenConfirmacionPago = exigePagoAdelanto ? generarTokenConfirmacionPago() : null;
 
@@ -744,14 +765,14 @@ async function crearPedidoPublico(req, res, next) {
       idTienda,
       titulo: 'Nuevo pedido desde la página web',
       cuerpo: exigePagoAdelanto
-        ? `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}. Está pagando por Yape; cuando mande su código, verifícalo en la app.`
+        ? `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}. Está pagando con tarjeta; el sistema lo confirma solo en cuanto el pago pase.`
         : `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}. Cel: ${telefonoLimpio}. Confírmalo en la app.`,
       datos: { tipo: 'PEDIDO_SOLICITADO', idTienda: String(idTienda), idPedido: String(idPedido) },
     });
 
     return res.status(201).json({
       mensaje: exigePagoAdelanto
-        ? 'Registramos tu pedido. Ahora paga por Yape y escribe tu código de operación para que lo confirmemos.'
+        ? 'Registramos tu pedido. Solo falta pagarlo con tu tarjeta para que quede confirmado.'
         : 'Recibimos tu pedido. Te llamaremos al número que dejaste para confirmarlo.',
       // El pedido YA existe con estos dos datos, aunque todavía no se haya
       // pagado: son lo que la página guarda en localStorage para poder
@@ -759,9 +780,10 @@ async function crearPedidoPublico(req, res, next) {
       // cliente está en Yape (ver el encabezado de esta función).
       idPedido,
       numeroPedidoDia,
-      // Solo en Panadería. `tokenConfirmacionPago` es lo único de toda la
-      // respuesta que no se le muestra al cliente: viaja para poder mandar
-      // después el código de operación (registrarCodigoPagoPublico).
+      // Solo en Panadería con el cobro por adelantado encendido.
+      // `tokenConfirmacionPago` es lo único de toda la respuesta que no se le
+      // muestra al cliente: viaja para poder pagar después sin tener login
+      // (pagarPedidoCulqi).
       estadoPagoAdelanto,
       tokenConfirmacionPago,
       // `total` sigue siendo lo que el cliente paga (ya descontado): la
@@ -940,6 +962,317 @@ async function registrarCodigoPagoPublico(req, res, next) {
 }
 
 /**
+ * `POST /publico/pedidos/:idPedido/pagar-culqi` — el segundo paso del pedido
+ * de Panadería cuando el cobro por adelantado está encendido: el cliente ya
+ * tokenizó su tarjeta en el navegador con Culqi.js y manda ese token para que
+ * el SERVIDOR cree el cargo.
+ *
+ * POR QUÉ ES UN ENDPOINT NUEVO Y NO `registrarCodigoPagoPublico`. Los dos
+ * reciben "la prueba de que pagué" de un pedido ya creado, pero ahí se acaba
+ * el parecido. El de Yape guardaba un texto que una PERSONA iba a contrastar
+ * después contra su app, y por eso no cambiaba de estado. Este HACE el cobro:
+ * sale a la red, y si Culqi dice que sí, el pedido pasa a 'CONFIRMADO' en la
+ * misma petición, sin que intervenga nadie. Mezclar los dos en una función
+ * habría significado una máquina de estados con dos finales distintos según
+ * qué campo vino en el body.
+ *
+ * Cómo se prueba que el pedido es suyo, sin login: exactamente el mismo
+ * criterio que `registrarCodigoPagoPublico` — o el `token` que recibió al
+ * crear el pedido (viene de localStorage), o el `documento` con el que lo
+ * hizo (para el caso de "se me murió la pestaña y estoy en otro celular").
+ * 404 genérico si no coincide ninguno, para no confirmar que ese IdPedido
+ * existe. Vale la misma consideración de entonces: ninguno es una credencial
+ * fuerte, y lo que de verdad limita el daño es la máquina de estados (solo
+ * 'VERIFICANDO' acepta un cobro) más el hecho de que quien pague de más un
+ * pedido ajeno solo consigue pagarle el pan a un desconocido.
+ *
+ * ORDEN DE LAS DOS OPERACIONES: primero el cargo en Culqi, DESPUÉS la
+ * transacción de base. Al revés —o con el cargo dentro de la transacción—
+ * una llamada de red de hasta 20s mantendría abiertos los locks sobre la fila
+ * del pedido todo ese rato. El costo de este orden es un hueco real, tratado
+ * explícitamente más abajo: si Culqi cobra y la base falla a continuación, el
+ * cliente pagó y su pedido no quedó confirmado.
+ */
+async function pagarPedidoCulqi(req, res, next) {
+  if (limiteExcedido(req.ip)) {
+    return res.status(429).json({ mensaje: 'Demasiados intentos. Intenta de nuevo en unos minutos, o contáctanos directamente.' });
+  }
+
+  // Antes que nada, y antes de tocar la base: sin llave secreta no hay forma
+  // de cobrar. El dueño todavía está tramitando su cuenta Culqi, así que este
+  // es el estado NORMAL del sistema hasta que llene CULQI_SECRET_KEY — tiene
+  // que decirlo claro y no reventar con un 500.
+  if (!culqiConfigurado()) {
+    return res.status(503).json({
+      mensaje: 'Los pagos con tarjeta no están configurados todavía. Tu pedido quedó registrado: te escribimos por WhatsApp para coordinar el pago.',
+    });
+  }
+
+  const idPedido = Number(req.params.idPedido);
+  if (!Number.isInteger(idPedido) || idPedido <= 0) {
+    return res.status(400).json({ mensaje: 'Pedido no encontrado.' });
+  }
+
+  const { token, documento } = req.body || {};
+  const culqiTokenId = typeof req.body?.culqiTokenId === 'string' ? req.body.culqiTokenId.trim() : '';
+  if (!tokenCulqiValido(culqiTokenId)) {
+    return res.status(400).json({
+      mensaje: 'No recibimos los datos de tu tarjeta correctamente. Vuelve a intentarlo.',
+    });
+  }
+  // Culqi EXIGE un email en el cargo (es a donde manda el comprobante). Se
+  // valida acá y no se deja que lo rechace la pasarela: un 400 de Culqi por
+  // un correo mal escrito llegaría con su propio texto, mucho menos claro que
+  // señalar el campo.
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  if (!EMAIL_REGEX.test(email) || email.length > 100) {
+    return res.status(400).json({ mensaje: 'Escribe un correo válido: ahí te llega el comprobante del pago.' });
+  }
+
+  try {
+    const pool = await getPool();
+    const pedidoResult = await pool
+      .request()
+      .input('IdPedido', sql.Int, idPedido)
+      .query(`
+        SELECT pd.IdPedido, pd.NumeroPedidoDia, pd.IdTienda, pd.IdCliente, pd.Total, pd.Estado,
+               pd.EstadoPagoAdelanto, pd.TokenConfirmacionPago,
+               per.DNI
+        FROM Pedidos pd
+        INNER JOIN Clientes c ON c.IdCliente = pd.IdCliente
+        INNER JOIN Personas per ON per.IdPersona = c.IdPersona
+        WHERE pd.IdPedido = @IdPedido
+      `);
+
+    if (pedidoResult.recordset.length === 0) {
+      return res.status(404).json({ mensaje: 'No encontramos ese pedido.' });
+    }
+    const pedido = pedidoResult.recordset[0];
+
+    // Mismo 404 que un pedido inexistente cuando ni el token ni el documento
+    // coinciden — ver el encabezado.
+    const tokenCoincide =
+      Boolean(pedido.TokenConfirmacionPago) &&
+      typeof token === 'string' &&
+      token.trim() === pedido.TokenConfirmacionPago;
+    const documentoCoincide =
+      typeof documento === 'string' && documento.trim().length > 0 && documento.trim() === String(pedido.DNI);
+    if (!tokenCoincide && !documentoCoincide) {
+      return res.status(404).json({ mensaje: 'No encontramos ese pedido.' });
+    }
+
+    // La máquina de estados es el candado de verdad: un pedido ya pagado no
+    // se puede volver a cobrar, y uno que no usa pago por adelantado (el pan
+    // de hamburguesa) no entra acá por ningún camino.
+    if (pedido.EstadoPagoAdelanto !== ESTADO_VERIFICANDO) {
+      return res.status(400).json({
+        mensaje:
+          pedido.EstadoPagoAdelanto === ESTADO_NO_APLICA
+            ? 'Este pedido no se paga por adelantado.'
+            : 'Este pedido ya está pagado. No te vamos a cobrar de nuevo.',
+      });
+    }
+    if (['CANCELADO', 'RECHAZADO'].includes(pedido.Estado)) {
+      return res.status(400).json({ mensaje: 'Este pedido ya no está activo, así que no te lo vamos a cobrar.' });
+    }
+
+    const total = Number(pedido.Total);
+    // El monto sale de la BASE, nunca del body: si viniera del cliente HTTP,
+    // cualquiera podría pedir S/ 200 de pan y cobrarse S/ 1.
+    const centimos = aCentimosCulqi(total);
+    if (centimos === null) {
+      return res.status(400).json({ mensaje: 'El total de este pedido no se puede cobrar. Escríbenos por WhatsApp.' });
+    }
+
+    // --- El cobro. Fuera de toda transacción, a propósito (ver encabezado).
+    const cobro = await crearCargoCulqi({
+      centimos,
+      email,
+      tokenId: culqiTokenId,
+      descripcion: `Pedido #${pedido.NumeroPedidoDia} - Panaderia Ronceros`,
+      metadata: { idPedido: String(idPedido), numeroPedidoDia: String(pedido.NumeroPedidoDia) },
+    });
+
+    if (!cobro.ok) {
+      // Rechazo o falta de respuesta: el pedido se queda tal cual, en
+      // 'VERIFICANDO', para que el cliente pueda reintentar con otra tarjeta
+      // sin volver a llenar el formulario. Queda registrado igual: un cobro
+      // rechazado es justo lo que hay que poder mirar después cuando el dueño
+      // pregunte por qué un pedido nunca se pagó.
+      await registrarAuditoria({
+        idUsuario: null,
+        accion: 'PAGO_CULQI_RECHAZADO',
+        tablaAfectada: 'Pedidos',
+        registroAfectadoId: String(idPedido),
+        datosNuevos: {
+          total,
+          centimos,
+          // El token de tarjeta es de un solo uso y ya quedó quemado, pero
+          // igual NO se guarda entero: alcanza el prefijo para distinguir un
+          // reintento de otro en la auditoría.
+          culqiTokenId: `${culqiTokenId.slice(0, 12)}…`,
+          codigo: cobro.codigo ?? null,
+          declineCode: cobro.declineCode ?? null,
+          rechazado: cobro.rechazado,
+        },
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+
+      // 400 para un rechazo (el cliente puede hacer algo: otra tarjeta), 502
+      // cuando Culqi no contestó (no es culpa de sus datos y no se sabe si
+      // cobró; el mensaje ya se lo dice).
+      return res.status(cobro.rechazado ? 400 : 502).json({
+        mensaje: cobro.mensaje,
+        idPedido,
+        numeroPedidoDia: pedido.NumeroPedidoDia,
+        // Sigue esperando pago: es lo que le dice a la página que puede
+        // ofrecer "probar con otra tarjeta" en vez de mandarlo al final.
+        estadoPagoAdelanto: ESTADO_VERIFICANDO,
+        total,
+      });
+    }
+
+    // --- Cobrado. De acá en adelante ya hay plata movida.
+    const cargo = cobro.cargo;
+    // Lo que Culqi dice haber cobrado DE VERDAD, no lo que le pedimos. Con un
+    // cargo normal son el mismo número y `resolverPagoAdelanto` devuelve
+    // PAGADO sin ajuste; el cálculo se hace igual para que un día con
+    // reembolsos parciales el saldo quede registrado (ver utils/pagoCulqi.js).
+    const montoCobrado = montoCobradoEnSoles(cargo) ?? total;
+    const { estadoPagoAdelanto, ajuste } = resolverPagoAdelanto(total, montoCobrado);
+
+    const transaction = new sql.Transaction(pool);
+    let idAjuste = null;
+    try {
+      // Mismo patrón que `confirmarPagoAdelanto`: el cambio de estado del
+      // pedido y la creación del ajuste van en la MISMA transacción. Un
+      // pedido DEUDA_PARCIAL sin su fila de AjustesPago sería una deuda que
+      // nadie puede ver ni cobrar.
+      await transaction.begin();
+
+      await new sql.Request(transaction)
+        .input('IdPedido', sql.Int, idPedido)
+        .input('EstadoPagoAdelanto', sql.VarChar(20), estadoPagoAdelanto)
+        .input('MontoConfirmadoStaff', sql.Decimal(10, 2), montoCobrado)
+        .query(`
+          UPDATE Pedidos
+          SET Estado = 'CONFIRMADO',
+              EstadoPagoAdelanto = @EstadoPagoAdelanto,
+              MontoConfirmadoStaff = @MontoConfirmadoStaff,
+              FechaAprobacion = SYSUTCDATETIME()
+          WHERE IdPedido = @IdPedido AND EstadoPagoAdelanto = 'VERIFICANDO'
+        `);
+      // `IdUsuarioAprobo` queda NULL a propósito, a diferencia de
+      // `confirmarPagoAdelanto`: acá no aprobó ninguna persona, lo confirmó la
+      // pasarela. Poner el id de alguien sería inventar un responsable.
+      // El `AND EstadoPagoAdelanto = 'VERIFICANDO'` del WHERE cierra la
+      // carrera de dos pagos simultáneos del mismo pedido: el segundo UPDATE
+      // no toca nada (Culqi ya habría rechazado el token repetido, pero esto
+      // no depende de eso).
+      //
+      // `MontoConfirmadoStaff` guarda lo que cobró Culqi. El nombre quedó del
+      // flujo de Yape, donde lo escribía el personal; renombrar la columna
+      // pedía otra migración y tocar la app Flutter, y su SIGNIFICADO es el
+      // mismo: "lo que de verdad entró". `CodigoOperacionYape` sí se queda
+      // NULL para siempre en este flujo — es específica de Yape.
+
+      if (ajuste) {
+        const insertAjuste = await new sql.Request(transaction)
+          .input('IdPedido', sql.Int, idPedido)
+          .input('Tipo', sql.VarChar(10), ajuste.tipo)
+          .input('Monto', sql.Decimal(10, 2), ajuste.monto)
+          .query(`
+            INSERT INTO AjustesPago (IdPedido, Tipo, Monto, Estado, FechaCreacion)
+            OUTPUT INSERTED.IdAjuste
+            VALUES (@IdPedido, @Tipo, @Monto, 'PENDIENTE', SYSUTCDATETIME())
+          `);
+        idAjuste = insertAjuste.recordset[0].IdAjuste;
+      }
+
+      await transaction.commit();
+    } catch (err) {
+      await transaction.rollback();
+      // EL hueco de este diseño, y el único caso de todo el flujo donde el
+      // cliente pagó y el sistema no lo refleja. No se puede devolver el
+      // dinero desde acá (eso es un reembolso, que decide el dueño), así que
+      // lo que queda es dejar rastro imborrable del id de cargo y decirle al
+      // cliente la verdad: su plata salió, su pedido necesita una mano.
+      console.error(
+        `PAGO COBRADO SIN CONFIRMAR — pedido ${idPedido}, cargo Culqi ${cargo.id}: ${err.message}`,
+      );
+      await registrarAuditoria({
+        idUsuario: null,
+        accion: 'PAGO_CULQI_COBRADO_SIN_CONFIRMAR',
+        tablaAfectada: 'Pedidos',
+        registroAfectadoId: String(idPedido),
+        datosNuevos: { culqiChargeId: cargo.id, total, montoCobrado, error: err.message },
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      }).catch(() => {
+        // Si hasta la auditoría falla, el console.error de arriba es lo único
+        // que queda — y no se puede hacer nada mejor desde acá.
+      });
+      return res.status(500).json({
+        mensaje: `Tu pago se realizó (referencia ${cargo.id}) pero no pudimos marcar el pedido como confirmado. Escríbenos por WhatsApp con esa referencia y lo resolvemos al toque — no vuelvas a pagar.`,
+      });
+    }
+
+    await registrarAuditoria({
+      idUsuario: null,
+      accion: 'PAGAR_PEDIDO_CULQI',
+      tablaAfectada: 'Pedidos',
+      registroAfectadoId: String(idPedido),
+      datosNuevos: {
+        culqiChargeId: cargo.id,
+        total,
+        montoCobrado,
+        estadoPagoAdelanto,
+        email,
+        ajuste: ajuste ? { ...ajuste, idAjuste } : null,
+      },
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    await notificarCliente({
+      idCliente: pedido.IdCliente,
+      titulo: 'Pago confirmado',
+      cuerpo: `Cobramos S/ ${montoCobrado.toFixed(2)} de tu pedido #${pedido.NumeroPedidoDia}. Ya lo estamos preparando.`,
+      datos: { tipo: 'PAGO_ADELANTO_CONFIRMADO', idPedido: String(idPedido) },
+    });
+    await notificarPersonalTienda({
+      idTienda: pedido.IdTienda,
+      titulo: 'Pedido web pagado con tarjeta',
+      cuerpo: `El pedido #${pedido.NumeroPedidoDia} se pagó con tarjeta por S/ ${montoCobrado.toFixed(2)}. Ya quedó CONFIRMADO, solo hay que prepararlo.`,
+      datos: {
+        tipo: 'PAGO_ADELANTO_CONFIRMADO',
+        idTienda: String(pedido.IdTienda),
+        idPedido: String(idPedido),
+      },
+    });
+
+    return res.status(200).json({
+      // El mismo texto que ve el personal en su app, para que no haya dos
+      // redacciones del mismo hecho (ver describirResultadoPago).
+      mensaje: describirResultadoPago({ estadoPagoAdelanto, ajuste }),
+      idPedido,
+      numeroPedidoDia: pedido.NumeroPedidoDia,
+      estado: 'CONFIRMADO',
+      estadoPagoAdelanto,
+      total,
+      montoCobrado,
+      // La referencia del cargo: es lo que el cliente necesita tener a mano
+      // si algún día hay que reclamar algo sobre este pago.
+      culqiChargeId: cargo.id,
+      ajuste: ajuste ? { idAjuste, tipo: ajuste.tipo, monto: ajuste.monto, estado: 'PENDIENTE' } : null,
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
  * Consulta pública de pedidos por DNI o RUC, sin login: el visitante
  * escribe su documento (ya validado por validateConsultarPedidosPublico,
  * acepta cualquiera de los dos formatos) y ve el estado de cada uno de sus
@@ -1097,6 +1430,7 @@ module.exports = {
   listarCatalogoPublico,
   crearPedidoPublico,
   registrarCodigoPagoPublico,
+  pagarPedidoCulqi,
   consultarPedidosPublicos,
   verificarDocumentoPublico,
   obtenerMedioPagoPublico,

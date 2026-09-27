@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, BadgePercent, CheckCircle2, Clock, Smartphone } from "lucide-react";
+import { AlertTriangle, BadgePercent, CheckCircle2, CreditCard, ShieldCheck } from "lucide-react";
 import type { PedidoPublicoResultado } from "../services/api";
 import { formatearFechaBonita, formatearHora12 } from "../utils/horariosPan";
 import { montoDescontado, textoDescuento } from "../utils/descuentos";
@@ -25,11 +25,11 @@ interface ResumenPedidoExitoProps {
   /** El horario elegido ya había cerrado al enviar: se avisa que la
    * confirmación depende de que quede stock. */
   fueraDeVentana: boolean;
-  /** Solo en Panadería (pago por adelantado con Yape): true si el cliente
-   * ya mandó su código de operación, false si salió de la pantalla de pago
-   * sin mandarlo. Se ignora en los pedidos que no se pagan por adelantado
-   * (`estadoPagoAdelanto` distinto de "VERIFICANDO"). */
-  codigoPagoRegistrado?: boolean;
+  /** Solo en Panadería con el cobro por adelantado encendido: true si Culqi
+   * ya confirmó el cobro de la tarjeta, false si el cliente salió de la
+   * pantalla de pago sin pagar ("lo pago después"). Se ignora en los pedidos
+   * que no se pagan por adelantado. */
+  pagoConfirmado?: boolean;
   onPedirDeNuevo: () => void;
 }
 
@@ -40,7 +40,7 @@ export function ResumenPedidoExito({
   resultado,
   detalle,
   fueraDeVentana,
-  codigoPagoRegistrado = false,
+  pagoConfirmado = false,
   onPedirDeNuevo,
 }: ResumenPedidoExitoProps) {
   // El foco salta al título: quien navega con teclado o lector de pantalla
@@ -55,10 +55,17 @@ export function ResumenPedidoExito({
   // Ausente con un backend viejo (o cuando el pedido no llevó descuento):
   // en ese caso la pantalla queda exactamente como era antes.
   const descuento = resultado.descuentoCliente ?? null;
-  // Solo los pedidos de Panadería pasan por el pago con Yape. En cualquier
-  // otro ("NO_APLICA", o ausente con un backend viejo) esta pantalla es
-  // exactamente la de siempre.
-  const esperaVerificacionPago = resultado.estadoPagoAdelanto === "VERIFICANDO";
+  // Solo los pedidos de Panadería con el cobro por adelantado encendido pasan
+  // por el pago con tarjeta. En cualquier otro ("NO_APLICA", o ausente con un
+  // backend viejo) esta pantalla es exactamente la de siempre.
+  //
+  // El aviso de pago se muestra en los DOS desenlaces posibles de ese flujo:
+  // 'VERIFICANDO' (salió sin pagar, todavía le falta) y 'PAGADO' (Culqi
+  // cobró). Antes bastaba con mirar 'VERIFICANDO' porque el pago lo confirmaba
+  // una persona mucho después; ahora se confirma en la misma petición, así que
+  // el estado ya viene resuelto cuando esta pantalla aparece.
+  const hayPagoPorAdelantado =
+    resultado.estadoPagoAdelanto === "VERIFICANDO" || resultado.estadoPagoAdelanto === "PAGADO";
 
   return (
     <motion.div
@@ -117,25 +124,25 @@ export function ResumenPedidoExito({
       {/* Estado del pago por adelantado. NO se vuelve a decir "recibido"
           (ya lo dice el título de arriba): lo que falta contar acá es en qué
           quedó el pago, que es lo único que el cliente todavía no sabe. */}
-      {esperaVerificacionPago && (
+      {hayPagoPorAdelantado && (
         <div
           className={`mx-auto mt-4 flex max-w-sm items-start gap-2.5 rounded-xl border px-4 py-3 text-left ${
-            codigoPagoRegistrado ? "border-blue-200 bg-blue-50" : "border-amber-300 bg-amber-50"
+            pagoConfirmado ? "border-emerald-200 bg-emerald-50" : "border-amber-300 bg-amber-50"
           }`}
         >
-          {codigoPagoRegistrado ? (
-            <Clock className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" strokeWidth={1.75} />
+          {pagoConfirmado ? (
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" strokeWidth={1.75} />
           ) : (
-            <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={1.75} />
+            <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={1.75} />
           )}
           <p
             className={`text-xs leading-relaxed font-medium ${
-              codigoPagoRegistrado ? "text-blue-800" : "text-amber-800"
+              pagoConfirmado ? "text-emerald-800" : "text-amber-800"
             }`}
           >
-            {codigoPagoRegistrado
-              ? "Recibimos tu código de operación. Estamos verificando el pago con la tienda y te avisamos apenas lo revisen — puedes seguirlo desde “Ver mi pedido”."
-              : "Tu pedido está guardado, pero todavía nos falta tu pago. Cuando yapees, vuelve a “Ver mi pedido”, busca tu documento y escribe ahí tu código de operación."}
+            {pagoConfirmado
+              ? "Tu pago con tarjeta quedó confirmado y ya estamos preparando tu pedido. Te llega el comprobante al correo que dejaste."
+              : "Tu pedido está guardado, pero todavía nos falta tu pago. Vuelve a “Ver mi pedido”, busca tu documento y págalo con tarjeta desde ahí."}
           </p>
         </div>
       )}

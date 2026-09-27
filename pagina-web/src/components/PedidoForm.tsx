@@ -15,7 +15,12 @@ import {
   Wheat,
 } from "lucide-react";
 import { CANTIDAD_MINIMA_UNIDAD } from "../data/config";
-import { ApiError, crearPedidoPublico, type PedidoPublicoResultado } from "../services/api";
+import {
+  ApiError,
+  crearPedidoPublico,
+  pagarConCulqi,
+  type PedidoPublicoResultado,
+} from "../services/api";
 import type { CatalogoPublico } from "../hooks/useCatalogoPublico";
 import {
   LONGITUD_DOCUMENTO,
@@ -51,7 +56,7 @@ import {
 import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
 import { EncabezadoSeccion } from "./EncabezadoSeccion";
 import { MascotaPanadero } from "./MascotaPanadero";
-import { PagoYape } from "./PagoYape";
+import { PagoCulqi } from "./PagoCulqi";
 import { ResumenPedidoExito, type DetallePedidoEnviado } from "./ResumenPedidoExito";
 import type { SelectorFechaHandle } from "./SelectorFecha";
 import type { SelectorHoraHandle } from "./SelectorHora";
@@ -170,15 +175,17 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   const [fueraDeVentanaAlEnviar, setFueraDeVentanaAlEnviar] = useState(false);
   const [anunciarMascota, setAnunciarMascota] = useState(false);
 
-  // ---- Pago por adelantado (solo Panadería) --------------------------
+  // ---- Pago por adelantado con tarjeta, vía Culqi (solo Panadería) ----
   // El pedido se crea al terminar el formulario, ANTES de que el cliente
-  // pague: pagar obliga a salir a la app de Yape, y al volver el navegador
-  // muy a menudo recargó la pestaña. Con el pedido ya registrado, lo único
-  // que hay que recuperar es la pantalla de pago, y para eso está esto.
+  // pague. Sigue siendo necesario aunque ahora se pague con tarjeta dentro
+  // de la misma página: la verificación 3DS del banco saca al cliente de acá
+  // (a su app o a una pantalla del emisor) y al volver la pestaña muy a
+  // menudo viene recargada. Con el pedido ya registrado, lo único que hay que
+  // recuperar es la pantalla de pago, y para eso está esto.
   const [pasoPago, setPasoPago] = useState<PagoPendienteGuardado | null>(null);
-  // true una vez que el cliente ya mandó su código de operación: cambia lo
-  // que dice la pantalla final ("estamos verificando" vs "falta tu pago").
-  const [codigoRegistrado, setCodigoRegistrado] = useState(false);
+  // true una vez que Culqi confirmó el cobro: cambia lo que dice la pantalla
+  // final ("pago confirmado" vs "falta pagar tu pedido").
+  const [pagoConfirmado, setPagoConfirmado] = useState(false);
 
   // Retomar un pago a medias: si la pestaña murió mientras el cliente estaba
   // en Yape, al volver aterriza directo en la pantalla de pago de SU pedido,
@@ -528,19 +535,58 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   }
 
   /**
+   * Cobra la tarjeta que el cliente acaba de tokenizar y, si pasa, salta a la
+   * pantalla de éxito. Es lo que `PagoCulqi` llama en cuanto Culqi.js le
+   * devuelve un `culqiTokenId`.
+   *
+   * A propósito NO atrapa el error: `PagoCulqi` ya muestra el mensaje de una
+   * promesa rechazada dentro de su propio formulario, que es donde el cliente
+   * está mirando y donde puede corregir la tarjeta. Atraparlo acá lo dejaría
+   * sin saber qué pasó. Lo único que se hace es traducir el error a un
+   * mensaje legible: un `ApiError` ya viene redactado por el backend (incluido
+   * el texto que manda Culqi), y cualquier otra cosa es un problema de red.
+   *
+   * El pedido se queda en 'VERIFICANDO' cuando el cobro falla, así que el
+   * cliente puede reintentar con otra tarjeta sin volver a llenar nada.
+   */
+  async function cobrarConCulqi(culqiTokenId: string, datosTarjeta: { email: string }) {
+    const pendiente = pasoPago;
+    if (!pendiente) return;
+
+    try {
+      await pagarConCulqi({
+        idPedido: pendiente.idPedido,
+        token: pendiente.token,
+        culqiTokenId,
+        email: datosTarjeta.email,
+      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw new Error(err.errores?.join(" ") || err.message);
+      }
+      throw new Error(
+        "No pudimos conectar con el servidor. Tu pedido sigue guardado y tu tarjeta no fue cobrada: intenta de nuevo en un momento.",
+      );
+    }
+    // Fuera del try: si el cobro salió bien, un error de acá para adelante no
+    // debe mostrarse como "falló el pago".
+    cerrarPasoPago({ pagado: true });
+  }
+
+  /**
    * Sale de la pantalla de pago hacia la de confirmación. Se usa en los dos
-   * finales posibles: cuando el código ya quedó registrado, y cuando el
-   * cliente elige pagar más tarde (su pedido igual existe, y puede volver a
-   * meter el código desde "Ver mi pedido" cuando quiera).
+   * finales posibles: cuando el pago ya quedó confirmado, y cuando el cliente
+   * elige pagar más tarde (su pedido igual existe, y puede volver a pagarlo
+   * desde "Ver mi pedido" cuando quiera).
    *
    * En los dos casos se borra el pendiente de localStorage: si no, al
    * recargar la página volvería a aterrizar en la pantalla de pago de un
    * pedido que ya resolvió.
    */
-  function cerrarPasoPago({ conCodigo }: { conCodigo: boolean }) {
+  function cerrarPasoPago({ pagado }: { pagado: boolean }) {
     const pendiente = pasoPago;
     borrarPagoPendiente();
-    setCodigoRegistrado(conCodigo);
+    setPagoConfirmado(pagado);
     setPasoPago(null);
     // `resultado` ya está puesto salvo que esta sesión haya arrancado
     // retomando un pendiente de localStorage (la pestaña murió y el
@@ -551,13 +597,17 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
         actual ??
         (pendiente
           ? {
-              mensaje: conCodigo
-                ? "Recibimos tu código. Estamos verificando el pago con la tienda."
-                : "Tu pedido está registrado. Cuando yapees, escribe tu código desde “Ver mi pedido”.",
+              mensaje: pagado
+                ? "¡Listo! Tu pago quedó confirmado y ya estamos preparando tu pedido."
+                : "Tu pedido está registrado. Puedes pagarlo con tarjeta desde “Ver mi pedido” cuando quieras.",
               idPedido: pendiente.idPedido,
               numeroPedidoDia: pendiente.numeroPedidoDia,
               total: pendiente.total,
-              estadoPagoAdelanto: "VERIFICANDO",
+              // Si pagó, el backend ya dejó el pedido en PAGADO/CONFIRMADO.
+              // Este objeto es solo para pintar la pantalla final cuando no
+              // hay respuesta de creación a mano (pestaña recargada), así que
+              // refleja eso y no un "falta pagar" que sería mentira.
+              estadoPagoAdelanto: pagado ? "PAGADO" : "VERIFICANDO",
             }
           : null),
     );
@@ -566,7 +616,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   function pedirOtroVez() {
     borrarPagoPendiente();
     setPasoPago(null);
-    setCodigoRegistrado(false);
+    setPagoConfirmado(false);
     setResultado(null);
     setDetalleEnviado(null);
     setFueraDeVentanaAlEnviar(false);
@@ -666,19 +716,19 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
             }}
             className="relative z-10 rounded-3xl border border-pan-borde/50 bg-pan-crema-suave p-5 shadow-md shadow-pan-carbon/5 sm:p-8"
           >
-            {/* Tres vistas, en este orden: formulario → pago (solo
-                Panadería) → confirmación. El pedido ya existe desde que se
-                entra a la del medio. */}
+            {/* Tres vistas, en este orden: formulario → pago con tarjeta
+                (solo Panadería, y solo si el dueño tiene el cobro por
+                adelantado encendido) → confirmación. El pedido ya existe
+                desde que se entra a la del medio. */}
             <AnimatePresence mode="wait">
               {pasoPago ? (
-                <PagoYape
+                <PagoCulqi
                   key="pago"
                   idPedido={pasoPago.idPedido}
                   numeroPedidoDia={pasoPago.numeroPedidoDia}
                   total={pasoPago.total}
-                  token={pasoPago.token}
-                  onCodigoRegistrado={() => cerrarPasoPago({ conCodigo: true })}
-                  onCancelar={() => cerrarPasoPago({ conCodigo: false })}
+                  onTokenGenerado={cobrarConCulqi}
+                  onCancelar={() => cerrarPasoPago({ pagado: false })}
                 />
               ) : resultado && detalleEnviado ? (
                 <ResumenPedidoExito
@@ -686,7 +736,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                   resultado={resultado}
                   detalle={detalleEnviado}
                   fueraDeVentana={fueraDeVentanaAlEnviar}
-                  codigoPagoRegistrado={codigoRegistrado}
+                  pagoConfirmado={pagoConfirmado}
                   onPedirDeNuevo={pedirOtroVez}
                 />
               ) : (

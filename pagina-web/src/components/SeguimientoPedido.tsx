@@ -7,10 +7,11 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  CreditCard,
   Loader2,
   PackageSearch,
   SearchX,
-  Smartphone,
+  ShieldCheck,
   Truck,
   X,
   XCircle,
@@ -18,14 +19,15 @@ import {
 import {
   ApiError,
   consultarPedidosPublicos,
+  pagarConCulqi,
   type PedidoPublicoConsultaItem,
   type PedidoPublicoConsultaResultado,
 } from "../services/api";
 import { formatearHora12 } from "../utils/horariosPan";
-import { avisoPagoAdelanto, esperaCodigoDePago } from "../utils/pagoAdelanto";
+import { avisoPagoAdelanto, esperaPagoDelCliente } from "../utils/pagoAdelanto";
 import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
 import { LONGITUD_DOCUMENTO, type TipoDocumento } from "../hooks/useVerificacionDocumento";
-import { PagoYape } from "./PagoYape";
+import { PagoCulqi } from "./PagoCulqi";
 import { SelectorTipoDocumento } from "./SelectorTipoDocumento";
 
 const ESTADO_INFO = {
@@ -39,9 +41,9 @@ const ESTADO_INFO = {
     icono: Truck,
     clases: "bg-blue-100 text-blue-800",
   },
-  // Estado nuevo: pedido de Panadería cuyo pago por adelantado ya verificó
-  // la tienda. Está tan listo para recogerse como un PENDIENTE, solo que
-  // llegó por el camino del pago con Yape.
+  // Pedido de Panadería cuyo pago por adelantado ya está confirmado. Está tan
+  // listo para recogerse como un PENDIENTE, solo que llegó por el camino del
+  // pago con tarjeta (antes, del pago con Yape verificado a mano).
   CONFIRMADO: {
     etiqueta: "Pagado, por recoger",
     icono: BadgeCheck,
@@ -148,13 +150,13 @@ export function SeguimientoPedido() {
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<PedidoPublicoConsultaResultado | null>(null);
   const documentoConsultadoRef = useRef("");
-  // Segunda vía para meter el código de pago: la de siempre es la pantalla
-  // de pago que queda guardada en localStorage al crear el pedido, pero eso
-  // no sirve si el cliente pagó desde otro celular, borró los datos del
-  // navegador o usa incógnito. Acá se llega buscando por documento, que es
-  // lo mismo con lo que hizo el pedido.
+  // Segunda vía para pagar un pedido: la de siempre es la pantalla de pago
+  // que queda guardada en localStorage al crear el pedido, pero eso no sirve
+  // si el cliente volvió desde otro celular, borró los datos del navegador o
+  // usa incógnito. Acá se llega buscando por documento, que es el mismo con
+  // el que hizo el pedido.
   const [pedidoPagando, setPedidoPagando] = useState<PedidoPublicoConsultaItem | null>(null);
-  const [avisoCodigoEnviado, setAvisoCodigoEnviado] = useState(false);
+  const [avisoPagoHecho, setAvisoPagoHecho] = useState(false);
   // Qué grupos (por estado) están desplegados — arrancan todos plegados;
   // el cliente elige cuál abrir. Un refresco del sondeo no toca esto, así
   // que un grupo que ya abrió no se le vuelve a cerrar solo.
@@ -175,12 +177,12 @@ export function SeguimientoPedido() {
     setResultado(null);
     setGruposAbiertos(new Set());
     setPedidoPagando(null);
-    setAvisoCodigoEnviado(false);
+    setAvisoPagoHecho(false);
   }
 
   /** Vuelve a consultar ya mismo (sin esperar al sondeo de 20s) para que el
-   * pedido al que se le acaba de meter el código aparezca al toque como
-   * "estamos verificando tu pago". */
+   * pedido que se acaba de pagar aparezca al toque como "Pagado, por recoger"
+   * en vez de seguir diciendo "falta pagar" durante medio minuto. */
   async function refrescarAhora() {
     try {
       setResultado(await consultarPedidosPublicos(documentoConsultadoRef.current));
@@ -189,9 +191,44 @@ export function SeguimientoPedido() {
     }
   }
 
-  async function alRegistrarCodigoDesdeSeguimiento() {
+  /**
+   * Cobra la tarjeta del pedido que se está pagando desde el seguimiento.
+   *
+   * Es la MISMA llamada que hace `PedidoForm`, con una sola diferencia: acá no
+   * hay `token` guardado en localStorage (se llegó buscando por documento en
+   * otro dispositivo, o después de borrar los datos del navegador), así que la
+   * identidad del pedido se prueba con el `documento` con el que se hizo — la
+   * segunda vía que el backend acepta a propósito.
+   *
+   * Sin try/catch, igual que en PedidoForm: `PagoCulqi` muestra el mensaje de
+   * una promesa rechazada dentro de su propio formulario, que es donde el
+   * cliente puede corregir la tarjeta.
+   */
+  async function cobrarPedidoDesdeSeguimiento(culqiTokenId: string, datosTarjeta: { email: string }) {
+    const pedido = pedidoPagando;
+    if (!pedido) return;
+
+    try {
+      await pagarConCulqi({
+        idPedido: pedido.idPedido,
+        documento: documentoConsultadoRef.current,
+        culqiTokenId,
+        email: datosTarjeta.email,
+      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw new Error(err.errores?.join(" ") || err.message);
+      }
+      throw new Error(
+        "No pudimos conectar con el servidor. Tu pedido sigue guardado y tu tarjeta no fue cobrada: intenta de nuevo en un momento.",
+      );
+    }
+
+    // Cobrado: se vuelve a la lista y se la refresca YA MISMO (sin esperar al
+    // sondeo de 20s), para que el pedido aparezca al toque como confirmado en
+    // vez de seguir diciendo "falta pagar" durante medio minuto.
     setPedidoPagando(null);
-    setAvisoCodigoEnviado(true);
+    setAvisoPagoHecho(true);
     await refrescarAhora();
   }
 
@@ -235,7 +272,7 @@ export function SeguimientoPedido() {
     setDocumento("");
     setGruposAbiertos(new Set());
     setPedidoPagando(null);
-    setAvisoCodigoEnviado(false);
+    setAvisoPagoHecho(false);
   }
 
   // Sondeo en tiempo real: solo mientras el panel está abierto, hay un
@@ -345,12 +382,11 @@ export function SeguimientoPedido() {
                       animate={{ opacity: 1, y: 0 }}
                       className="mx-auto max-w-md"
                     >
-                      <PagoYape
+                      <PagoCulqi
                         idPedido={pedidoPagando.idPedido}
                         numeroPedidoDia={pedidoPagando.numeroPedidoDia}
                         total={pedidoPagando.total}
-                        documento={documentoConsultadoRef.current}
-                        onCodigoRegistrado={alRegistrarCodigoDesdeSeguimiento}
+                        onTokenGenerado={cobrarPedidoDesdeSeguimiento}
                         onCancelar={() => setPedidoPagando(null)}
                         etiquetaCancelar="Volver a mis pedidos"
                         compacto
@@ -390,16 +426,16 @@ export function SeguimientoPedido() {
                             </p>
                           )}
 
-                          {avisoCodigoEnviado && (
+                          {avisoPagoHecho && (
                             <motion.div
                               initial={{ opacity: 0, y: -4 }}
                               animate={{ opacity: 1, y: 0 }}
-                              className="mb-4 flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3"
+                              className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3"
                             >
-                              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" strokeWidth={1.75} />
-                              <p className="text-xs leading-relaxed font-medium text-blue-800">
-                                Recibimos tu código de operación. Estamos verificando el pago con la
-                                tienda; el estado de tu pedido se actualiza solo acá.
+                              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" strokeWidth={1.75} />
+                              <p className="text-xs leading-relaxed font-medium text-emerald-800">
+                                Tu pago quedó confirmado y ya estamos preparando tu pedido. Te llega el
+                                comprobante al correo que dejaste.
                               </p>
                             </motion.div>
                           )}
@@ -537,19 +573,19 @@ export function SeguimientoPedido() {
                                               </div>
                                               {/* Pago por adelantado: en qué
                                                   quedó, y —si todavía falta
-                                                  el código— el botón para
-                                                  mandarlo desde acá. Nada de
+                                                  pagarlo— el botón para
+                                                  hacerlo desde acá. Nada de
                                                   esto aparece en un pedido
                                                   de pan de hamburguesa. */}
                                               <AvisoPagoPedido pedido={pedido} />
-                                              {esperaCodigoDePago(pedido) && (
+                                              {esperaPagoDelCliente(pedido) && (
                                                 <button
                                                   type="button"
                                                   onClick={() => setPedidoPagando(pedido)}
                                                   className="mt-2.5 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-pan-terracota px-4 text-sm font-semibold text-pan-crema shadow-sm shadow-pan-terracota/25 transition-transform hover:scale-[1.02]"
                                                 >
-                                                  <Smartphone className="h-3.5 w-3.5" strokeWidth={2} />
-                                                  Pagar / ingresar código
+                                                  <CreditCard className="h-3.5 w-3.5" strokeWidth={2} />
+                                                  Pagar con tarjeta
                                                 </button>
                                               )}
                                             </li>

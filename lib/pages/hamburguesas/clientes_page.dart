@@ -178,7 +178,7 @@ class _ClientesPageState extends State<ClientesPage> {
   Future<void> _abrirPerfil(Cliente cliente) async {
     await pushSlideUpFade(
       context,
-      (_) => ClientePerfilPage(cliente: cliente),
+      (_) => ClientePerfilPage(cliente: cliente, rolUsuario: widget.usuario?.rol),
     );
     _cargarClientes();
   }
@@ -524,6 +524,7 @@ class _ClientesPageState extends State<ClientesPage> {
       clienteInicial: seleccionado,
       embebido: true,
       onCambio: _cargarClientes,
+      rolUsuario: widget.usuario?.rol,
     );
   }
 

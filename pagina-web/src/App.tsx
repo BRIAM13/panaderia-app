@@ -11,6 +11,7 @@ import { Ubicacion } from "./components/Ubicacion";
 import { Footer } from "./components/Footer";
 import { BotonWhatsApp } from "./components/BotonWhatsApp";
 import { useCatalogoPublico } from "./hooks/useCatalogoPublico";
+import { PagoCulqi } from "./components/PagoCulqi";
 
 // Dos bloques que casi nadie necesita al abrir la página: el buscador de
 // pedidos (solo le sirve a quien ya pidió antes) y las preguntas
@@ -45,6 +46,13 @@ const RUTA_ACTIVACION = "/activar-cuenta";
 const ES_RUTA_ACTIVACION =
   (window.location.pathname.replace(/\/+$/, "") || "/") === RUTA_ACTIVACION;
 
+// TEMPORAL — solo para que el dueño vea PagoCulqi montado en aislamiento
+// mientras decide si le gusta el diseño. Se quita apenas termine de mirarlo,
+// no es una ruta real del sitio.
+const RUTA_PREVIEW_CULQI = "/preview-culqi";
+const ES_RUTA_PREVIEW_CULQI =
+  (window.location.pathname.replace(/\/+$/, "") || "/") === RUTA_PREVIEW_CULQI;
+
 /** Hueco del mismo tamaño y forma que el bloque que se está descargando —
  * el mismo esqueleto con barrido que ya usan el selector de pan y el panel
  * de seguimiento, para que la espera se vea igual en toda la página y el
@@ -58,6 +66,23 @@ function EsqueletoSeccion({ className }: { className?: string }) {
 }
 
 function App() {
+  if (ES_RUTA_PREVIEW_CULQI) {
+    return (
+      <div className="bg-pan-crema flex min-h-screen items-center justify-center px-6 py-16">
+        <div className="w-full max-w-3xl">
+          <PagoCulqi
+            idPedido={999}
+            numeroPedidoDia={42}
+            total={45.5}
+            onTokenGenerado={async (tokenId, datos) => {
+              console.log("token generado (solo vista previa):", tokenId, datos);
+            }}
+            onCancelar={() => console.log("cancelar (solo vista previa)")}
+          />
+        </div>
+      </div>
+    );
+  }
   if (ES_RUTA_ACTIVACION) {
     return (
       <Suspense

@@ -57,6 +57,7 @@ class Cliente {
     this.activo = true,
     this.telefonoVerificado = false,
     this.emailVerificado = false,
+    this.pideSinPagarAdelanto = false,
   });
 
   factory Cliente.fromJson(Map<String, dynamic> json) {
@@ -80,6 +81,10 @@ class Cliente {
       activo: json['activo'] as bool? ?? true,
       telefonoVerificado: json['telefonoVerificado'] as bool? ?? false,
       emailVerificado: json['emailVerificado'] as bool? ?? false,
+      // `?? false` y no un campo obligatorio: un backend anterior a la
+      // migración 2026_09_excepcion_pago_adelanto no manda esta clave, y "sin
+      // excepción" es el valor seguro (le aplica el cobro normal).
+      pideSinPagarAdelanto: json['pideSinPagarAdelanto'] as bool? ?? false,
     );
   }
 
@@ -111,6 +116,17 @@ class Cliente {
   /// cambios sensibles (ver `AutorizacionCambioSheet`).
   final bool telefonoVerificado;
   final bool emailVerificado;
+
+  /// true si este cliente puede registrar pedidos web SIN pagarlos primero,
+  /// aunque el cobro por adelantado con tarjeta esté encendido para todos los
+  /// demás (clave `EXIGE_PAGO_ADELANTADO_PANADERIA` de Configuraciones).
+  ///
+  /// Es para los clientes de siempre —bodegas, puestos de mercado— que pagan
+  /// su deuda semanal o mensual completa de una vez: exigirles la tarjeta
+  /// pedido por pedido les rompería la forma de trabajar que ya tenían
+  /// acordada. Solo el SUPERADMIN puede activarlo (es una línea de crédito),
+  /// desde el perfil del cliente — ver `ClientePerfilVista`.
+  final bool pideSinPagarAdelanto;
 
   String get nombreCompleto => [
     nombres,

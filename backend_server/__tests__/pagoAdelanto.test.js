@@ -7,6 +7,8 @@ const {
   AJUSTE_DEUDA,
   AJUSTE_VUELTO,
   LARGO_MAXIMO_CODIGO,
+  CLAVE_EXIGE_PAGO_ADELANTADO,
+  esCandidatoAPagoAdelanto,
   requierePagoAdelanto,
   normalizarCodigoOperacion,
   codigoOperacionValido,
@@ -16,35 +18,155 @@ const {
 } = require('../utils/pagoAdelanto');
 
 /**
- * Pruebas puras del pago por adelantado con Yape — ni una consulta, igual
- * que descuentosCliente.test.js / horariosPanaderia.test.js. Lo que se
- * cubre acá es la cuenta que decide si a un cliente le queda un saldo o un
- * vuelto, que es la parte del feature donde un error se traduce en plata.
+ * Pruebas del pago por adelantado del pedido web de Panadería (hoy con
+ * tarjeta vía Culqi; antes con código de operación de Yape).
+ *
+ * Casi todo acá es puro, igual que descuentosCliente.test.js /
+ * horariosPanaderia.test.js: la cuenta que decide si a un cliente le queda un
+ * saldo o un vuelto es la parte del feature donde un error se traduce en
+ * plata. La excepción es `requierePagoAdelanto`, que desde que el dueño puede
+ * encender y apagar el cobro desde la app necesita leer la base — se le pasa
+ * un `pool` de mentira (abajo) en vez de levantar nada.
  */
 
-describe('requierePagoAdelanto — apagado (se dio de baja el pago con código de Yape)', () => {
-  test('Panadería con pan por unidad YA NO exige pagar por adelantado', () => {
-    // SLUGS_PAGO_ADELANTO quedó vacía a propósito: el pago con código de
-    // operación de Yape se dio de baja. Panadería vuelve a "paga al
-    // recoger" hasta que se integre Culqi.
-    expect(requierePagoAdelanto({ tiendaSlug: 'panaderia', hayPanPorUnidad: true })).toBe(false);
+/**
+ * Un `pool` mínimo con la forma que usa la capa de compatibilidad:
+ * `pool.request().input(...).query(texto)` -> `{ recordset }`.
+ *
+ * Se arma a mano y no con `instalarMockMysql` a propósito: lo que se prueba
+ * acá es la DECISIÓN (¿exige pago?), no la traducción de T-SQL, y un pool de
+ * 10 líneas deja ver de un vistazo qué responde cada consulta.
+ */
+function poolFalso({ valorConfig, pideSinPagarAdelanto = false, fallaConfig = false, fallaCliente = false } = {}) {
+  const consultas = [];
+  return {
+    consultas,
+    request() {
+      return {
+        input() {
+          return this;
+        },
+        async query(texto) {
+          consultas.push(texto);
+          if (/FROM Configuraciones/i.test(texto)) {
+            if (fallaConfig) throw new Error('base caída');
+            return { recordset: valorConfig === undefined ? [] : [{ Valor: valorConfig }] };
+          }
+          if (/FROM Clientes/i.test(texto)) {
+            if (fallaCliente) throw new Error('Unknown column PideSinPagarAdelanto');
+            return { recordset: [{ PideSinPagarAdelanto: pideSinPagarAdelanto ? 1 : 0 }] };
+          }
+          return { recordset: [] };
+        },
+      };
+    },
+  };
+}
+
+/** Panadería con pan por unidad: el pedido que SÍ es candidato. El resto de
+ * los parámetros cambia según lo que cada caso quiera probar. */
+const CANDIDATO = { tiendaSlug: 'panaderia', hayPanPorUnidad: true, idCliente: 5 };
+
+describe('esCandidatoAPagoAdelanto — el filtro puro de tienda + producto', () => {
+  test('Panadería con pan por unidad es candidata', () => {
+    // Volvió a la lista con la integración de Culqi (estuvo vacía mientras el
+    // pago con código de Yape estaba dado de baja). Ser candidata NO significa
+    // que se cobre: eso lo decide la configuración, ver el describe siguiente.
+    expect(esCandidatoAPagoAdelanto({ tiendaSlug: 'panaderia', hayPanPorUnidad: true })).toBe(true);
   });
 
   test('Hamburguesas NUNCA entra, ni aunque llegara con pan por unidad', () => {
     // Es el punto del alcance acordado: el pan de hamburguesa es otro
-    // negocio y se sigue cobrando al recoger.
-    expect(requierePagoAdelanto({ tiendaSlug: 'hamburguesas', hayPanPorUnidad: true })).toBe(false);
-    expect(requierePagoAdelanto({ tiendaSlug: 'hamburguesas', hayPanPorUnidad: false })).toBe(false);
+    // negocio y se sigue cobrando al recoger, pase lo que pase con la
+    // configuración global.
+    expect(esCandidatoAPagoAdelanto({ tiendaSlug: 'hamburguesas', hayPanPorUnidad: true })).toBe(false);
+    expect(esCandidatoAPagoAdelanto({ tiendaSlug: 'hamburguesas', hayPanPorUnidad: false })).toBe(false);
   });
 
-  test('Panadería sin pan por unidad (solo paquetes) tampoco exige adelanto', () => {
-    expect(requierePagoAdelanto({ tiendaSlug: 'panaderia', hayPanPorUnidad: false })).toBe(false);
+  test('Panadería sin pan por unidad (solo paquetes) no es candidata', () => {
+    expect(esCandidatoAPagoAdelanto({ tiendaSlug: 'panaderia', hayPanPorUnidad: false })).toBe(false);
   });
 
-  test('una tienda desconocida, vacía o ausente no exige adelanto', () => {
-    expect(requierePagoAdelanto({ tiendaSlug: 'horneados', hayPanPorUnidad: true })).toBe(false);
-    expect(requierePagoAdelanto({ tiendaSlug: '', hayPanPorUnidad: true })).toBe(false);
-    expect(requierePagoAdelanto({ tiendaSlug: undefined, hayPanPorUnidad: true })).toBe(false);
+  test('una tienda desconocida, vacía o ausente no es candidata', () => {
+    expect(esCandidatoAPagoAdelanto({ tiendaSlug: 'horneados', hayPanPorUnidad: true })).toBe(false);
+    expect(esCandidatoAPagoAdelanto({ tiendaSlug: '', hayPanPorUnidad: true })).toBe(false);
+    expect(esCandidatoAPagoAdelanto({ tiendaSlug: undefined, hayPanPorUnidad: true })).toBe(false);
+  });
+});
+
+describe('requierePagoAdelanto — el interruptor del dueño + la excepción por cliente', () => {
+  test(`con ${CLAVE_EXIGE_PAGO_ADELANTADO} en '1', Panadería exige pagar antes`, async () => {
+    const pool = poolFalso({ valorConfig: '1' });
+    await expect(requierePagoAdelanto({ pool, ...CANDIDATO })).resolves.toBe(true);
+  });
+
+  test("con la clave en '0', se vuelve a pagar al recoger", async () => {
+    const pool = poolFalso({ valorConfig: '0' });
+    await expect(requierePagoAdelanto({ pool, ...CANDIDATO })).resolves.toBe(false);
+  });
+
+  test('si la clave todavía no existe en Configuraciones, falla APAGADO', async () => {
+    // Con la cuenta Culqi del dueño en trámite, encendido por defecto dejaría
+    // a TODO pedido de pan exigiendo una tarjeta que el backend no puede
+    // cobrar (503): nadie podría pedir pan. Lo peor que puede pasar apagado
+    // es seguir cobrando al recoger, como siempre.
+    const pool = poolFalso({ valorConfig: undefined });
+    await expect(requierePagoAdelanto({ pool, ...CANDIDATO })).resolves.toBe(false);
+  });
+
+  test('un valor raro escrito a mano NO cuenta como encendido', async () => {
+    for (const valor of ['true', 'SI', '2', '', '  ']) {
+      const pool = poolFalso({ valorConfig: valor });
+      await expect(requierePagoAdelanto({ pool, ...CANDIDATO })).resolves.toBe(false);
+    }
+  });
+
+  test('si la consulta de configuración revienta, falla APAGADO', async () => {
+    const pool = poolFalso({ valorConfig: '1', fallaConfig: true });
+    await expect(requierePagoAdelanto({ pool, ...CANDIDATO })).resolves.toBe(false);
+  });
+
+  test('un cliente con la excepción pide sin pagar AUNQUE el toggle esté encendido', async () => {
+    // El caso que pidió el dueño: las bodegas que le pagan la semana o el mes
+    // completos. Es la razón de existir de `Clientes.PideSinPagarAdelanto`.
+    const pool = poolFalso({ valorConfig: '1', pideSinPagarAdelanto: true });
+    await expect(requierePagoAdelanto({ pool, ...CANDIDATO })).resolves.toBe(false);
+  });
+
+  test('un visitante sin IdCliente todavía (null) sí tiene que pagar', async () => {
+    // Sin fila en Clientes no hay excepción posible: no se le puede fiar a
+    // alguien que el sistema todavía no conoce.
+    const pool = poolFalso({ valorConfig: '1' });
+    await expect(requierePagoAdelanto({ pool, ...CANDIDATO, idCliente: null })).resolves.toBe(true);
+  });
+
+  test('si la columna de la excepción no existe todavía, se exige pagar igual', async () => {
+    // O sea: la migración 2026_09_excepcion_pago_adelanto no se corrió. Falla
+    // CERRADO al revés que el toggle — regalar la excepción por un error de
+    // base sería regalar pan al fiado.
+    const pool = poolFalso({ valorConfig: '1', fallaCliente: true });
+    await expect(requierePagoAdelanto({ pool, ...CANDIDATO })).resolves.toBe(true);
+  });
+
+  test('un pedido que no es candidato no gasta NI UNA consulta', async () => {
+    // El orden de las condiciones importa por costo: el filtro puro descarta
+    // todos los pedidos de hamburguesa sin tocar la base.
+    const pool = poolFalso({ valorConfig: '1' });
+    await expect(
+      requierePagoAdelanto({ pool, tiendaSlug: 'hamburguesas', hayPanPorUnidad: true, idCliente: 5 }),
+    ).resolves.toBe(false);
+    expect(pool.consultas).toHaveLength(0);
+  });
+
+  test('con el toggle apagado NO se consulta el flag del cliente', async () => {
+    // Si no se cobra por adelantado, la excepción es irrelevante.
+    const pool = poolFalso({ valorConfig: '0' });
+    await requierePagoAdelanto({ pool, ...CANDIDATO });
+    expect(pool.consultas.filter((t) => /FROM Clientes/i.test(t))).toHaveLength(0);
+  });
+
+  test('sin pool no exige nada (no se puede consultar la configuración)', async () => {
+    await expect(requierePagoAdelanto({ ...CANDIDATO, pool: undefined })).resolves.toBe(false);
   });
 });
 

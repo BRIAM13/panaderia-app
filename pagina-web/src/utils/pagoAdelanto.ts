@@ -1,12 +1,25 @@
 import type { AjustePagoPublico, EstadoPagoAdelanto, PedidoPublicoConsultaItem } from "../services/api";
 
 /**
- * Pago por adelantado con Yape, lado del cliente (solo Panadería).
+ * Pago por adelantado del pedido de Panadería, lado del cliente.
  *
  * Todo lo de acá es puro: son las mismas reglas que aplica el servidor
  * (`backend_server/utils/pagoAdelanto.js`), repetidas para que el visitante
  * vea el problema ANTES de enviar y no después de un viaje de ida y vuelta.
  * El servidor sigue siendo el que manda — nada de esto lo reemplaza.
+ *
+ * Hoy el cobro es con TARJETA, por la pasarela Culqi (ver `PagoCulqi.tsx` y
+ * `pagarConCulqi` en services/api.ts). Lo que sigue acá del flujo anterior
+ * —el de código de operación de Yape, dado de baja el 2026-09-17— es a
+ * propósito:
+ *
+ *   * [CLAVE_PAGO_PENDIENTE] y compañía: el patrón de "el pedido se crea
+ *     ANTES de pagar y se retoma desde localStorage" es EL MISMO y por la
+ *     misma razón. Pagar saca al cliente de la página (a Yape entonces, al
+ *     3DS de su banco ahora) y al volver la pestaña suele venir recargada.
+ *   * `limpiarCodigoOperacion` / `revisarMontoDeclarado` / `montoSugerido`:
+ *     los usa `PagoYape.tsx`, que sigue en el repositorio como referencia y
+ *     por si hay que atender un pedido viejo que quedó a medias.
  */
 
 /** Largo máximo del código de operación. El mismo tope que
@@ -169,11 +182,17 @@ export function limpiarMonto(valor: string): string {
   return `${partes[0].slice(0, 7)}.${partes.slice(1).join("").slice(0, 2)}`;
 }
 
-/** ¿Este pedido todavía está esperando que el cliente mande su código?
- * Es lo que decide si el seguimiento por DNI le ofrece "Ingresar código de
- * pago" — la segunda vía para quien perdió el localStorage o está en otro
- * dispositivo. */
-export function esperaCodigoDePago(pedido: PedidoPublicoConsultaItem): boolean {
+/** ¿Este pedido todavía está esperando que el cliente lo pague?
+ *
+ * Es lo que decide si el seguimiento por DNI le ofrece "Pagar con tarjeta" —
+ * la segunda vía para quien perdió el localStorage o está en otro
+ * dispositivo.
+ *
+ * El `!codigoOperacionYape` sigue en la condición aunque el pago con código de
+ * operación ya no exista: hay pedidos viejos que alcanzaron a mandar su código
+ * y están esperando que una persona lo verifique. A ESOS no hay que
+ * ofrecerles pagar de nuevo — ya pagaron, por el camino de antes. */
+export function esperaPagoDelCliente(pedido: PedidoPublicoConsultaItem): boolean {
   return (
     pedido.estadoPagoAdelanto === "VERIFICANDO" &&
     !pedido.codigoOperacionYape &&
@@ -197,12 +216,15 @@ export function avisoPagoAdelanto(pedido: PedidoPublicoConsultaItem): AvisoPago 
   if (estado === "NO_APLICA") return null;
 
   if (estado === "VERIFICANDO") {
+    // Con código de operación = pedido viejo del flujo de Yape, esperando que
+    // una persona lo revise. Sin código = pedido actual, esperando que el
+    // cliente pague con tarjeta.
     return pedido.codigoOperacionYape
       ? { texto: "Estamos verificando tu pago con la tienda.", tono: "espera" }
-      : { texto: "Falta tu código de operación de Yape para confirmar el pedido.", tono: "atencion" };
+      : { texto: "Falta pagar tu pedido con tarjeta para confirmarlo.", tono: "atencion" };
   }
   if (estado === "PAGADO") {
-    return { texto: "Pago verificado. ¡Ya lo estamos preparando!", tono: "bien" };
+    return { texto: "Pago confirmado. ¡Ya lo estamos preparando!", tono: "bien" };
   }
 
   const ajuste = pedido.ajustePago ?? null;

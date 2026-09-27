@@ -114,6 +114,22 @@ class ClientesService {
     return data['cuentaClonada'] == true;
   }
 
+  /// Marca (o desmarca) a un cliente como "puede pedir sin pagar primero".
+  ///
+  /// EXCLUSIVO SUPERADMIN — el backend lo exige en la propia ruta
+  /// (`PUT /clientes/:id/pago-adelanto`), no solo en la UI: es una línea de
+  /// crédito, y quién la recibe lo decide el dueño, no el personal de piso.
+  /// Un ADMIN o TRABAJADOR recibe 403.
+  Future<void> actualizarExcepcionPagoAdelanto(
+    int idCliente, {
+    required bool pideSinPagarAdelanto,
+  }) async {
+    final token = await _storage.obtenerAccessToken();
+    await _api.put('/clientes/$idCliente/pago-adelanto', {
+      'pideSinPagarAdelanto': pideSinPagarAdelanto,
+    }, token: token);
+  }
+
   Future<void> desactivar(int idCliente) async {
     final token = await _storage.obtenerAccessToken();
     await _api.delete('/clientes/$idCliente', token: token);

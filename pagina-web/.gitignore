@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Variables de entorno locales. En producción viven en Vercel (Settings →
+# Environment Variables), no en un archivo. `.env.example` SÍ se versiona:
+# es la lista de qué variables hacen falta, sin ningún valor real.
+.env
+.env.*
+!.env.example
