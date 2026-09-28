@@ -75,6 +75,15 @@ export function ResumenPedidoExito({
     resultado.estadoPagoAdelanto === "DEUDA_PARCIAL";
   const pagoConfirmado = pago !== null;
   const saldoAlRecoger = pago?.ajuste?.tipo === "DEUDA" ? pago.ajuste.monto : null;
+  // El pedido de Panadería YA existe en la base apenas se envía el
+  // formulario (así sobrevive si el cliente cierra el navegador al ir a
+  // pagar) — pero "existe" no es lo mismo que "confirmado", y el dueño no
+  // quiere que esta pantalla lo festeje como si ya estuviera listo cuando en
+  // realidad el cliente salió de "Pagar" sin pagar. Esta es la ÚNICA
+  // combinación que cambia el encabezado (ícono + título) de los dos de
+  // abajo: cualquier otro caso (no exige pago, o ya pagó/separó) sigue con
+  // el check verde de siempre.
+  const pagoPendiente = hayPagoPorAdelantado && !pagoConfirmado;
 
   return (
     <motion.div
@@ -89,22 +98,31 @@ export function ResumenPedidoExito({
         transition={{ type: "spring", stiffness: 260, damping: 15, delay: 0.1 }}
         className="relative mx-auto h-14 w-14"
       >
-        {/* Onda que se expande una sola vez detrás del check — el "clic"
-            visual que confirma que algo se completó. */}
-        <motion.span
-          initial={{ scale: 0.6, opacity: 0.5 }}
-          animate={{ scale: 2.1, opacity: 0 }}
-          transition={{ duration: 1, ease: "easeOut", delay: 0.15 }}
-          className="absolute inset-0 rounded-full bg-emerald-500/30"
-        />
-        <CheckCircle2 className="relative h-14 w-14 text-emerald-600" strokeWidth={1.6} />
+        {/* La onda que "celebra" solo aparece cuando de verdad hay algo
+            completado — un pedido con pago pendiente no la lleva, para no
+            decir "listo" sobre algo que todavía no lo está. */}
+        {!pagoPendiente && (
+          <motion.span
+            initial={{ scale: 0.6, opacity: 0.5 }}
+            animate={{ scale: 2.1, opacity: 0 }}
+            transition={{ duration: 1, ease: "easeOut", delay: 0.15 }}
+            className="absolute inset-0 rounded-full bg-emerald-500/30"
+          />
+        )}
+        {pagoPendiente ? (
+          <CreditCard className="relative h-14 w-14 text-amber-600" strokeWidth={1.6} />
+        ) : (
+          <CheckCircle2 className="relative h-14 w-14 text-emerald-600" strokeWidth={1.6} />
+        )}
       </motion.div>
       <h3
         ref={tituloRef}
         tabIndex={-1}
         className="mt-4 font-[family-name:var(--font-display-panaderia)] text-2xl font-semibold text-pan-carbon outline-none"
       >
-        Pedido #{resultado.numeroPedidoDia} recibido
+        {pagoPendiente
+          ? `Pedido #${resultado.numeroPedidoDia} guardado — falta pagar`
+          : `Pedido #${resultado.numeroPedidoDia} recibido`}
       </h3>
       <p className="mt-2 text-pan-carbon-suave">{resultado.mensaje}</p>
       {/* Todo lo de acá sale de la respuesta del SERVIDOR, no de lo que la
