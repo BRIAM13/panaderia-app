@@ -179,6 +179,22 @@ async function obtenerResumenSegmentos(req, res, next) {
   }
 }
 
+/**
+ * Las columnas `BIT` de `Clientes` (`Estado`, `NombreComercialOficial`,
+ * `TelefonoVerificado`, `EmailVerificado`, `PideSinPagarAdelanto`) llegan del
+ * driver mysql2 como un `Buffer` (ej. `<Buffer 00>`), NO como `0`/`1` directo
+ * — a diferencia de una columna `TINYINT`. `Boolean(buffer)` da SIEMPRE
+ * `true`, porque cualquier objeto es verdadero en JS sin importar el byte
+ * que tenga adentro: con eso, estos cinco campos se mostraban siempre en
+ * `true` sin importar su valor real en la base. Bug real, encontrado el
+ * 2026-09-29 a través de `pideSinPagarAdelanto` (mismo bug, ver el
+ * comentario gemelo en `utils/pagoAdelanto.js`).
+ */
+function bitAVerdadero(valor) {
+  if (Buffer.isBuffer(valor)) return valor[0] === 1;
+  return Boolean(valor);
+}
+
 function mapearCliente(fila) {
   return {
     idCliente: fila.IdCliente,
@@ -191,19 +207,19 @@ function mapearCliente(fila) {
     email: fila.Email,
     direccion: fila.Direccion,
     descripcionNegocio: fila.DescripcionNegocio,
-    nombreComercialOficial: Boolean(fila.NombreComercialOficial),
+    nombreComercialOficial: bitAVerdadero(fila.NombreComercialOficial),
     origenValidacion: fila.OrigenValidacion,
     calidadDato: calcularCalidadDato(fila.DNI, fila.OrigenValidacion),
     puntosFidelidad: fila.PuntosFidelidad,
-    activo: fila.Estado === undefined ? true : Boolean(fila.Estado),
-    telefonoVerificado: Boolean(fila.TelefonoVerificado),
-    emailVerificado: Boolean(fila.EmailVerificado),
+    activo: fila.Estado === undefined ? true : bitAVerdadero(fila.Estado),
+    telefonoVerificado: bitAVerdadero(fila.TelefonoVerificado),
+    emailVerificado: bitAVerdadero(fila.EmailVerificado),
     // La excepción al cobro por adelantado con tarjeta (ver
-    // `actualizarExcepcionPagoAdelanto`). `Boolean()` de un undefined da
-    // false, así que un SELECT que no traiga la columna —o una base donde la
-    // migración 2026_09_excepcion_pago_adelanto todavía no corrió— responde
-    // "sin excepción", que es el valor seguro.
-    pideSinPagarAdelanto: Boolean(fila.PideSinPagarAdelanto),
+    // `actualizarExcepcionPagoAdelanto`). Un `undefined` da false, así que un
+    // SELECT que no traiga la columna —o una base donde la migración
+    // 2026_09_excepcion_pago_adelanto todavía no corrió— responde "sin
+    // excepción", que es el valor seguro.
+    pideSinPagarAdelanto: bitAVerdadero(fila.PideSinPagarAdelanto),
   };
 }
 

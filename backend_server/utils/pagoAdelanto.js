@@ -210,6 +210,25 @@ async function exigePagoAdelantadoConfigurado(pool) {
  * asume que NO tiene la excepción (o sea, se le exige pagar). Regalar la
  * excepción por un error de base sería regalar pan al fiado.
  */
+/**
+ * `Clientes.PideSinPagarAdelanto` es `BIT`, y el driver mysql2 devuelve una
+ * columna `BIT` como un `Buffer` (ej. `<Buffer 00>`), NO como `0`/`1`
+ * directo — a diferencia de columnas `TINYINT` como `AplicaAderezo`, que sí
+ * llegan como número plano. `Boolean(buffer)` es SIEMPRE `true` porque
+ * cualquier objeto es verdadero en JS, sin importar el byte que tenga
+ * adentro: con eso, todo cliente real (nunca `null`/`undefined`) quedaba
+ * marcado con la excepción, pase lo que pase su valor real en la base —
+ * bug real, encontrado el 2026-09-29 porque un pedido de prueba con un
+ * cliente real (no anónimo) se registraba sin pedir pago aunque el
+ * interruptor estuviera encendido. Acá se lee el primer byte del `Buffer`
+ * a mano; si algún día llega como número (otra versión del driver, u otra
+ * capa de compatibilidad), sigue funcionando iaual.
+ */
+function bitAVerdadero(valor) {
+  if (Buffer.isBuffer(valor)) return valor[0] === 1;
+  return Boolean(valor);
+}
+
 async function clientePideSinPagarAdelanto(pool, idCliente) {
   if (idCliente === null || idCliente === undefined) return false;
   try {
@@ -217,7 +236,7 @@ async function clientePideSinPagarAdelanto(pool, idCliente) {
       .request()
       .input('IdCliente', idCliente)
       .query('SELECT PideSinPagarAdelanto FROM Clientes WHERE IdCliente = @IdCliente');
-    return Boolean(result.recordset[0]?.PideSinPagarAdelanto);
+    return bitAVerdadero(result.recordset[0]?.PideSinPagarAdelanto);
   } catch (err) {
     // Incluye el caso "la migración 2026_09_excepcion_pago_adelanto todavía
     // no se corrió" (Unknown column): el sistema sigue funcionando como
