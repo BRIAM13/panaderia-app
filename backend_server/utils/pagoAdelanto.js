@@ -84,6 +84,23 @@ const CLAVE_EXIGE_PAGO_ADELANTADO = 'EXIGE_PAGO_ADELANTADO_PANADERIA';
  */
 const EXIGE_PAGO_ADELANTADO_POR_DEFECTO = false;
 
+/**
+ * Cuánto del total hay que pagar como MÍNIMO para separar el pedido.
+ *
+ * 0.5 = la mitad. Es una DECISIÓN DE NEGOCIO del dueño (2026-09-28), no un
+ * número técnico: quería que un cliente pudiera "separar" su pedido sin tener
+ * que adelantar todo, pero con suficiente plata puesta como para que no le
+ * convenga no aparecer a recogerlo. El pan por unidad se hornea contra pedido;
+ * un pedido que nadie recoge es masa, harina y horno gastados, y la mitad
+ * cobrada por adelantado cubre eso. Menos de la mitad y el incentivo se
+ * invierte; más y vuelve a ser casi lo mismo que pagar todo.
+ *
+ * Si el dueño cambia de opinión, se cambia ACÁ y nada más: el saldo que queda
+ * pendiente ya lo maneja el mecanismo de DEUDA_PARCIAL + AjustesPago que
+ * existía desde el flujo de Yape (ver `resolverPagoAdelanto`).
+ */
+const FRACCION_MINIMA_PAGO_ADELANTO = 0.5;
+
 /** Largo máximo aceptado para el código de operación de Yape.
  *
  * Los códigos reales son bastante más cortos (alrededor de 7 dígitos), pero
@@ -109,6 +126,32 @@ function aCentimos(monto) {
 /** Céntimos enteros de vuelta a soles con 2 decimales, listos para la base. */
 function aSoles(centimos) {
   return Number((centimos / 100).toFixed(2));
+}
+
+/**
+ * El mínimo pagable AHORA para separar un pedido de `total` soles.
+ *
+ * [FRACCION_MINIMA_PAGO_ADELANTO] del total, redondeado al céntimo. La cuenta
+ * pasa por céntimos enteros como todo el resto del archivo: `montoMinimoAPagar`
+ * es la cifra contra la que se compara lo que el cliente eligió pagar, y un
+ * mínimo con cola de punto flotante (S/ 25.024999999) rechazaría un pago de
+ * exactamente el mínimo mostrado en pantalla.
+ *
+ * Redondea al céntimo más cercano y eso puede dejar el mínimo un céntimo POR
+ * ENCIMA de la mitad exacta (total 50.05 -> mínimo 25.03, no 25.025): es lo
+ * correcto, porque el mínimo tiene que ser un monto cobrable de verdad y el
+ * céntimo de más va del lado del negocio, no del cliente que quiere pagar de
+ * menos.
+ *
+ * Devuelve null para un total que no es cobrable (no numérico, cero,
+ * negativo). Quien llama ya validó el total del pedido antes de llegar acá;
+ * null es la señal de "no hay mínimo que calcular", nunca 0 — un mínimo de 0
+ * dejaría pasar cualquier monto.
+ */
+function montoMinimoAPagar(total) {
+  const totalCentimos = aCentimos(total);
+  if (!Number.isFinite(totalCentimos) || totalCentimos <= 0) return null;
+  return aSoles(Math.round(totalCentimos * FRACCION_MINIMA_PAGO_ADELANTO));
 }
 
 /**
@@ -325,7 +368,11 @@ module.exports = {
   SLUGS_PAGO_ADELANTO,
   CLAVE_EXIGE_PAGO_ADELANTADO,
   EXIGE_PAGO_ADELANTADO_POR_DEFECTO,
+  FRACCION_MINIMA_PAGO_ADELANTO,
   LARGO_MAXIMO_CODIGO,
+  aCentimos,
+  aSoles,
+  montoMinimoAPagar,
   esCandidatoAPagoAdelanto,
   exigePagoAdelantadoConfigurado,
   clientePideSinPagarAdelanto,

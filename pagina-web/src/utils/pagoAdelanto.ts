@@ -8,8 +8,13 @@ import type { AjustePagoPublico, EstadoPagoAdelanto, PedidoPublicoConsultaItem }
  * vea el problema ANTES de enviar y no después de un viaje de ida y vuelta.
  * El servidor sigue siendo el que manda — nada de esto lo reemplaza.
  *
- * Hoy el cobro es con TARJETA, por la pasarela Culqi (ver `PagoCulqi.tsx` y
- * `pagarConCulqi` en services/api.ts). Lo que sigue acá del flujo anterior
+ * Hoy el cobro es con TARJETA o YAPE, por la pasarela Culqi (ver
+ * `PagoCulqi.tsx` y `pagarConCulqi` en services/api.ts), y desde el
+ * 2026-09-28 el cliente elige cuánto abonar AHORA (entre la mitad y el
+ * total, para "separar" el pedido) y paga él la comisión de la pasarela: la
+ * cuenta de eso —mínimo, comisión, acotado del monto— está en el bloque
+ * "PAGO PARCIAL Y COMISIÓN" más abajo, espejo de los dos archivos del
+ * backend que la definen. Lo que sigue acá del flujo anterior
  * —el de código de operación de Yape, dado de baja el 2026-09-17— es a
  * propósito:
  *
@@ -145,6 +150,158 @@ function aCentimos(monto: number): number {
   return Math.round(monto * 100);
 }
 
+/** Céntimos enteros de vuelta a soles con 2 decimales — el mismo `aSoles`
+ * del backend, para que un monto que pasó por céntimos vuelva sin cola de
+ * punto flotante (4724 -> 47.24, no 47.239999). */
+function aSoles(centimos: number): number {
+  return Number((centimos / 100).toFixed(2));
+}
+
+// =====================================================================
+// PAGO PARCIAL ("separar el pedido") Y COMISIÓN DE LA PASARELA
+// =====================================================================
+//
+// ⚠️ ESPEJO DEL BACKEND. Las tres constantes y las dos funciones que siguen
+//    son una COPIA fiel de:
+//      * `FRACCION_MINIMA_PAGO_ADELANTO` y `montoMinimoAPagar`
+//        -> backend_server/utils/pagoAdelanto.js
+//      * `COMISION_FIJA_SOLES`, `TASA_COMISION_VARIABLE` y
+//        `calcularMontoConComision`
+//        -> backend_server/utils/pagoCulqi.js
+//
+//    Existen SOLO para la vista previa: para que lo que el cliente ve en
+//    pantalla mientras mueve el monto ("vas a tu pedido S/ X, comisión S/ Y,
+//    sale de tu tarjeta S/ Z") coincida centavo a centavo con lo que el
+//    servidor va a cobrar de verdad un segundo después. Un desfase de un
+//    céntimo entre lo mostrado y lo cobrado es exactamente la clase de bug
+//    que rompe la confianza de alguien con su tarjeta.
+//
+//    EL BACKEND ES LA AUTORIDAD FINAL: recibe `montoElegido` (sin comisión),
+//    lo valida contra el rango y calcula la comisión por su cuenta. Nada de
+//    lo de acá reemplaza eso. SI CAMBIAN ALLÁ, HAY QUE CAMBIARLAS ACÁ — y
+//    en particular las dos de comisión, que salen de la tarifa negociada de
+//    ESTE comercio en modo prueba y se van a reconfirmar al pasar a
+//    producción (ver el bloque de constantes en pagoCulqi.js).
+
+/** Cuánto del total hay que pagar como MÍNIMO para separar el pedido: la
+ * mitad. Decisión de negocio del dueño (2026-09-28). */
+export const FRACCION_MINIMA_PAGO_ADELANTO = 0.5;
+
+/** Comisión FIJA de Culqi por transacción, en soles, IGV incluido:
+ * S/ 1.00 + 18%. */
+export const COMISION_FIJA_SOLES = 1.18;
+
+/** Comisión VARIABLE de Culqi como fracción del monto cobrado, IGV incluido:
+ * 1% * 1.18 = 0.0118. */
+export const TASA_COMISION_VARIABLE = 0.0118;
+
+/**
+ * El mínimo pagable AHORA para separar un pedido de `total` soles: la
+ * fracción mínima del total, redondeada al céntimo más cercano — mismo
+ * `Math.round` en céntimos enteros que el backend, así el mínimo de un total
+ * de S/ 50.05 es S/ 25.03 acá y allá (y no 25.025 de un lado y 25.02 del
+ * otro, que rechazaría un pago de exactamente el mínimo mostrado).
+ *
+ * null para un total que no es cobrable (no numérico, cero, negativo): nunca
+ * 0, porque un mínimo de 0 dejaría pasar cualquier monto.
+ */
+export function montoMinimoAPagar(total: number): number | null {
+  const totalCentimos = aCentimos(total);
+  if (!Number.isFinite(totalCentimos) || totalCentimos <= 0) return null;
+  return aSoles(Math.round(totalCentimos * FRACCION_MINIMA_PAGO_ADELANTO));
+}
+
+/**
+ * "Engrosar" el monto para que al dueño le llegue LIMPIO `montoNetoDeseado`
+ * después de que Culqi se quede con su comisión (fija + variable):
+ *
+ *     cobrado = (neto + fija) / (1 - tasa)
+ *
+ * TODA la cuenta en céntimos enteros con UN SOLO redondeo al final, igual
+ * que el backend: redondear la comisión aparte y sumarla arrastra un
+ * céntimo y deja de coincidir. Con las constantes de hoy, neto S/ 45.50 ->
+ * (4550 + 118) / 0.9882 = 4723.74 -> 4724 céntimos -> se cobra S/ 47.24 y
+ * la comisión es S/ 1.74 (comprobado contra un cargo real de prueba el
+ * 2026-09-28).
+ *
+ * Devuelve `{ montoACobrar, comision }` en soles con 2 decimales, con
+ * `comision = montoACobrar - neto` (lo que el cliente paga de más por usar
+ * la pasarela). null para un neto no cobrable.
+ */
+export function calcularMontoConComision(
+  montoNetoDeseado: number,
+): { montoACobrar: number; comision: number } | null {
+  const netoCentimos = aCentimos(montoNetoDeseado);
+  if (!Number.isFinite(netoCentimos) || netoCentimos <= 0) return null;
+
+  const fijaCentimos = Math.round(COMISION_FIJA_SOLES * 100);
+  const cobrarCentimos = Math.round((netoCentimos + fijaCentimos) / (1 - TASA_COMISION_VARIABLE));
+
+  return {
+    montoACobrar: aSoles(cobrarCentimos),
+    comision: aSoles(cobrarCentimos - netoCentimos),
+  };
+}
+
+/**
+ * Lo que de verdad se le manda al servidor como `montoElegido`: el monto que
+ * el cliente pidió, encajado en [mínimo, total] y redondeado al céntimo. Es
+ * la única puerta por la que pasa cualquier interacción del control de monto
+ * (slider, campo de texto, atajos), así nunca hay en pantalla —ni en el
+ * botón de pagar, ni en el body— un número que el backend vaya a rechazar.
+ *
+ * Un `monto` no numérico (campo vacío, "12.") cae al TOTAL, no al mínimo:
+ * el estado por defecto del control es "pago completo", y ante la duda es
+ * mejor mostrar de más que de menos.
+ */
+export function acotarMontoElegido(total: number, monto: number): number {
+  const minimo = montoMinimoAPagar(total);
+  if (minimo === null) return total;
+  if (!Number.isFinite(monto)) return aSoles(aCentimos(total));
+  const centimos = Math.min(Math.max(aCentimos(monto), aCentimos(minimo)), aCentimos(total));
+  return aSoles(centimos);
+}
+
+/** Lo que va a quedar por pagar al recoger si el cliente abona `montoElegido`
+ * ahora: total - elegido, en céntimos para que 91 - 45.50 dé 45.50 exacto y
+ * no 45.499999. Nunca negativo. */
+export function saldoPendiente(total: number, montoElegido: number): number {
+  return aSoles(Math.max(aCentimos(total) - aCentimos(montoElegido), 0));
+}
+
+/**
+ * Error que levanta quien llama a `pagarConCulqi` cuando el servidor rechazó
+ * el `montoElegido` por estar fuera de rango (400 con `total` y
+ * `montoMinimo`). En teoría no puede pasar —el control ya acota en el
+ * cliente con la misma cuenta—, pero si pasara (el total del pedido cambió
+ * en la base, o esta copia de la fracción quedó desactualizada), la pantalla
+ * de pago usa `total`/`montoMinimo` para corregir el control y dejar el
+ * botón con el número que el servidor sí va a aceptar. Red de seguridad, no
+ * el camino normal.
+ */
+export class ErrorMontoFueraDeRango extends Error {
+  readonly total: number;
+  readonly montoMinimo: number;
+  constructor(mensaje: string, total: number, montoMinimo: number) {
+    super(mensaje);
+    this.name = "ErrorMontoFueraDeRango";
+    this.total = total;
+    this.montoMinimo = montoMinimo;
+  }
+}
+
+/** ¿El cuerpo de un error del backend trae el rango de un rechazo por monto?
+ * Devuelve `{ total, montoMinimo }` cuando vienen los dos como números
+ * cobrables, null si no — así quien atrapa el `ApiError` sabe si convertirlo
+ * en [ErrorMontoFueraDeRango] o dejarlo como un error de texto común. */
+export function rangoDesdeRespuesta(datos: unknown): { total: number; montoMinimo: number } | null {
+  if (!datos || typeof datos !== "object") return null;
+  const { total, montoMinimo } = datos as { total?: unknown; montoMinimo?: unknown };
+  if (typeof total !== "number" || typeof montoMinimo !== "number") return null;
+  if (!Number.isFinite(total) || !Number.isFinite(montoMinimo) || total <= 0 || montoMinimo <= 0) return null;
+  return { total, montoMinimo };
+}
+
 /**
  * La misma revisión que hace el servidor sobre el monto declarado, para que
  * el cliente vea el problema antes de enviar. Devuelve el mensaje listo
@@ -238,8 +395,13 @@ export function avisoPagoAdelanto(pedido: PedidoPublicoConsultaItem): AvisoPago 
 }
 
 /**
- * "Aún debes S/ 2.00, los completas al recoger" / "Te debemos S/ 3.00 de
- * vuelto, te lo damos al recoger".
+ * "Tu pedido está separado: aún debes S/ 2.00, los pagas al recoger" / "Te
+ * debemos S/ 3.00 de vuelto, te lo damos al recoger".
+ *
+ * La DEUDA ya no se cuenta como "pagaste de menos": desde el pago parcial es
+ * el camino normal de quien eligió separar su pedido con la mitad, no un
+ * error que haya que señalar. El VUELTO sí sigue siendo un caso raro del
+ * flujo viejo de Yape (con Culqi el servidor topa en el total).
  *
  * `ajuste` puede llegar null aunque el estado diga que hubo diferencia: eso
  * pasa cuando la tienda YA resolvió el saldo/vuelto (el backend solo manda
@@ -256,6 +418,6 @@ export function textoAjuste(
       : "Tu vuelto ya quedó devuelto.";
   }
   return ajuste.tipo === "DEUDA"
-    ? `Pagaste de menos: aún debes S/ ${ajuste.monto.toFixed(2)}. Los completas al recoger.`
+    ? `Tu pedido está separado: aún debes S/ ${ajuste.monto.toFixed(2)}. Los pagas al recoger.`
     : `Pagaste de más: te debemos S/ ${ajuste.monto.toFixed(2)} de vuelto. Te lo damos al recoger.`;
 }

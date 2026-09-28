@@ -19,17 +19,21 @@ const { obtenerHorariosPanaderia, esMuyProntoParaHoy, esMuyTardeParaHoy, fueraDe
 const {
   ESTADO_NO_APLICA,
   ESTADO_VERIFICANDO,
+  AJUSTE_DEUDA,
   requierePagoAdelanto,
   normalizarCodigoOperacion,
   codigoOperacionValido,
   validarMontoDeclarado,
   resolverPagoAdelanto,
-  describirResultadoPago,
+  montoMinimoAPagar,
+  aCentimos,
+  aSoles,
   LARGO_MAXIMO_CODIGO,
 } = require('../utils/pagoAdelanto');
 const {
   culqiConfigurado,
   aCentimosCulqi,
+  calcularMontoConComision,
   tokenCulqiValido,
   montoCobradoEnSoles,
   crearCargoCulqi,
@@ -986,6 +990,30 @@ async function registrarCodigoPagoPublico(req, res, next) {
  * 'VERIFICANDO' acepta un cobro) más el hecho de que quien pague de más un
  * pedido ajeno solo consigue pagarle el pan a un desconocido.
  *
+ * LAS TRES CIFRAS DE PLATA DE ESTA FUNCIÓN, que son tres y no una (2026-09-28):
+ *
+ *   `montoElegido`  cuánto abona el cliente A SU PEDIDO ahora. Llega en el
+ *                   body, pero NO se le cree: tiene que caer en
+ *                   [montoMinimoAPagar(Total), Total] comparado EN CÉNTIMOS
+ *                   contra el `Total` de la BASE. Si el body no lo trae, se
+ *                   asume el 100% (compatibilidad con la página anterior).
+ *                   ESTE es el número que decide PAGADO vs DEUDA_PARCIAL y el
+ *                   que se guarda en `MontoConfirmadoStaff`.
+ *   `comision`      lo que Culqi se va a quedar de ese cargo. La paga el
+ *                   CLIENTE, no el dueño (decisión del dueño), así que se
+ *                   suma al cobro en vez de descontarse del pedido.
+ *   `montoACobrar`  lo que de verdad sale de la tarjeta/Yape = los dos de
+ *                   arriba. Es lo ÚNICO que se le pide a Culqi.
+ *
+ * Confundirlas tiene consecuencias caras en direcciones opuestas: usar
+ * `montoACobrar` en `resolverPagoAdelanto` daría VUELTO_PENDIENTE fantasma
+ * (¡devolverle al cliente la comisión que el dueño nunca recibió!), y cobrarle
+ * `montoElegido` a la tarjeta dejaría al dueño cobrando la comisión de su
+ * propio bolsillo en cada pedido. Por eso el saldo pendiente que queda en
+ * `AjustesPago` es SIEMPRE la diferencia del pedido (Total - montoElegido), sin
+ * comisión metida ahí: la comisión no es parte del pedido y no se cobra al
+ * recoger.
+ *
  * ORDEN DE LAS DOS OPERACIONES: primero el cargo en Culqi, DESPUÉS la
  * transacción de base. Al revés —o con el cargo dentro de la transacción—
  * una llamada de red de hasta 20s mantendría abiertos los locks sobre la fila
@@ -1016,8 +1044,10 @@ async function pagarPedidoCulqi(req, res, next) {
   const { token, documento } = req.body || {};
   const culqiTokenId = typeof req.body?.culqiTokenId === 'string' ? req.body.culqiTokenId.trim() : '';
   if (!tokenCulqiValido(culqiTokenId)) {
+    // "de tu pago" y no "de tu tarjeta": por acá también entra el token de
+    // Yape (`ype_…`), y a quien yapeó decirle "tarjeta" lo desorienta.
     return res.status(400).json({
-      mensaje: 'No recibimos los datos de tu tarjeta correctamente. Vuelve a intentarlo.',
+      mensaje: 'No recibimos los datos de tu pago correctamente. Vuelve a intentarlo.',
     });
   }
   // Culqi EXIGE un email en el cargo (es a donde manda el comprobante). Se
@@ -1076,21 +1106,74 @@ async function pagarPedidoCulqi(req, res, next) {
       return res.status(400).json({ mensaje: 'Este pedido ya no está activo, así que no te lo vamos a cobrar.' });
     }
 
+    // El TOTAL sale de la BASE, nunca del body: es el techo de lo que se puede
+    // cobrar y el piso del que se calcula el mínimo.
     const total = Number(pedido.Total);
-    // El monto sale de la BASE, nunca del body: si viniera del cliente HTTP,
-    // cualquiera podría pedir S/ 200 de pan y cobrarse S/ 1.
-    const centimos = aCentimosCulqi(total);
+    if (aCentimosCulqi(total) === null) {
+      return res.status(400).json({ mensaje: 'El total de este pedido no se puede cobrar. Escríbenos por WhatsApp.' });
+    }
+    const totalCentimos = aCentimos(total);
+    const montoMinimo = montoMinimoAPagar(total);
+
+    // --- Cuánto quiere abonar AHORA a su pedido.
+    //
+    // Es lo único de la plata que decide el cliente, y por eso es lo único que
+    // se valida contra la base en vez de creerse. Ausente = 100% del total: la
+    // versión anterior de la página no mandaba el campo, y un pedido pagado
+    // completo no puede empezar a fallar por eso. `null` cuenta como ausente
+    // por lo mismo (JSON flojo).
+    const montoElegidoCrudo = req.body?.montoElegido;
+    const montoElegidoPedido =
+      montoElegidoCrudo === undefined || montoElegidoCrudo === null ? total : Number(montoElegidoCrudo);
+    const elegidoCentimos = aCentimos(montoElegidoPedido);
+    // La comparación es EN CÉNTIMOS ENTEROS y no en soles decimales: el mínimo
+    // de un total de S/ 50.05 es S/ 25.03, y `25.03 >= 50.05 * 0.5` en punto
+    // flotante es la clase de comparación que rechaza un pago legítimo por una
+    // cola de decimales invisible.
+    if (
+      !Number.isFinite(montoElegidoPedido) ||
+      !Number.isFinite(elegidoCentimos) ||
+      elegidoCentimos < aCentimos(montoMinimo) ||
+      elegidoCentimos > totalCentimos
+    ) {
+      return res.status(400).json({
+        mensaje: `Tienes que pagar al menos S/ ${montoMinimo.toFixed(2)} para separar tu pedido, y como máximo su total de S/ ${total.toFixed(2)}.`,
+        idPedido,
+        numeroPedidoDia: pedido.NumeroPedidoDia,
+        estadoPagoAdelanto: ESTADO_VERIFICANDO,
+        total,
+        montoMinimo,
+      });
+    }
+    // Normalizado al céntimo: de acá en adelante `montoElegido` es un monto
+    // cobrable de verdad, no lo que haya escrito el body ('25.004', '25').
+    const montoElegido = aSoles(elegidoCentimos);
+
+    // --- La comisión, que paga el cliente (ver el encabezado).
+    const { montoACobrar, comision } = calcularMontoConComision(montoElegido);
+    const centimos = aCentimosCulqi(montoACobrar);
     if (centimos === null) {
       return res.status(400).json({ mensaje: 'El total de este pedido no se puede cobrar. Escríbenos por WhatsApp.' });
     }
 
     // --- El cobro. Fuera de toda transacción, a propósito (ver encabezado).
+    // Se le pide a Culqi `montoACobrar` (con comisión), NUNCA `montoElegido`:
+    // así lo que Culqi deposita después de quedarse su comisión es exactamente
+    // el `montoElegido` que se le va a acreditar al pedido.
     const cobro = await crearCargoCulqi({
       centimos,
       email,
       tokenId: culqiTokenId,
       descripcion: `Pedido #${pedido.NumeroPedidoDia} - Panaderia Ronceros`,
-      metadata: { idPedido: String(idPedido), numeroPedidoDia: String(pedido.NumeroPedidoDia) },
+      // `montoElegido` y `comisionCulqi` en la metadata dejan el desglose
+      // visible desde el panel de Culqi: sin eso, un cargo de S/ 47.24 contra
+      // un pedido de S/ 45.50 no se entiende sin abrir la base.
+      metadata: {
+        idPedido: String(idPedido),
+        numeroPedidoDia: String(pedido.NumeroPedidoDia),
+        montoElegido: montoElegido.toFixed(2),
+        comisionCulqi: comision.toFixed(2),
+      },
     });
 
     if (!cobro.ok) {
@@ -1106,6 +1189,9 @@ async function pagarPedidoCulqi(req, res, next) {
         registroAfectadoId: String(idPedido),
         datosNuevos: {
           total,
+          montoElegido,
+          comision,
+          montoACobrar,
           centimos,
           // El token de tarjeta es de un solo uso y ya quedó quemado, pero
           // igual NO se guarda entero: alcanza el prefijo para distinguir un
@@ -1130,17 +1216,26 @@ async function pagarPedidoCulqi(req, res, next) {
         // ofrecer "probar con otra tarjeta" en vez de mandarlo al final.
         estadoPagoAdelanto: ESTADO_VERIFICANDO,
         total,
+        montoMinimo,
+        montoElegido,
+        comision,
+        montoCobrado: montoACobrar,
       });
     }
 
     // --- Cobrado. De acá en adelante ya hay plata movida.
     const cargo = cobro.cargo;
-    // Lo que Culqi dice haber cobrado DE VERDAD, no lo que le pedimos. Con un
-    // cargo normal son el mismo número y `resolverPagoAdelanto` devuelve
-    // PAGADO sin ajuste; el cálculo se hace igual para que un día con
-    // reembolsos parciales el saldo quede registrado (ver utils/pagoCulqi.js).
-    const montoCobrado = montoCobradoEnSoles(cargo) ?? total;
-    const { estadoPagoAdelanto, ajuste } = resolverPagoAdelanto(total, montoCobrado);
+    // Lo que Culqi dice haber cobrado DE VERDAD (con comisión adentro). NO
+    // entra en la cuenta de saldos —eso es `montoElegido`, ver el encabezado—;
+    // va a la auditoría como constancia de que el cargo salió por lo que se
+    // pidió y no por otra cifra.
+    const montoCargoCulqi = montoCobradoEnSoles(cargo) ?? montoACobrar;
+    // LA cuenta: contra el total del pedido se compara lo que el cliente abonó
+    // A SU PEDIDO, sin comisión. Igual = PAGADO sin ajuste; menos =
+    // DEUDA_PARCIAL con un ajuste DEUDA por el saldo que va a pagar al recoger.
+    // Más es imposible acá (la validación de arriba topa en el total), así que
+    // VUELTO_PENDIENTE no puede salir de este endpoint.
+    const { estadoPagoAdelanto, ajuste } = resolverPagoAdelanto(total, montoElegido);
 
     const transaction = new sql.Transaction(pool);
     let idAjuste = null;
@@ -1154,7 +1249,7 @@ async function pagarPedidoCulqi(req, res, next) {
       await new sql.Request(transaction)
         .input('IdPedido', sql.Int, idPedido)
         .input('EstadoPagoAdelanto', sql.VarChar(20), estadoPagoAdelanto)
-        .input('MontoConfirmadoStaff', sql.Decimal(10, 2), montoCobrado)
+        .input('MontoConfirmadoStaff', sql.Decimal(10, 2), montoElegido)
         .query(`
           UPDATE Pedidos
           SET Estado = 'CONFIRMADO',
@@ -1171,10 +1266,15 @@ async function pagarPedidoCulqi(req, res, next) {
       // no toca nada (Culqi ya habría rechazado el token repetido, pero esto
       // no depende de eso).
       //
-      // `MontoConfirmadoStaff` guarda lo que cobró Culqi. El nombre quedó del
-      // flujo de Yape, donde lo escribía el personal; renombrar la columna
-      // pedía otra migración y tocar la app Flutter, y su SIGNIFICADO es el
-      // mismo: "lo que de verdad entró". `CodigoOperacionYape` sí se queda
+      // `MontoConfirmadoStaff` guarda `montoElegido`, o sea lo que de verdad
+      // entró HACIA EL PEDIDO — NO el cargo con comisión. Es lo que significa
+      // esa columna en todo el sistema ("lo que de verdad entró"), es lo que
+      // cuadra con el ajuste de AjustesPago (Total = MontoConfirmadoStaff +
+      // deuda), y es lo que el personal ve en la app al entregar. Meterle la
+      // comisión ahí haría que un pedido pagado al 100% pareciera cobrado de
+      // más y le generaría un vuelto inexistente. El nombre quedó del flujo de
+      // Yape, donde lo escribía el personal; renombrar la columna pedía otra
+      // migración y tocar la app Flutter. `CodigoOperacionYape` sí se queda
       // NULL para siempre en este flujo — es específica de Yape.
 
       if (ajuste) {
@@ -1206,7 +1306,15 @@ async function pagarPedidoCulqi(req, res, next) {
         accion: 'PAGO_CULQI_COBRADO_SIN_CONFIRMAR',
         tablaAfectada: 'Pedidos',
         registroAfectadoId: String(idPedido),
-        datosNuevos: { culqiChargeId: cargo.id, total, montoCobrado, error: err.message },
+        datosNuevos: {
+          culqiChargeId: cargo.id,
+          total,
+          montoElegido,
+          comision,
+          montoACobrar,
+          montoCargoCulqi,
+          error: err.message,
+        },
         ip: req.ip,
         userAgent: req.headers['user-agent'],
       }).catch(() => {
@@ -1226,7 +1334,17 @@ async function pagarPedidoCulqi(req, res, next) {
       datosNuevos: {
         culqiChargeId: cargo.id,
         total,
-        montoCobrado,
+        // LAS TRES CIFRAS, las tres guardadas. Es lo que permite reconstruir
+        // después "¿cuánto pagó el cliente de más por la comisión?" sin ninguna
+        // columna nueva en la base: `montoElegido` es lo que entró al pedido,
+        // `comision` lo que se quedó la pasarela y `montoACobrar` lo que salió
+        // de su tarjeta. `montoCargoCulqi` es lo que Culqi dijo haber cobrado
+        // DE VERDAD: si algún día no coincide con `montoACobrar`, esta es la
+        // única fila que lo va a delatar.
+        montoElegido,
+        comision,
+        montoACobrar,
+        montoCargoCulqi,
         estadoPagoAdelanto,
         email,
         ajuste: ajuste ? { ...ajuste, idAjuste } : null,
@@ -1235,16 +1353,24 @@ async function pagarPedidoCulqi(req, res, next) {
       userAgent: req.headers['user-agent'],
     });
 
+    // Las notificaciones hablan de `montoElegido`, no de `montoACobrar`: al
+    // cliente y al personal les importa cuánto quedó abonado AL PEDIDO y cuánto
+    // falta, no el detalle de la comisión de la pasarela (que el cliente ya vio
+    // desglosado en la pantalla de pago, y que al personal no le toca cobrar).
     await notificarCliente({
       idCliente: pedido.IdCliente,
-      titulo: 'Pago confirmado',
-      cuerpo: `Cobramos S/ ${montoCobrado.toFixed(2)} de tu pedido #${pedido.NumeroPedidoDia}. Ya lo estamos preparando.`,
+      titulo: ajuste ? 'Pedido separado' : 'Pago confirmado',
+      cuerpo: ajuste
+        ? `Recibimos S/ ${montoElegido.toFixed(2)} de tu pedido #${pedido.NumeroPedidoDia} y ya quedó separado. Falta S/ ${ajuste.monto.toFixed(2)}: lo pagas al recogerlo.`
+        : `Cobramos S/ ${montoElegido.toFixed(2)} de tu pedido #${pedido.NumeroPedidoDia}. Ya lo estamos preparando.`,
       datos: { tipo: 'PAGO_ADELANTO_CONFIRMADO', idPedido: String(idPedido) },
     });
     await notificarPersonalTienda({
       idTienda: pedido.IdTienda,
       titulo: 'Pedido web pagado con tarjeta',
-      cuerpo: `El pedido #${pedido.NumeroPedidoDia} se pagó con tarjeta por S/ ${montoCobrado.toFixed(2)}. Ya quedó CONFIRMADO, solo hay que prepararlo.`,
+      cuerpo: ajuste
+        ? `El pedido #${pedido.NumeroPedidoDia} se separó con S/ ${montoElegido.toFixed(2)} pagados con tarjeta. Ya quedó CONFIRMADO: prepáralo y cóbrale S/ ${ajuste.monto.toFixed(2)} al entregarlo.`
+        : `El pedido #${pedido.NumeroPedidoDia} se pagó con tarjeta por S/ ${montoElegido.toFixed(2)}. Ya quedó CONFIRMADO, solo hay que prepararlo.`,
       datos: {
         tipo: 'PAGO_ADELANTO_CONFIRMADO',
         idTienda: String(pedido.IdTienda),
@@ -1254,14 +1380,32 @@ async function pagarPedidoCulqi(req, res, next) {
 
     return res.status(200).json({
       // El mismo texto que ve el personal en su app, para que no haya dos
-      // redacciones del mismo hecho (ver describirResultadoPago).
-      mensaje: describirResultadoPago({ estadoPagoAdelanto, ajuste }),
+      // El mensaje va dirigido AL CLIENTE, y por eso desde el pago parcial
+      // (2026-09-28) ya no puede ser `describirResultadoPago`: esa frase está
+      // redactada para el PERSONAL ("falta S/ 25.00: cóbralo al entregar") y se
+      // la lee quien confirma un pago en la app. Mientras DEUDA_PARCIAL era una
+      // contingencia rara la diferencia casi no se notaba; ahora es el camino
+      // normal de la mitad de los pedidos, y mandarle al cliente una orden
+      // dirigida a otra persona lo deja sin saber qué le toca hacer a él.
+      // `describirResultadoPago` sigue intacta para el lado del personal.
+      mensaje: ajuste
+        ? `Listo, tu pedido quedó separado con S/ ${montoElegido.toFixed(2)}. Los S/ ${ajuste.monto.toFixed(2)} que faltan los pagas cuando lo recojas.`
+        : 'Listo, tu pedido está pagado por completo. Ya lo estamos preparando.',
       idPedido,
       numeroPedidoDia: pedido.NumeroPedidoDia,
       estado: 'CONFIRMADO',
       estadoPagoAdelanto,
       total,
-      montoCobrado,
+      // EL DESGLOSE que la página le muestra al cliente, y la razón por la que
+      // son tres campos y no uno: si solo viajara `montoCobrado` (S/ 47.24
+      // contra un pedido de S/ 45.50), el cliente vería un cobro que no cuadra
+      // con nada de lo que eligió y pensaría que le cobraron mal.
+      //   montoElegido  lo que quedó abonado A SU PEDIDO
+      //   comision      lo que pagó de más por usar la pasarela
+      //   montoCobrado  lo que salió de su tarjeta/Yape (= los dos de arriba)
+      montoElegido,
+      comision,
+      montoCobrado: montoACobrar,
       // La referencia del cargo: es lo que el cliente necesita tener a mano
       // si algún día hay que reclamar algo sobre este pago.
       culqiChargeId: cargo.id,

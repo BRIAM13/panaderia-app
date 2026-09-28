@@ -35,10 +35,36 @@ const PEDIDO_ESPERANDO_PAGO = {
 
 /** Un token de tarjeta con la forma que emite Culqi.js en el navegador. */
 const TOKEN_TARJETA = 'tkn_test_A1b2C3d4E5f6G7h8';
+/** Un token de Yape, tal como lo emite CulqiJS v4 a partir del celular + código
+ * de aprobación: prefijo `ype_`, no `tkn_` (visto en vivo el 2026-09-27:
+ * `ype_test_SJzb9dQhW2xXsKFS`, cobrado con `venta_exitosa`). */
+const TOKEN_YAPE = 'ype_test_SJzb9dQhW2xXsKFS';
+
+/**
+ * Las tres cifras de plata de un cobro, calculadas con las MISMAS funciones que
+ * usa el controlador.
+ *
+ * Los números están escritos a mano en cada test igual (S/ 50 -> 5179 céntimos),
+ * pero estos helpers existen para los tests que comprueban una PROPIEDAD y no un
+ * número: el día que el dueño pase a producción y la tarifa cambie, los que
+ * afirman "se le cobra el monto CON comisión" tienen que seguir pasando, y los
+ * que afirman "5179" tienen que ponerse rojos a propósito, para que alguien
+ * vuelva a mirar la cuenta.
+ */
+const { calcularMontoConComision } = require('../utils/pagoCulqi');
+const { montoMinimoAPagar } = require('../utils/pagoAdelanto');
+
+/** Lo que se le pide a Culqi (céntimos) por un abono de `neto` soles al pedido. */
+function centimosConComision(neto) {
+  return Math.round(calcularMontoConComision(neto).montoACobrar * 100);
+}
 
 /** La respuesta de un cargo exitoso, recortada a lo que el controlador lee.
- * `amount` viene en CÉNTIMOS, como manda Culqi. */
-function cargoExitoso({ amount = 5000, id = 'chr_test_abc123' } = {}) {
+ * `amount` viene en CÉNTIMOS, como manda Culqi.
+ *
+ * Por defecto contesta el cargo del camino feliz: el 100% de un pedido de S/ 50
+ * MÁS la comisión, que es lo que de verdad se le cobra desde el 2026-09-28. */
+function cargoExitoso({ amount = centimosConComision(50), id = 'chr_test_abc123' } = {}) {
   return {
     data: {
       object: 'charge',
@@ -145,15 +171,16 @@ describe('pagarPedidoCulqi — el cobro sale bien', () => {
   });
 
   test('le pide a Culqi CÉNTIMOS enteros, no soles — el error más caro posible', async () => {
-    // S/ 50.00 -> 5000. Mandar `50` le cobraría S/ 0.50 a quien pidió S/ 50 de
-    // pan, y el pedido quedaría marcado como pagado.
+    // S/ 51.79 -> 5179. Mandar `51.79` le cobraría S/ 0.52 a quien pidió S/ 50
+    // de pan, y el pedido quedaría marcado como pagado.
     const { publico, post } = preparar();
     await llamar(publico.pagarPedidoCulqi, req());
 
     expect(post).toHaveBeenCalledTimes(1);
     const [url, cuerpo, opciones] = post.mock.calls[0];
     expect(url).toBe('https://api.culqi.com/v2/charges');
-    expect(cuerpo.amount).toBe(5000);
+    expect(cuerpo.amount).toBe(5179);
+    expect(Number.isInteger(cuerpo.amount)).toBe(true);
     expect(cuerpo.currency_code).toBe('PEN');
     expect(cuerpo.source_id).toBe(TOKEN_TARJETA);
     expect(cuerpo.email).toBe('cliente@correo.com');
@@ -161,16 +188,76 @@ describe('pagarPedidoCulqi — el cobro sale bien', () => {
     expect(opciones.headers.Authorization).toBe(`Bearer ${LLAVE_FALSA}`);
   });
 
+  test('el cargo sale por el monto CON comisión, no por el del pedido', async () => {
+    // EL punto de la parte 2 (2026-09-28): la comisión de la pasarela la paga el
+    // CLIENTE. Se le cobra S/ 51.79 para que, después de que Culqi se quede sus
+    // S/ 1.79, al dueño le lleguen los S/ 50.00 limpios del pedido. Cobrar
+    // S/ 50.00 dejaría al dueño pagando la comisión de su propio bolsillo en
+    // cada pedido — que es justo lo que decidió no hacer.
+    const { publico, post } = preparar();
+    const { res } = await llamar(publico.pagarPedidoCulqi, req());
+
+    expect(post.mock.calls[0][1].amount).toBe(5179);
+    // Y NO por el monto del pedido: el candado explícito contra la regresión.
+    expect(post.mock.calls[0][1].amount).not.toBe(5000);
+    expect(post.mock.calls[0][1].amount).toBe(centimosConComision(50));
+
+    // El desglose que la página le muestra al cliente: las tres cifras, y las
+    // dos primeras tienen que sumar la tercera o el cliente ve un cobro que no
+    // cuadra con nada.
+    expect(res.body.montoElegido).toBe(50);
+    expect(res.body.comision).toBe(1.79);
+    expect(res.body.montoCobrado).toBe(51.79);
+    expect(res.body.montoElegido + res.body.comision).toBeCloseTo(res.body.montoCobrado, 10);
+    // Pero el PEDIDO se salda con los S/ 50, sin comisión adentro: si la
+    // comisión entrara en la cuenta de saldos, saldría un VUELTO_PENDIENTE
+    // fantasma de S/ 1.79 que el dueño tendría que devolver sin haberlo cobrado.
+    expect(res.body.estadoPagoAdelanto).toBe('PAGADO');
+    expect(res.body.ajuste).toBeNull();
+  });
+
+  test('la metadata del cargo lleva el desglose, para entenderlo desde el panel de Culqi', async () => {
+    // Sin esto, un cargo de S/ 51.79 contra un pedido de S/ 50.00 no se entiende
+    // sin abrir la base.
+    const { publico, post } = preparar();
+    await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 25 })));
+
+    expect(post.mock.calls[0][1].metadata).toEqual({
+      idPedido: '900',
+      numeroPedidoDia: '3',
+      montoElegido: '25.00',
+      comisionCulqi: '1.49',
+    });
+  });
+
+  test('un token de Yape (ype_…) se cobra por el mismo camino que uno de tarjeta', async () => {
+    // Culqi acepta el token de Yape como `source_id` del mismo POST /charges
+    // (comprobado con un cargo real de prueba). Lo único que podía frenarlo
+    // era la validación de forma de acá, que antes solo conocía `tkn_`.
+    const { publico, post } = preparar();
+    const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ culqiTokenId: TOKEN_YAPE })));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.estadoPagoAdelanto).toBe('PAGADO');
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][1].source_id).toBe(TOKEN_YAPE);
+  });
+
   test('un total con decimales se redondea al céntimo, sin perder ni uno', async () => {
     // 50.10 * 100 da 5009.999999999999 en punto flotante: truncar cobraría
-    // S/ 50.09. Por eso la conversión redondea.
+    // S/ 50.09. Por eso la conversión redondea. Con la comisión encima,
+    // (5010 + 118) / 0.9882 = 5189.23… -> 5189 céntimos.
     const { publico, post } = preparar({
       pedido: { ...PEDIDO_ESPERANDO_PAGO, Total: 50.1 },
-      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: 5010 })),
+      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: 5189 })),
     });
-    await llamar(publico.pagarPedidoCulqi, req());
+    const { res } = await llamar(publico.pagarPedidoCulqi, req());
 
-    expect(post.mock.calls[0][1].amount).toBe(5010);
+    expect(post.mock.calls[0][1].amount).toBe(5189);
+    expect(res.body.montoElegido).toBe(50.1);
+    expect(res.body.estadoPagoAdelanto).toBe('PAGADO');
+    // Y ni el desglose ni el pedido arrastran cola de punto flotante.
+    expect(res.body.comision).toBe(Number(res.body.comision.toFixed(2)));
   });
 
   test('el DNI del cliente sirve como segunda vía (otro celular, sin localStorage)', async () => {
@@ -184,29 +271,249 @@ describe('pagarPedidoCulqi — el cobro sale bien', () => {
     expect(res.body.estadoPagoAdelanto).toBe('PAGADO');
   });
 
-  test('si Culqi cobrara MENOS del total, queda DEUDA_PARCIAL con su ajuste', async () => {
-    // No debería pasar nunca (se le pide un monto exacto), pero la lógica de
-    // saldos se conserva del flujo de Yape para que un reembolso parcial o una
-    // captura por otro monto no se pierda en silencio.
+  test('lo que Culqi diga haber cobrado NO cambia el saldo del pedido', async () => {
+    // Antes del 2026-09-28 la cuenta de saldos se hacía con el `amount` que
+    // devolvía Culqi, y tenía sentido: se le pedía exactamente el total. Ahora
+    // ese número INCLUYE la comisión, así que usarlo daría un VUELTO_PENDIENTE
+    // fantasma en cada pedido. La cuenta se hace con `montoElegido` y nada más.
+    //
+    // Se simula un `amount` disparatado a propósito: aunque Culqi contestara
+    // cualquier cosa, el saldo del pedido no se mueve.
     const { mock, publico } = preparar({
-      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: 4800 })),
+      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: 9999 })),
     });
     const { res } = await llamar(publico.pagarPedidoCulqi, req());
 
+    expect(res.body.estadoPagoAdelanto).toBe('PAGADO');
+    expect(res.body.ajuste).toBeNull();
+    expect(mock.contar(/INSERT INTO AjustesPago/i)).toBe(0);
+  });
+});
+
+/**
+ * EL pedido del dueño del 2026-09-28: pagar el 50% para "separar" el pedido, y
+ * el saldo al recoger. El saldo usa el mecanismo que ya existía (DEUDA_PARCIAL
+ * + AjustesPago tipo DEUDA), lo único nuevo es dejar de asumir el 100%.
+ */
+describe('pagarPedidoCulqi — el pago parcial para separar el pedido', () => {
+  test('el mínimo exacto (50%) se acepta y deja el saldo como DEUDA_PARCIAL', async () => {
+    // S/ 25.00 de un pedido de S/ 50.00. El cargo sale por 25 + comisión = 2649
+    // céntimos, y el ajuste es por los S/ 25.00 que FALTAN del pedido — sin
+    // comisión adentro, porque la comisión no es parte del pedido y no se cobra
+    // al recoger.
+    const { mock, publico, post } = preparar({
+      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: centimosConComision(25) })),
+    });
+    const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 25 })));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.estado).toBe('CONFIRMADO');
     expect(res.body.estadoPagoAdelanto).toBe('DEUDA_PARCIAL');
-    expect(res.body.ajuste).toEqual({ idAjuste: 77, tipo: 'DEUDA', monto: 2, estado: 'PENDIENTE' });
-    expect(mock.consultasQueMatcheen(/INSERT INTO AjustesPago/i)[0].valores).toEqual([900, 'DEUDA', 2]);
+    expect(res.body.montoElegido).toBe(25);
+    expect(res.body.comision).toBe(1.49);
+    expect(res.body.montoCobrado).toBe(26.49);
+    expect(res.body.total).toBe(50);
+    expect(res.body.ajuste).toEqual({ idAjuste: 77, tipo: 'DEUDA', monto: 25, estado: 'PENDIENTE' });
+
+    // A Culqi se le pide el monto CON comisión.
+    expect(post.mock.calls[0][1].amount).toBe(2649);
+    // El ajuste en base: los S/ 25 del pedido, NO los S/ 26.49 cobrados.
+    expect(mock.consultasQueMatcheen(/INSERT INTO AjustesPago/i)[0].valores).toEqual([900, 'DEUDA', 25]);
+    // `MontoConfirmadoStaff` guarda lo que entró AL PEDIDO, no el cargo.
+    expect(mock.consultasQueMatcheen(/UPDATE Pedidos\s+SET Estado = 'CONFIRMADO'/i)[0].valores).toEqual([
+      'DEUDA_PARCIAL',
+      25,
+      900,
+    ]);
+    // Y la cuenta cierra: lo abonado + la deuda = el total del pedido.
+    expect(res.body.montoElegido + res.body.ajuste.monto).toBe(res.body.total);
   });
 
-  test('si Culqi cobrara MÁS del total, queda VUELTO_PENDIENTE con su ajuste', async () => {
-    const { mock, publico } = preparar({
-      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: 5300 })),
-    });
-    const { res } = await llamar(publico.pagarPedidoCulqi, req());
+  test('el máximo (el 100% del total) se acepta y da PAGADO sin ajuste', async () => {
+    const { mock, publico } = preparar();
+    const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 50 })));
 
-    expect(res.body.estadoPagoAdelanto).toBe('VUELTO_PENDIENTE');
-    expect(res.body.ajuste).toEqual({ idAjuste: 77, tipo: 'VUELTO', monto: 3, estado: 'PENDIENTE' });
-    expect(mock.consultasQueMatcheen(/INSERT INTO AjustesPago/i)[0].valores).toEqual([900, 'VUELTO', 3]);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.estadoPagoAdelanto).toBe('PAGADO');
+    expect(res.body.ajuste).toBeNull();
+    expect(mock.contar(/INSERT INTO AjustesPago/i)).toBe(0);
+  });
+
+  test('un monto intermedio (campo libre, no dos botones) también vale', async () => {
+    // El dueño pidió un campo libre entre el 50% y el 100%, no solo "mitad" o
+    // "todo": el 70% tiene que pasar igual.
+    const { mock, publico, post } = preparar({
+      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: centimosConComision(35) })),
+    });
+    const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 35 })));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.estadoPagoAdelanto).toBe('DEUDA_PARCIAL');
+    expect(res.body.ajuste.monto).toBe(15);
+    expect(post.mock.calls[0][1].amount).toBe(centimosConComision(35));
+    expect(mock.consultasQueMatcheen(/INSERT INTO AjustesPago/i)[0].valores).toEqual([900, 'DEUDA', 15]);
+  });
+
+  test('un céntimo por debajo del mínimo se rechaza con 400 y NO se le cobra nada', async () => {
+    // S/ 24.99 de un pedido de S/ 50.00. Es el borde exacto: un `>=` mal puesto
+    // acá dejaría separar un pedido con menos de lo que el dueño decidió.
+    const { mock, publico, post } = preparar();
+    const { res, next } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 24.99 })));
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.body.mensaje).toMatch(/al menos S\/ 25\.00/);
+    // La tarjeta no se toca: un rechazo de validación no puede cobrar nada.
+    expect(post).not.toHaveBeenCalled();
+    expect(mock.contar(/UPDATE Pedidos\s+SET Estado = 'CONFIRMADO'/i)).toBe(0);
+    // El pedido sigue esperando pago, y el mínimo viaja en la respuesta para
+    // que la página pueda corregir el campo sin hacer la cuenta de nuevo.
+    expect(res.body.estadoPagoAdelanto).toBe('VERIFICANDO');
+    expect(res.body.montoMinimo).toBe(25);
+    expect(res.body.total).toBe(50);
+  });
+
+  test('un monto muy por debajo del mínimo se rechaza igual', async () => {
+    const { publico, post } = preparar();
+    const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 1 })));
+
+    expect(res.statusCode).toBe(400);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  test('pagar MÁS que el total se rechaza: el techo es el pedido', async () => {
+    // El techo lo pone la base, no el body. Sin esto, un body con
+    // montoElegido: 5000 haría un cargo de S/ 5000 y un VUELTO_PENDIENTE de
+    // S/ 4950 que el dueño tendría que devolver de su bolsillo.
+    const { publico, post } = preparar();
+    const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 50.01 })));
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.mensaje).toMatch(/como máximo su total de S\/ 50\.00/);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  test('VUELTO_PENDIENTE es imposible por este endpoint', async () => {
+    // El techo de la validación es el total, así que el cliente no puede abonar
+    // de más a su pedido por acá. Es la diferencia de fondo con el flujo de
+    // Yape, donde el monto lo declaraba él.
+    const { mock, publico } = preparar();
+    for (const montoElegido of [50, 25, 37.5, undefined]) {
+      const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido })));
+      expect(res.body.estadoPagoAdelanto).not.toBe('VUELTO_PENDIENTE');
+    }
+    expect(mock.contar(/INSERT INTO AjustesPago.*VUELTO/is)).toBe(0);
+  });
+
+  test('un montoElegido basura se rechaza, no se cuela como NaN hasta la pasarela', async () => {
+    // `Number('mucho')` es NaN, y NaN falla toda comparación en silencio: sin la
+    // guarda de `Number.isFinite`, NaN pasaría los dos `<`/`>` y llegaría a
+    // `aCentimosCulqi`, que sí lo corta — pero con un mensaje de "no se puede
+    // cobrar", que no le dice al cliente qué escribir.
+    for (const montoElegido of ['mucho', NaN, Infinity, -25, 0, {}, [], true]) {
+      const { publico, post } = preparar();
+      const { res, next } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido })));
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(400);
+      expect(res.body.mensaje).toMatch(/al menos S\/ 25\.00/);
+      expect(post).not.toHaveBeenCalled();
+    }
+  });
+
+  test('sin montoElegido en el body se asume el 100% (la página anterior no lo mandaba)', async () => {
+    // Compatibilidad hacia atrás: un cliente con la página vieja en caché no
+    // puede empezar a recibir un 400 por un campo que su versión no conoce.
+    for (const cuerpo of [body(), body({ montoElegido: undefined }), body({ montoElegido: null })]) {
+      const { publico, post } = preparar();
+      const { res } = await llamar(publico.pagarPedidoCulqi, req(cuerpo));
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.estadoPagoAdelanto).toBe('PAGADO');
+      expect(res.body.montoElegido).toBe(50);
+      expect(post.mock.calls[0][1].amount).toBe(centimosConComision(50));
+    }
+  });
+
+  test('un montoElegido en texto (body JSON flojo) se trata como número', async () => {
+    const { publico, post } = preparar({
+      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: centimosConComision(25) })),
+    });
+    const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: '25.00' })));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.montoElegido).toBe(25);
+    expect(post.mock.calls[0][1].amount).toBe(2649);
+  });
+
+  test('el mínimo se compara EN CÉNTIMOS: un total impar no rechaza el mínimo que se mostró', async () => {
+    // Total S/ 50.05 -> mínimo S/ 25.03 (redondeado hacia arriba). En soles
+    // decimales, `25.03 >= 50.05 * 0.5` arrastra la cola de punto flotante y es
+    // justo la comparación que rechazaría el monto exacto que la página le
+    // mostró al cliente.
+    const pedido = { ...PEDIDO_ESPERANDO_PAGO, Total: 50.05 };
+    expect(montoMinimoAPagar(50.05)).toBe(25.03);
+
+    const { publico, post } = preparar({
+      pedido,
+      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: centimosConComision(25.03) })),
+    });
+    const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 25.03 })));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.estadoPagoAdelanto).toBe('DEUDA_PARCIAL');
+    expect(res.body.ajuste.monto).toBe(25.02);
+    expect(post.mock.calls[0][1].amount).toBe(centimosConComision(25.03));
+
+    // Y el céntimo de abajo (S/ 25.02, la mitad exacta hacia abajo) NO pasa.
+    const { publico: p2, post: post2 } = preparar({ pedido });
+    const { res: res2 } = await llamar(p2.pagarPedidoCulqi, req(body({ montoElegido: 25.02 })));
+    expect(res2.statusCode).toBe(400);
+    expect(post2).not.toHaveBeenCalled();
+  });
+
+  test('el mensaje va dirigido al CLIENTE, no al personal', async () => {
+    // `describirResultadoPago` dice "falta S/ 25.00: cóbralo al entregar", que es
+    // una orden para quien atiende. Mientras DEUDA_PARCIAL era raro casi no se
+    // notaba; ahora es el camino normal de la mitad de los pedidos.
+    const { publico } = preparar({
+      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: centimosConComision(25) })),
+    });
+    const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 25 })));
+
+    expect(res.body.mensaje).toMatch(/quedó separado con S\/ 25\.00/);
+    expect(res.body.mensaje).toMatch(/S\/ 25\.00 que faltan los pagas cuando lo recojas/);
+    // Nada dirigido a otra persona.
+    expect(res.body.mensaje).not.toMatch(/cóbralo|devuélvelo|Pago verificado/i);
+  });
+
+  test('pagado al 100%, el mensaje no habla de ningún saldo', async () => {
+    const { publico } = preparar();
+    const { res } = await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 50 })));
+
+    expect(res.body.mensaje).toMatch(/pagado por completo/i);
+    expect(res.body.mensaje).not.toMatch(/falta|separado|recojas/i);
+  });
+
+  test('un pago parcial deja en auditoría las tres cifras, sin columnas nuevas en la base', async () => {
+    // Es lo único que va a quedar de "cuánto pagó el cliente de más por la
+    // comisión": no hay columna para eso, y el dueño decidió que no hacía falta.
+    const { mock, publico } = preparar({
+      axiosPost: jest.fn().mockResolvedValue(cargoExitoso({ amount: centimosConComision(25) })),
+    });
+    await llamar(publico.pagarPedidoCulqi, req(body({ montoElegido: 25 })));
+
+    const auditorias = mock.consultasQueMatcheen(/INSERT INTO Auditoria/i);
+    expect(auditorias).toHaveLength(1);
+    const datos = JSON.parse(auditorias[0].valores.find((v) => typeof v === 'string' && v.startsWith('{')));
+    expect(datos).toMatchObject({
+      total: 50,
+      montoElegido: 25,
+      comision: 1.49,
+      montoACobrar: 26.49,
+      estadoPagoAdelanto: 'DEUDA_PARCIAL',
+      culqiChargeId: 'chr_test_abc123',
+    });
   });
 });
 

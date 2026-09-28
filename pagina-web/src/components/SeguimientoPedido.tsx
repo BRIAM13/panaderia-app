@@ -20,11 +20,17 @@ import {
   ApiError,
   consultarPedidosPublicos,
   pagarConCulqi,
+  type PagarConCulqiResultado,
   type PedidoPublicoConsultaItem,
   type PedidoPublicoConsultaResultado,
 } from "../services/api";
 import { formatearHora12 } from "../utils/horariosPan";
-import { avisoPagoAdelanto, esperaPagoDelCliente } from "../utils/pagoAdelanto";
+import {
+  ErrorMontoFueraDeRango,
+  avisoPagoAdelanto,
+  esperaPagoDelCliente,
+  rangoDesdeRespuesta,
+} from "../utils/pagoAdelanto";
 import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
 import { LONGITUD_DOCUMENTO, type TipoDocumento } from "../hooks/useVerificacionDocumento";
 import { PagoCulqi } from "./PagoCulqi";
@@ -156,7 +162,12 @@ export function SeguimientoPedido() {
   // usa incógnito. Acá se llega buscando por documento, que es el mismo con
   // el que hizo el pedido.
   const [pedidoPagando, setPedidoPagando] = useState<PedidoPublicoConsultaItem | null>(null);
-  const [avisoPagoHecho, setAvisoPagoHecho] = useState(false);
+  // La respuesta del cobro que se acaba de hacer desde acá: alimenta el aviso
+  // verde de arriba de la lista con el mensaje y el desglose que devolvió el
+  // servidor (cuánto entró al pedido, cuánto salió de la tarjeta y cuánto
+  // falta al recoger, si separó con una parte). null = no pagó nada en esta
+  // sesión del panel.
+  const [avisoPagoHecho, setAvisoPagoHecho] = useState<PagarConCulqiResultado | null>(null);
   // Qué grupos (por estado) están desplegados — arrancan todos plegados;
   // el cliente elige cuál abrir. Un refresco del sondeo no toca esto, así
   // que un grupo que ya abrió no se le vuelve a cerrar solo.
@@ -177,7 +188,7 @@ export function SeguimientoPedido() {
     setResultado(null);
     setGruposAbiertos(new Set());
     setPedidoPagando(null);
-    setAvisoPagoHecho(false);
+    setAvisoPagoHecho(null);
   }
 
   /** Vuelve a consultar ya mismo (sin esperar al sondeo de 20s) para que el
@@ -204,19 +215,26 @@ export function SeguimientoPedido() {
    * una promesa rechazada dentro de su propio formulario, que es donde el
    * cliente puede corregir la tarjeta.
    */
-  async function cobrarPedidoDesdeSeguimiento(culqiTokenId: string, datosTarjeta: { email: string }) {
+  async function cobrarPedidoDesdeSeguimiento(culqiTokenId: string, datos: { email: string; montoElegido: number }) {
     const pedido = pedidoPagando;
     if (!pedido) return;
 
+    let pago: PagarConCulqiResultado;
     try {
-      await pagarConCulqi({
+      pago = await pagarConCulqi({
         idPedido: pedido.idPedido,
         documento: documentoConsultadoRef.current,
         culqiTokenId,
-        email: datosTarjeta.email,
+        email: datos.email,
+        // SIN comisión: lo que el cliente eligió abonar a su pedido.
+        montoElegido: datos.montoElegido,
       });
     } catch (err) {
       if (err instanceof ApiError) {
+        // Un 400 por monto fuera de rango trae `total` y `montoMinimo`: la
+        // pantalla de pago los usa para corregir el control (ver PedidoForm).
+        const rango = rangoDesdeRespuesta(err.datos);
+        if (rango) throw new ErrorMontoFueraDeRango(err.message, rango.total, rango.montoMinimo);
         throw new Error(err.errores?.join(" ") || err.message);
       }
       throw new Error(
@@ -228,7 +246,7 @@ export function SeguimientoPedido() {
     // sondeo de 20s), para que el pedido aparezca al toque como confirmado en
     // vez de seguir diciendo "falta pagar" durante medio minuto.
     setPedidoPagando(null);
-    setAvisoPagoHecho(true);
+    setAvisoPagoHecho(pago);
     await refrescarAhora();
   }
 
@@ -272,7 +290,7 @@ export function SeguimientoPedido() {
     setDocumento("");
     setGruposAbiertos(new Set());
     setPedidoPagando(null);
-    setAvisoPagoHecho(false);
+    setAvisoPagoHecho(null);
   }
 
   // Sondeo en tiempo real: solo mientras el panel está abierto, hay un
@@ -430,13 +448,38 @@ export function SeguimientoPedido() {
                             <motion.div
                               initial={{ opacity: 0, y: -4 }}
                               animate={{ opacity: 1, y: 0 }}
-                              className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3"
+                              className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3"
                             >
-                              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" strokeWidth={1.75} />
-                              <p className="text-xs leading-relaxed font-medium text-emerald-800">
-                                Tu pago quedó confirmado y ya estamos preparando tu pedido. Te llega el
-                                comprobante al correo que dejaste.
-                              </p>
+                              <div className="flex items-start gap-2.5">
+                                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" strokeWidth={1.75} />
+                                <p className="text-xs leading-relaxed font-medium text-emerald-800">
+                                  {/* El mensaje del servidor ya dice si quedó pagado
+                                      completo o separado con una parte. */}
+                                  {avisoPagoHecho.mensaje} Te llega el comprobante al correo que dejaste.
+                                </p>
+                              </div>
+                              {/* Las mismas tres cifras que vio antes de pagar, ahora
+                                  con lo que el servidor cobró de verdad. */}
+                              <dl className="mt-2.5 space-y-1 border-t border-emerald-200 pt-2.5 text-xs text-emerald-900 tabular-nums">
+                                <div className="flex justify-between gap-3">
+                                  <dt>Entró a tu pedido</dt>
+                                  <dd className="font-semibold">S/ {avisoPagoHecho.montoElegido.toFixed(2)}</dd>
+                                </div>
+                                <div className="flex justify-between gap-3">
+                                  <dt>Comisión de la pasarela</dt>
+                                  <dd className="font-semibold">S/ {avisoPagoHecho.comision.toFixed(2)}</dd>
+                                </div>
+                                <div className="flex justify-between gap-3">
+                                  <dt>Salió de tu tarjeta o Yape</dt>
+                                  <dd className="font-semibold">S/ {avisoPagoHecho.montoCobrado.toFixed(2)}</dd>
+                                </div>
+                                {avisoPagoHecho.ajuste?.tipo === "DEUDA" && (
+                                  <div className="flex justify-between gap-3 text-amber-800">
+                                    <dt>Saldo pendiente al recoger</dt>
+                                    <dd className="font-semibold">S/ {avisoPagoHecho.ajuste.monto.toFixed(2)}</dd>
+                                  </div>
+                                )}
+                              </dl>
                             </motion.div>
                           )}
 

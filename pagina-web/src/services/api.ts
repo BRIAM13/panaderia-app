@@ -12,10 +12,17 @@ export class ApiError extends Error {
    * redactado para mostrarse tal cual; esto sirve para decidir la FORMA de
    * mostrarlo (ej. un callejón sin salida en vez de un error del campo). */
   tipo?: string;
-  constructor(mensaje: string, errores?: string[], tipo?: string) {
+  /** El cuerpo completo de la respuesta de error, tal como llegó. Casi
+   * nunca hace falta —`message` ya trae lo que hay que mostrar—, pero algún
+   * error viene con datos para CORREGIR la pantalla además de avisar: el
+   * 400 de `pagar-culqi` por un monto fuera de rango trae `total` y
+   * `montoMinimo` (ver `rangoDesdeRespuesta` en utils/pagoAdelanto). */
+  datos?: Record<string, unknown>;
+  constructor(mensaje: string, errores?: string[], tipo?: string, datos?: Record<string, unknown>) {
     super(mensaje);
     this.errores = errores;
     this.tipo = tipo;
+    this.datos = datos;
   }
 }
 
@@ -223,27 +230,46 @@ export interface PagarConCulqiInput {
   culqiTokenId: string;
   /** A dónde manda Culqi el comprobante del pago. Lo exige la pasarela. */
   email: string;
+  /** Cuánto abona el cliente A SU PEDIDO ahora, en soles y SIN comisión: lo
+   * que eligió en el control de monto de la pantalla de pago. Entre el
+   * mínimo (la mitad del total) y el total, o el servidor responde 400 con
+   * `total` y `montoMinimo`. Ausente = el 100% del total. La comisión NO va
+   * acá: el backend la calcula por su cuenta sobre este número. */
+  montoElegido?: number;
 }
 
-/** Saldo o vuelto que quedó del cobro, con su id. En la práctica siempre es
- * null: al servidor le pedimos cobrar el total EXACTO, así que no hay
- * diferencia que ajustar. Existe porque la lógica de saldos se conserva del
- * flujo anterior (Yape), para el día que haya un reembolso parcial. */
+/** Saldo que quedó por pagar al recoger, con su id. Existe cuando el cliente
+ * eligió "separar" el pedido abonando menos que el total (`tipo: "DEUDA"`,
+ * `monto` = total - montoElegido). Un VUELTO no puede salir de este endpoint
+ * —el servidor topa el monto en el total—, pero el tipo se conserva porque
+ * la mecánica de saldos es la misma del flujo anterior de Yape. */
 export interface AjustePagoCulqi extends AjustePagoPublico {
   idAjuste: number;
 }
 
 export interface PagarConCulqiResultado {
+  /** Ya redactado para el cliente: "Listo, tu pedido quedó separado con
+   * S/ 45.50. Los S/ 45.50 que faltan los pagas cuando lo recojas." o "Listo,
+   * tu pedido está pagado por completo…". */
   mensaje: string;
   idPedido: number;
   numeroPedidoDia: number;
   /** Siempre "CONFIRMADO": si el cobro pasó, el pedido queda confirmado en la
    * misma petición — no espera a que nadie lo revise a mano. */
   estado: "CONFIRMADO";
-  /** "PAGADO" en la práctica (ver `AjustePagoCulqi`). */
+  /** "PAGADO" si abonó el total, "DEUDA_PARCIAL" si separó el pedido con una
+   * parte (y entonces `ajuste` trae el saldo). */
   estadoPagoAdelanto: EstadoPagoAdelanto;
+  /** El total del pedido, el de siempre. */
   total: number;
-  /** Lo que Culqi cobró de verdad, según su propia respuesta. */
+  /** Lo que quedó abonado AL PEDIDO (sin comisión). Es lo que decide el
+   * estado y lo que se compara contra `total`. */
+  montoElegido: number;
+  /** Lo que el cliente pagó DE MÁS por usar la pasarela: se le traslada
+   * entera a él, el negocio no se queda con nada de esto. */
+  comision: number;
+  /** Lo que de verdad salió de su tarjeta/Yape: `montoElegido + comision`.
+   * OJO: antes de 2026-09-28 este campo era el total del pedido; ya no. */
   montoCobrado: number;
   /** La referencia del cargo (`chr_...`). Es lo que el cliente necesita tener
    * a mano si algún día hay que reclamar algo sobre este pago. */
@@ -256,13 +282,16 @@ export interface PagarConCulqiResultado {
  * encendido: el navegador ya tokenizó la tarjeta con Culqi.js y acá se le pide
  * al SERVIDOR que cree el cargo con su llave secreta.
  *
- * El monto NO viaja: lo saca el backend de `Pedidos.Total`. Si viniera de acá,
+ * El TOTAL no viaja: lo saca el backend de `Pedidos.Total`. Lo único de la
+ * plata que decide el cliente es `montoElegido` (cuánto abona ahora), y el
+ * servidor lo valida contra ese total antes de cobrar — si viniera libre,
  * cualquiera podría pedir S/ 200 de pan y cobrarse S/ 1.
  *
  * Los errores llegan como `ApiError` con un mensaje ya redactado en español
  * (Culqi devuelve el suyo y el backend lo traduce cuando falta) — se puede
- * mostrar tal cual. Un 400 es un rechazo y el pedido sigue en pie para
- * reintentar con otra tarjeta; un 503 significa que el dueño todavía no
+ * mostrar tal cual. Un 400 es un rechazo (de la tarjeta, o del monto fuera
+ * de rango: ese trae `total` y `montoMinimo` en `datos`) y el pedido sigue
+ * en pie para reintentar; un 503 significa que el dueño todavía no
  * configuró la pasarela.
  */
 export async function pagarConCulqi(
@@ -286,7 +315,7 @@ async function manejarRespuesta<T>(respuesta: Response): Promise<T> {
   }
   if (!respuesta.ok) {
     const mensaje = (data.mensaje as string) || "Ocurrió un error inesperado.";
-    throw new ApiError(mensaje, data.errores as string[] | undefined, data.tipo as string | undefined);
+    throw new ApiError(mensaje, data.errores as string[] | undefined, data.tipo as string | undefined, data);
   }
   return data as T;
 }

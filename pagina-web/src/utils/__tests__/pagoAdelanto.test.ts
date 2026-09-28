@@ -2,18 +2,27 @@ import { describe, expect, test } from "vitest";
 import type { PedidoPublicoConsultaItem } from "../../services/api";
 import {
   CLAVE_PAGO_PENDIENTE,
+  COMISION_FIJA_SOLES,
+  ErrorMontoFueraDeRango,
+  FRACCION_MINIMA_PAGO_ADELANTO,
   LARGO_MAXIMO_CODIGO,
+  TASA_COMISION_VARIABLE,
+  acotarMontoElegido,
   avisoPagoAdelanto,
   borrarPagoPendiente,
+  calcularMontoConComision,
   codigoOperacionValido,
   esperaPagoDelCliente,
   guardarPagoPendiente,
   leerPagoPendiente,
   limpiarCodigoOperacion,
   limpiarMonto,
+  montoMinimoAPagar,
   montoSugerido,
   pagoPendienteVigente,
+  rangoDesdeRespuesta,
   revisarMontoDeclarado,
+  saldoPendiente,
   textoAjuste,
   type PagoPendienteGuardado,
 } from "../pagoAdelanto";
@@ -127,6 +136,136 @@ describe("campo de monto", () => {
   });
 });
 
+describe("espejo del backend — las constantes tienen que ser las mismas que allá", () => {
+  test("los valores que hoy aplica el servidor (pagoAdelanto.js / pagoCulqi.js)", () => {
+    // Si este test falla es porque alguien cambió una constante de un solo
+    // lado. Hay que cambiar las dos: el backend manda, esto es la vista previa.
+    expect(FRACCION_MINIMA_PAGO_ADELANTO).toBe(0.5);
+    expect(COMISION_FIJA_SOLES).toBe(1.18);
+    expect(TASA_COMISION_VARIABLE).toBe(0.0118);
+  });
+});
+
+describe("montoMinimoAPagar — la misma cuenta que el servidor", () => {
+  test("la mitad del total, al céntimo", () => {
+    expect(montoMinimoAPagar(91)).toBe(45.5);
+    expect(montoMinimoAPagar(50)).toBe(25);
+    expect(montoMinimoAPagar(17.5)).toBe(8.75);
+  });
+
+  test("una mitad con medio céntimo redondea hacia arriba, igual que el backend", () => {
+    // 50.05 / 2 = 25.025 -> 25.03 (Math.round en céntimos enteros). Si acá
+    // diera 25.02, el cliente vería un mínimo que el servidor rechazaría.
+    expect(montoMinimoAPagar(50.05)).toBe(25.03);
+    expect(montoMinimoAPagar(0.03)).toBe(0.02);
+  });
+
+  test("un total con cola de punto flotante no contamina el mínimo", () => {
+    expect(montoMinimoAPagar(0.1 + 0.2)).toBe(0.15);
+  });
+
+  test("un total no cobrable devuelve null, nunca 0", () => {
+    expect(montoMinimoAPagar(0)).toBeNull();
+    expect(montoMinimoAPagar(-5)).toBeNull();
+    expect(montoMinimoAPagar(Number.NaN)).toBeNull();
+    expect(montoMinimoAPagar(Number.POSITIVE_INFINITY)).toBeNull();
+  });
+});
+
+describe("calcularMontoConComision — la misma cuenta que el servidor", () => {
+  test("el caso comprobado contra un cargo real de Culqi: neto 45.50 -> cobra 47.24, comisión 1.74", () => {
+    expect(calcularMontoConComision(45.5)).toEqual({ montoACobrar: 47.24, comision: 1.74 });
+  });
+
+  test("otros netos, calculados a mano con las constantes de hoy", () => {
+    // (9100 + 118) / 0.9882 = 9328.07 -> 9328
+    expect(calcularMontoConComision(91)).toEqual({ montoACobrar: 93.28, comision: 2.28 });
+    // (5000 + 118) / 0.9882 = 5179.11 -> 5179
+    expect(calcularMontoConComision(50)).toEqual({ montoACobrar: 51.79, comision: 1.79 });
+    // (1750 + 118) / 0.9882 = 1890.30 -> 1890
+    expect(calcularMontoConComision(17.5)).toEqual({ montoACobrar: 18.9, comision: 1.4 });
+  });
+
+  test("comisión = cobrado - neto, siempre, y las dos cifras vienen con 2 decimales", () => {
+    for (const neto of [0.01, 1, 6, 12.34, 45.5, 99.99, 250, 1999.99]) {
+      const resultado = calcularMontoConComision(neto);
+      expect(resultado).not.toBeNull();
+      const { montoACobrar, comision } = resultado!;
+      expect(Math.round((montoACobrar - neto) * 100)).toBe(Math.round(comision * 100));
+      expect(montoACobrar).toBe(Number(montoACobrar.toFixed(2)));
+      expect(comision).toBe(Number(comision.toFixed(2)));
+      expect(comision).toBeGreaterThan(COMISION_FIJA_SOLES - 0.01);
+    }
+  });
+
+  test("un neto no cobrable devuelve null", () => {
+    expect(calcularMontoConComision(0)).toBeNull();
+    expect(calcularMontoConComision(-1)).toBeNull();
+    expect(calcularMontoConComision(Number.NaN)).toBeNull();
+  });
+});
+
+describe("acotarMontoElegido — el control nunca deja un monto fuera de [mínimo, total]", () => {
+  test("dentro del rango pasa tal cual, al céntimo", () => {
+    expect(acotarMontoElegido(91, 60)).toBe(60);
+    expect(acotarMontoElegido(91, 45.5)).toBe(45.5);
+    expect(acotarMontoElegido(91, 91)).toBe(91);
+    expect(acotarMontoElegido(91, 60.004)).toBe(60);
+  });
+
+  test("por debajo del mínimo sube al mínimo; por encima del total baja al total", () => {
+    expect(acotarMontoElegido(91, 10)).toBe(45.5);
+    expect(acotarMontoElegido(91, 45.49)).toBe(45.5);
+    expect(acotarMontoElegido(91, 150)).toBe(91);
+    expect(acotarMontoElegido(91, 91.01)).toBe(91);
+  });
+
+  test("sin número (campo vacío) cae al total, que es el valor por defecto", () => {
+    expect(acotarMontoElegido(91, Number.NaN)).toBe(91);
+  });
+
+  test("con un total no cobrable no hay rango: devuelve el total sin tocarlo", () => {
+    expect(acotarMontoElegido(0, 5)).toBe(0);
+  });
+});
+
+describe("saldoPendiente — lo que queda por pagar al recoger", () => {
+  test("total - elegido, en céntimos exactos", () => {
+    expect(saldoPendiente(91, 45.5)).toBe(45.5);
+    expect(saldoPendiente(91, 91)).toBe(0);
+    expect(saldoPendiente(50.1, 48.1)).toBe(2);
+  });
+
+  test("nunca negativo", () => {
+    expect(saldoPendiente(50, 60)).toBe(0);
+  });
+});
+
+describe("rangoDesdeRespuesta / ErrorMontoFueraDeRango — la red de seguridad del 400", () => {
+  test("con total y mínimo numéricos devuelve el rango", () => {
+    expect(rangoDesdeRespuesta({ mensaje: "…", total: 50, montoMinimo: 25 })).toEqual({
+      total: 50,
+      montoMinimo: 25,
+    });
+  });
+
+  test("cualquier otra respuesta de error no es un rechazo por monto", () => {
+    expect(rangoDesdeRespuesta({ mensaje: "Tarjeta rechazada" })).toBeNull();
+    expect(rangoDesdeRespuesta({ total: "50", montoMinimo: 25 })).toBeNull();
+    expect(rangoDesdeRespuesta({ total: 0, montoMinimo: 0 })).toBeNull();
+    expect(rangoDesdeRespuesta(null)).toBeNull();
+    expect(rangoDesdeRespuesta("texto")).toBeNull();
+  });
+
+  test("el error conserva el mensaje redactado por el servidor y el rango", () => {
+    const error = new ErrorMontoFueraDeRango("Tienes que pagar al menos S/ 25.00…", 50, 25);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain("S/ 25.00");
+    expect(error.total).toBe(50);
+    expect(error.montoMinimo).toBe(25);
+  });
+});
+
 describe("pendiente guardado — retomar el pago tras una pestaña muerta", () => {
   test("se guarda y se lee tal cual", () => {
     const almacen = crearAlmacen();
@@ -233,7 +372,7 @@ describe("avisoPagoAdelanto — qué se le dice al cliente sobre su pago", () =>
     expect(aviso?.tono).toBe("bien");
   });
 
-  test("pagó de menos: se dice cuánto debe, con la cifra", () => {
+  test("separó el pedido con una parte: se dice cuánto falta, con la cifra y sin reproche", () => {
     const aviso = avisoPagoAdelanto(
       pedido({
         estadoPagoAdelanto: "DEUDA_PARCIAL",
@@ -242,6 +381,8 @@ describe("avisoPagoAdelanto — qué se le dice al cliente sobre su pago", () =>
       }),
     );
     expect(aviso?.texto).toContain("aún debes S/ 2.00");
+    // Pagar la mitad es una elección del cliente, no un error suyo.
+    expect(aviso?.texto).not.toMatch(/de menos/i);
     expect(aviso?.tono).toBe("atencion");
   });
 

@@ -19,6 +19,7 @@ import {
   ApiError,
   crearPedidoPublico,
   pagarConCulqi,
+  type PagarConCulqiResultado,
   type PedidoPublicoResultado,
 } from "../services/api";
 import type { CatalogoPublico } from "../hooks/useCatalogoPublico";
@@ -48,9 +49,11 @@ import {
   totalConDescuento,
 } from "../utils/descuentos";
 import {
+  ErrorMontoFueraDeRango,
   borrarPagoPendiente,
   guardarPagoPendiente,
   leerPagoPendiente,
+  rangoDesdeRespuesta,
   type PagoPendienteGuardado,
 } from "../utils/pagoAdelanto";
 import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
@@ -185,7 +188,11 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   const [pasoPago, setPasoPago] = useState<PagoPendienteGuardado | null>(null);
   // true una vez que Culqi confirmó el cobro: cambia lo que dice la pantalla
   // final ("pago confirmado" vs "falta pagar tu pedido").
-  const [pagoConfirmado, setPagoConfirmado] = useState(false);
+  // La respuesta del cobro, entera: la pantalla final muestra el desglose
+  // que el SERVIDOR devolvió (cuánto entró al pedido, cuánto se llevó la
+  // pasarela, cuánto salió de la tarjeta, cuánto falta al recoger), no lo
+  // que la web había estimado. null = todavía no pagó (o salió sin pagar).
+  const [pagoRealizado, setPagoRealizado] = useState<PagarConCulqiResultado | null>(null);
 
   // Retomar un pago a medias: si la pestaña murió mientras el cliente estaba
   // en Yape, al volver aterriza directo en la pantalla de pago de SU pedido,
@@ -549,19 +556,28 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
    * El pedido se queda en 'VERIFICANDO' cuando el cobro falla, así que el
    * cliente puede reintentar con otra tarjeta sin volver a llenar nada.
    */
-  async function cobrarConCulqi(culqiTokenId: string, datosTarjeta: { email: string }) {
+  async function cobrarConCulqi(culqiTokenId: string, datos: { email: string; montoElegido: number }) {
     const pendiente = pasoPago;
     if (!pendiente) return;
 
+    let pago: PagarConCulqiResultado;
     try {
-      await pagarConCulqi({
+      pago = await pagarConCulqi({
         idPedido: pendiente.idPedido,
         token: pendiente.token,
         culqiTokenId,
-        email: datosTarjeta.email,
+        email: datos.email,
+        // SIN comisión: lo que el cliente eligió abonar a su pedido. El
+        // backend calcula la comisión por su cuenta sobre este número.
+        montoElegido: datos.montoElegido,
       });
     } catch (err) {
       if (err instanceof ApiError) {
+        // Un 400 por monto fuera de rango trae `total` y `montoMinimo`: se
+        // pasan a la pantalla de pago para que corrija el control, además
+        // de mostrar el mensaje (ya redactado) del servidor.
+        const rango = rangoDesdeRespuesta(err.datos);
+        if (rango) throw new ErrorMontoFueraDeRango(err.message, rango.total, rango.montoMinimo);
         throw new Error(err.errores?.join(" ") || err.message);
       }
       throw new Error(
@@ -570,7 +586,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
     }
     // Fuera del try: si el cobro salió bien, un error de acá para adelante no
     // debe mostrarse como "falló el pago".
-    cerrarPasoPago({ pagado: true });
+    cerrarPasoPago({ pago });
   }
 
   /**
@@ -583,10 +599,10 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
    * recargar la página volvería a aterrizar en la pantalla de pago de un
    * pedido que ya resolvió.
    */
-  function cerrarPasoPago({ pagado }: { pagado: boolean }) {
+  function cerrarPasoPago({ pago }: { pago: PagarConCulqiResultado | null }) {
     const pendiente = pasoPago;
     borrarPagoPendiente();
-    setPagoConfirmado(pagado);
+    setPagoRealizado(pago);
     setPasoPago(null);
     // `resultado` ya está puesto salvo que esta sesión haya arrancado
     // retomando un pendiente de localStorage (la pestaña murió y el
@@ -597,17 +613,18 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
         actual ??
         (pendiente
           ? {
-              mensaje: pagado
+              mensaje: pago
                 ? "¡Listo! Tu pago quedó confirmado y ya estamos preparando tu pedido."
                 : "Tu pedido está registrado. Puedes pagarlo con tarjeta desde “Ver mi pedido” cuando quieras.",
               idPedido: pendiente.idPedido,
               numeroPedidoDia: pendiente.numeroPedidoDia,
               total: pendiente.total,
-              // Si pagó, el backend ya dejó el pedido en PAGADO/CONFIRMADO.
-              // Este objeto es solo para pintar la pantalla final cuando no
-              // hay respuesta de creación a mano (pestaña recargada), así que
+              // Si pagó, el backend ya dejó el pedido en PAGADO (o en
+              // DEUDA_PARCIAL si separó con una parte) y CONFIRMADO. Este
+              // objeto es solo para pintar la pantalla final cuando no hay
+              // respuesta de creación a mano (pestaña recargada), así que
               // refleja eso y no un "falta pagar" que sería mentira.
-              estadoPagoAdelanto: pagado ? "PAGADO" : "VERIFICANDO",
+              estadoPagoAdelanto: pago ? pago.estadoPagoAdelanto : "VERIFICANDO",
             }
           : null),
     );
@@ -616,7 +633,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   function pedirOtroVez() {
     borrarPagoPendiente();
     setPasoPago(null);
-    setPagoConfirmado(false);
+    setPagoRealizado(null);
     setResultado(null);
     setDetalleEnviado(null);
     setFueraDeVentanaAlEnviar(false);
@@ -728,7 +745,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                   numeroPedidoDia={pasoPago.numeroPedidoDia}
                   total={pasoPago.total}
                   onTokenGenerado={cobrarConCulqi}
-                  onCancelar={() => cerrarPasoPago({ pagado: false })}
+                  onCancelar={() => cerrarPasoPago({ pago: null })}
                 />
               ) : resultado && detalleEnviado ? (
                 <ResumenPedidoExito
@@ -736,7 +753,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                   resultado={resultado}
                   detalle={detalleEnviado}
                   fueraDeVentana={fueraDeVentanaAlEnviar}
-                  pagoConfirmado={pagoConfirmado}
+                  pago={pagoRealizado}
                   onPedirDeNuevo={pedirOtroVez}
                 />
               ) : (

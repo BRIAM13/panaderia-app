@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, BadgePercent, CheckCircle2, CreditCard, ShieldCheck } from "lucide-react";
-import type { PedidoPublicoResultado } from "../services/api";
+import type { PagarConCulqiResultado, PedidoPublicoResultado } from "../services/api";
 import { formatearFechaBonita, formatearHora12 } from "../utils/horariosPan";
 import { montoDescontado, textoDescuento } from "../utils/descuentos";
 import { EASE_PREMIUM } from "../utils/animacion";
@@ -25,11 +25,13 @@ interface ResumenPedidoExitoProps {
   /** El horario elegido ya había cerrado al enviar: se avisa que la
    * confirmación depende de que quede stock. */
   fueraDeVentana: boolean;
-  /** Solo en Panadería con el cobro por adelantado encendido: true si Culqi
-   * ya confirmó el cobro de la tarjeta, false si el cliente salió de la
+  /** Solo en Panadería con el cobro por adelantado encendido: la respuesta
+   * del servidor si Culqi ya cobró (con el desglose real: cuánto entró al
+   * pedido, cuánto se llevó la pasarela, cuánto salió de la tarjeta y cuánto
+   * falta al recoger si separó con una parte), null si el cliente salió de la
    * pantalla de pago sin pagar ("lo pago después"). Se ignora en los pedidos
    * que no se pagan por adelantado. */
-  pagoConfirmado?: boolean;
+  pago?: PagarConCulqiResultado | null;
   onPedirDeNuevo: () => void;
 }
 
@@ -40,7 +42,7 @@ export function ResumenPedidoExito({
   resultado,
   detalle,
   fueraDeVentana,
-  pagoConfirmado = false,
+  pago = null,
   onPedirDeNuevo,
 }: ResumenPedidoExitoProps) {
   // El foco salta al título: quien navega con teclado o lector de pantalla
@@ -59,13 +61,20 @@ export function ResumenPedidoExito({
   // por el pago con tarjeta. En cualquier otro ("NO_APLICA", o ausente con un
   // backend viejo) esta pantalla es exactamente la de siempre.
   //
-  // El aviso de pago se muestra en los DOS desenlaces posibles de ese flujo:
-  // 'VERIFICANDO' (salió sin pagar, todavía le falta) y 'PAGADO' (Culqi
-  // cobró). Antes bastaba con mirar 'VERIFICANDO' porque el pago lo confirmaba
-  // una persona mucho después; ahora se confirma en la misma petición, así que
-  // el estado ya viene resuelto cuando esta pantalla aparece.
+  // El aviso de pago se muestra en los TRES desenlaces posibles de ese flujo:
+  // 'VERIFICANDO' (salió sin pagar, todavía le falta), 'PAGADO' (Culqi cobró
+  // el total) y 'DEUDA_PARCIAL' (Culqi cobró una parte y separó el pedido).
+  // Antes bastaba con mirar 'VERIFICANDO' porque el pago lo confirmaba una
+  // persona mucho después; ahora se confirma en la misma petición, así que el
+  // estado ya viene resuelto cuando esta pantalla aparece — y si hay `pago`,
+  // esa es la fuente de verdad, más que el estado con el que se CREÓ.
   const hayPagoPorAdelantado =
-    resultado.estadoPagoAdelanto === "VERIFICANDO" || resultado.estadoPagoAdelanto === "PAGADO";
+    pago !== null ||
+    resultado.estadoPagoAdelanto === "VERIFICANDO" ||
+    resultado.estadoPagoAdelanto === "PAGADO" ||
+    resultado.estadoPagoAdelanto === "DEUDA_PARCIAL";
+  const pagoConfirmado = pago !== null;
+  const saldoAlRecoger = pago?.ajuste?.tipo === "DEUDA" ? pago.ajuste.monto : null;
 
   return (
     <motion.div
@@ -126,24 +135,59 @@ export function ResumenPedidoExito({
           quedó el pago, que es lo único que el cliente todavía no sabe. */}
       {hayPagoPorAdelantado && (
         <div
-          className={`mx-auto mt-4 flex max-w-sm items-start gap-2.5 rounded-xl border px-4 py-3 text-left ${
+          className={`mx-auto mt-4 max-w-sm rounded-xl border px-4 py-3 text-left ${
             pagoConfirmado ? "border-emerald-200 bg-emerald-50" : "border-amber-300 bg-amber-50"
           }`}
         >
-          {pagoConfirmado ? (
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" strokeWidth={1.75} />
-          ) : (
-            <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={1.75} />
+          <div className="flex items-start gap-2.5">
+            {pagoConfirmado ? (
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" strokeWidth={1.75} />
+            ) : (
+              <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={1.75} />
+            )}
+            <p
+              className={`text-xs leading-relaxed font-medium ${
+                pagoConfirmado ? "text-emerald-800" : "text-amber-800"
+              }`}
+            >
+              {pago
+                ? // El mensaje del servidor ya dice si quedó pagado completo o
+                  // separado con una parte, con las cifras.
+                  `${pago.mensaje} Te llega el comprobante al correo que dejaste.`
+                : "Tu pedido está guardado, pero todavía nos falta tu pago. Vuelve a “Ver mi pedido”, busca tu documento y págalo con tarjeta o Yape desde ahí."}
+            </p>
+          </div>
+
+          {/* El desglose REAL del cobro, tal como lo devolvió el servidor: las
+              mismas tres cifras que el cliente vio antes de pagar, ahora con
+              lo que de verdad pasó. Si separó con una parte, el saldo va
+              aparte y en ámbar: es lo que le toca hacer después. */}
+          {pago && (
+            <dl className="mt-2.5 space-y-1 border-t border-emerald-200 pt-2.5 text-xs text-emerald-900 tabular-nums">
+              <div className="flex justify-between gap-3">
+                <dt>Entró a tu pedido</dt>
+                <dd className="font-semibold">S/ {pago.montoElegido.toFixed(2)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Comisión de la pasarela</dt>
+                <dd className="font-semibold">S/ {pago.comision.toFixed(2)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Salió de tu tarjeta o Yape</dt>
+                <dd className="font-semibold">S/ {pago.montoCobrado.toFixed(2)}</dd>
+              </div>
+              {saldoAlRecoger !== null && (
+                <div className="flex justify-between gap-3 rounded-lg bg-amber-100/70 px-2 py-1 text-amber-800">
+                  <dt className="font-medium">Saldo pendiente al recoger</dt>
+                  <dd className="font-bold">S/ {saldoAlRecoger.toFixed(2)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between gap-3 text-[11px] text-emerald-800/80">
+                <dt>Referencia del cobro</dt>
+                <dd className="truncate font-mono">{pago.culqiChargeId}</dd>
+              </div>
+            </dl>
           )}
-          <p
-            className={`text-xs leading-relaxed font-medium ${
-              pagoConfirmado ? "text-emerald-800" : "text-amber-800"
-            }`}
-          >
-            {pagoConfirmado
-              ? "Tu pago con tarjeta quedó confirmado y ya estamos preparando tu pedido. Te llega el comprobante al correo que dejaste."
-              : "Tu pedido está guardado, pero todavía nos falta tu pago. Vuelve a “Ver mi pedido”, busca tu documento y págalo con tarjeta desde ahí."}
-          </p>
         </div>
       )}
 

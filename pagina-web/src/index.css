@@ -242,6 +242,89 @@ footer[id] {
   opacity: 0.6;
 }
 
+/* Deslizador de "¿cuánto pagas ahora?" (ver PagoCulqiMonto). El nativo de
+   cada navegador se ve distinto en todos y ninguno combina con el sitio, así
+   que se dibuja a mano: una pista fina de crema con el tramo ya recorrido en
+   terracota (el porcentaje llega por --progreso desde React) y un pulgar
+   redondo con borde, que crece un poco al tocarlo y al enfocarlo con
+   teclado. Las reglas de WebKit y de Firefox van SEPARADAS a propósito: un
+   selector que un navegador no entiende invalida la regla entera. */
+.deslizador-pan {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.75rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  --progreso: 100%;
+}
+.deslizador-pan:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.deslizador-pan:focus-visible {
+  outline: none;
+}
+.deslizador-pan::-webkit-slider-runnable-track {
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--color-pan-terracota) 0%,
+    var(--color-pan-terracota) var(--progreso),
+    var(--color-pan-crema-muted) var(--progreso),
+    var(--color-pan-crema-muted) 100%
+  );
+}
+.deslizador-pan::-moz-range-track {
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: var(--color-pan-crema-muted);
+}
+.deslizador-pan::-moz-range-progress {
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: var(--color-pan-terracota);
+}
+.deslizador-pan::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.375rem;
+  height: 1.375rem;
+  margin-top: -0.5rem;
+  border-radius: 9999px;
+  border: 2px solid var(--color-pan-terracota);
+  background: var(--color-pan-crema-suave);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--color-pan-carbon) 20%, transparent);
+  transition:
+    transform 0.25s var(--ease-premium),
+    box-shadow 0.25s var(--ease-premium);
+}
+.deslizador-pan::-moz-range-thumb {
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 9999px;
+  border: 2px solid var(--color-pan-terracota);
+  background: var(--color-pan-crema-suave);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--color-pan-carbon) 20%, transparent);
+  transition:
+    transform 0.25s var(--ease-premium),
+    box-shadow 0.25s var(--ease-premium);
+}
+.deslizador-pan:not(:disabled):hover::-webkit-slider-thumb,
+.deslizador-pan:not(:disabled):active::-webkit-slider-thumb,
+.deslizador-pan:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-pan-terracota) 20%, transparent);
+}
+.deslizador-pan:not(:disabled):hover::-moz-range-thumb,
+.deslizador-pan:not(:disabled):active::-moz-range-thumb,
+.deslizador-pan:focus-visible::-moz-range-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-pan-terracota) 20%, transparent);
+}
+
 /* Hoja emergente que entra desde abajo en celulares (ver SelectorModal).
    Dos cosas que el navegador no resuelve solo:
    1. El relleno inferior descuenta la barra de gestos del iPhone — sin él,

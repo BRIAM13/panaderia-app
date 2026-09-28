@@ -8,6 +8,9 @@ const {
   AJUSTE_VUELTO,
   LARGO_MAXIMO_CODIGO,
   CLAVE_EXIGE_PAGO_ADELANTADO,
+  FRACCION_MINIMA_PAGO_ADELANTO,
+  aCentimos,
+  montoMinimoAPagar,
   esCandidatoAPagoAdelanto,
   requierePagoAdelanto,
   normalizarCodigoOperacion,
@@ -227,6 +230,68 @@ describe('validarMontoDeclarado — red blanda contra el error honesto', () => {
     expect(validarMontoDeclarado(50, 0).valido).toBe(false);
     expect(validarMontoDeclarado(50, -10).valido).toBe(false);
     expect(validarMontoDeclarado(50, 'mucho').valido).toBe(false);
+  });
+});
+
+describe('montoMinimoAPagar — el piso para "separar" el pedido', () => {
+  test('es la mitad del total, que es la fracción que fijó el dueño', () => {
+    expect(montoMinimoAPagar(50)).toBe(25);
+    expect(montoMinimoAPagar(100)).toBe(50);
+    expect(montoMinimoAPagar(45.5)).toBe(22.75);
+  });
+
+  test('la fracción sale de la constante, no de un 0.5 escrito a mano en la cuenta', () => {
+    // Si el dueño cambia de opinión, cambia UNA constante y esto la sigue.
+    // El candado es contra el `total / 2` suelto que quedaría desincronizado.
+    expect(montoMinimoAPagar(80)).toBe(Number((80 * FRACCION_MINIMA_PAGO_ADELANTO).toFixed(2)));
+    expect(FRACCION_MINIMA_PAGO_ADELANTO).toBe(0.5);
+  });
+
+  test('un total impar en céntimos redondea al céntimo, y el céntimo va del lado del negocio', () => {
+    // 50.05 / 2 = 25.025, que no es un monto cobrable. El mínimo tiene que ser
+    // un monto real, y sube a 25.03 en vez de bajar a 25.02: el cliente que
+    // quiere pagar lo menos posible no se lleva el céntimo de regalo.
+    expect(montoMinimoAPagar(50.05)).toBe(25.03);
+    expect(montoMinimoAPagar(33.33)).toBe(16.67);
+    expect(montoMinimoAPagar(0.03)).toBe(0.02);
+  });
+
+  test('nunca devuelve un mínimo con cola de punto flotante', () => {
+    // Un mínimo de 25.024999999 rechazaría un pago de exactamente los S/ 25.03
+    // que la pantalla le mostró al cliente — el peor error posible acá, porque
+    // el cliente ve un número y el servidor compara contra otro.
+    for (const total of [50.05, 0.07, 33.33, 19.99, 7.77]) {
+      const minimo = montoMinimoAPagar(total);
+      expect(aCentimos(minimo)).toBe(Math.round(aCentimos(minimo)));
+      expect(minimo).toBe(Number(minimo.toFixed(2)));
+    }
+  });
+
+  test('el mínimo nunca pasa del total: pagar el mínimo siempre es posible', () => {
+    for (const total of [0.01, 0.02, 1, 19.99, 50.05, 1234.56]) {
+      expect(aCentimos(montoMinimoAPagar(total))).toBeLessThanOrEqual(aCentimos(total));
+      expect(montoMinimoAPagar(total)).toBeGreaterThan(0);
+    }
+  });
+
+  test('un total de un céntimo tiene mínimo de un céntimo, no de cero', () => {
+    // Redondear 0.005 céntimos a 0 daría un mínimo de S/ 0.00, y un mínimo de
+    // cero deja pasar cualquier monto — o sea, deshabilita la validación.
+    expect(montoMinimoAPagar(0.01)).toBe(0.01);
+  });
+
+  test('un total que no es cobrable devuelve null, nunca 0', () => {
+    // null es "no hay mínimo que calcular" y corta el flujo; un 0 se colaría
+    // como un mínimo válido y dejaría pasar un pago de S/ 0.
+    expect(montoMinimoAPagar(0)).toBeNull();
+    expect(montoMinimoAPagar(-50)).toBeNull();
+    expect(montoMinimoAPagar('mucho')).toBeNull();
+    expect(montoMinimoAPagar(null)).toBeNull();
+    expect(montoMinimoAPagar(undefined)).toBeNull();
+  });
+
+  test('un total que llega como texto (body JSON flojo) se trata como número', () => {
+    expect(montoMinimoAPagar('50')).toBe(25);
   });
 });
 

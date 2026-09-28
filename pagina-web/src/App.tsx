@@ -52,6 +52,13 @@ const ES_RUTA_ACTIVACION =
 const RUTA_PREVIEW_CULQI = "/preview-culqi";
 const ES_RUTA_PREVIEW_CULQI =
   (window.location.pathname.replace(/\/+$/, "") || "/") === RUTA_PREVIEW_CULQI;
+// `/preview-culqi?total=2500` para ver cómo se comporta el selector cuando el
+// monto se sale del rango de Yape (máx. S/ 2000): sin esto habría que tocar
+// código para probar ese aviso. Sin el parámetro, un pedido de pan normal.
+const TOTAL_PREVIEW_CULQI = (() => {
+  const total = Number(new URLSearchParams(window.location.search).get("total"));
+  return Number.isFinite(total) && total > 0 ? total : 45.5;
+})();
 
 /** Hueco del mismo tamaño y forma que el bloque que se está descargando —
  * el mismo esqueleto con barrido que ya usan el selector de pan y el panel
@@ -73,7 +80,7 @@ function App() {
           <PagoCulqi
             idPedido={999}
             numeroPedidoDia={42}
-            total={45.5}
+            total={TOTAL_PREVIEW_CULQI}
             onTokenGenerado={async (tokenId, datos) => {
               console.log("token generado (solo vista previa):", tokenId, datos);
             }}
