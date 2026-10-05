@@ -39,6 +39,13 @@ const {
   crearCargoCulqi,
 } = require('../utils/pagoCulqi');
 const { calcularDescuentoCliente, aplicarDescuento } = require('../utils/descuentosCliente');
+const {
+  TIPO_ENTREGA_DELIVERY,
+  normalizarTipoEntrega,
+  validarDelivery,
+  obtenerZonaDelivery,
+  obtenerCostoDelivery,
+} = require('../utils/delivery');
 const { instantePeru, fechaEntregaEsAnteriorAHoy } = require('../utils/fechaPeru');
 const crypto = require('crypto');
 const { RUC_PERU_REGEX, EMAIL_REGEX, CELULAR_PERU_REGEX } = require('../middlewares/validators');
@@ -329,6 +336,14 @@ async function crearPedidoPublico(req, res, next) {
   // solo por el largo, mismo criterio que ya usa validateCliente para el
   // registro manual de clientes.
   const { documento, telefono, email, items, notas, fechaEntrega } = req.body;
+  // Delivery (2026-10-05): opcional. Sin `tipoEntrega` (la página vieja en
+  // caché, o cualquier pedido de recojo) el pedido es 'RECOJO' y todo sigue
+  // exactamente como antes. Un valor que no sea RECOJO/DELIVERY se rechaza
+  // en vez de adivinarlo.
+  const tipoEntrega = normalizarTipoEntrega(req.body.tipoEntrega);
+  if (tipoEntrega === null) {
+    return res.status(400).json({ mensaje: 'Elige si recoges el pedido en tienda o lo quieres por delivery.' });
+  }
   const documentoLimpio = String(documento).trim();
   const esRuc = RUC_PERU_REGEX.test(documentoLimpio);
   // Ambos pueden llegar vacíos/ausentes: si el documento ya está registrado
@@ -373,6 +388,39 @@ async function crearPedidoPublico(req, res, next) {
         AND t.Slug IN ('${SLUGS_TIENDA_PUBLICA.join("','")}')
     `);
   const hayPanPorUnidad = productosPreview.recordset.some((p) => p.Slug !== 'hamburguesas');
+
+  // Delivery: se valida ANTES de abrir la transacción (y antes de gastar
+  // una consulta paga a RENIEC/SUNAT), igual que la fecha de recojo. Solo
+  // Panadería con pan por unidad; el pin tiene que caer dentro del radio
+  // configurado. Fuera de zona se RECHAZA con el motivo — ofrecer "pedir
+  // igual para recoger" es decisión del cliente en la página, el servidor
+  // nunca convierte un DELIVERY en RECOJO por su cuenta.
+  let entregaDelivery = null;
+  let costoEnvio = 0;
+  if (tipoEntrega === TIPO_ENTREGA_DELIVERY) {
+    const slugsPreview = [...new Set(productosPreview.recordset.map((p) => p.Slug))];
+    const zona = await obtenerZonaDelivery(pool);
+    const revisionDelivery = validarDelivery({
+      // Un carrito mezclado o con algo de hamburguesa no califica.
+      tiendaSlug: slugsPreview.length === 1 ? slugsPreview[0] : null,
+      hayPanPorUnidad: hayPanPorUnidad && !slugsPreview.includes('hamburguesas'),
+      direccion: req.body.direccionEntrega,
+      latitud: req.body.latitudEntrega,
+      longitud: req.body.longitudEntrega,
+      ...zona,
+    });
+    if (!revisionDelivery.valido) {
+      return res.status(400).json({
+        mensaje: revisionDelivery.motivo,
+        // La página usa esto para ofrecer "recoger en tienda" en vez del
+        // delivery (solo cuando el problema es la distancia, no un dato
+        // faltante).
+        fueraDeZona: revisionDelivery.fueraDeZona,
+      });
+    }
+    entregaDelivery = revisionDelivery;
+    costoEnvio = await obtenerCostoDelivery(pool);
+  }
 
   if (hayPanPorUnidad) {
     const coincidencia = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(fechaEntrega || ''));
@@ -685,7 +733,14 @@ async function crearPedidoPublico(req, res, next) {
     // `Total` guarda lo que el cliente DEBE PAGAR, ya descontado — mismo
     // significado que en todo el resto del sistema (deudas, resúmenes,
     // historial del CRM), así que nada río abajo necesita cambiar.
-    const total = aplicarDescuento(subtotal, descuentoPorcentaje);
+    //
+    // Con delivery, el envío se suma DESPUÉS del descuento (el descuento por
+    // fidelidad es sobre el pan, no sobre el envío) y entra en el mismo
+    // `Total`: no hay un segundo total. Así el cobro por adelantado (Culqi,
+    // que lee `Pedidos.Total`) y los reportes de deuda cobran el envío sin
+    // tocar nada. `CostoEnvio` queda además grabado aparte en el pedido.
+    const totalProductos = aplicarDescuento(subtotal, descuentoPorcentaje);
+    const total = Number((totalProductos + costoEnvio).toFixed(2));
 
     const numeroPedidoDia = await obtenerSiguienteNumeroPedidoDia(transaction, idTienda);
     const notaWeb = `PEDIDO WEB — Cel: ${telefonoLimpio}${notas ? ' — ' + String(notas).trim().toUpperCase() : ''}`;
@@ -718,10 +773,17 @@ async function crearPedidoPublico(req, res, next) {
       .input('FechaEntrega', sql.DateTime, fechaEntregaUtc)
       .input('EstadoPagoAdelanto', sql.VarChar(20), estadoPagoAdelanto)
       .input('TokenConfirmacionPago', sql.VarChar(40), tokenConfirmacionPago)
+      // Delivery (ver 2026_10_delivery_panaderia.sql). En un pedido de
+      // recojo: 'RECOJO', NULLs y 0 — lo mismo que el DEFAULT de la columna.
+      .input('TipoEntrega', sql.VarChar(10), tipoEntrega)
+      .input('DireccionEntrega', sql.VarChar(300), entregaDelivery ? entregaDelivery.direccion : null)
+      .input('LatitudEntrega', sql.Decimal(10, 7), entregaDelivery ? entregaDelivery.latitud : null)
+      .input('LongitudEntrega', sql.Decimal(10, 7), entregaDelivery ? entregaDelivery.longitud : null)
+      .input('CostoEnvio', sql.Decimal(10, 2), costoEnvio)
       .query(`
-        INSERT INTO Pedidos (IdCliente, IdTienda, IdTrabajador, Total, DescuentoPorcentaje, Notas, NumeroPedidoDia, FechaEntrega, Estado, EstadoPagoAdelanto, TokenConfirmacionPago)
+        INSERT INTO Pedidos (IdCliente, IdTienda, IdTrabajador, Total, DescuentoPorcentaje, Notas, NumeroPedidoDia, FechaEntrega, Estado, EstadoPagoAdelanto, TokenConfirmacionPago, TipoEntrega, DireccionEntrega, LatitudEntrega, LongitudEntrega, CostoEnvio)
         OUTPUT INSERTED.IdPedido, INSERTED.FechaCreacion
-        VALUES (@IdCliente, @IdTienda, NULL, @Total, @DescuentoPorcentaje, @Notas, @NumeroPedidoDia, @FechaEntrega, 'SOLICITADO', @EstadoPagoAdelanto, @TokenConfirmacionPago)
+        VALUES (@IdCliente, @IdTienda, NULL, @Total, @DescuentoPorcentaje, @Notas, @NumeroPedidoDia, @FechaEntrega, 'SOLICITADO', @EstadoPagoAdelanto, @TokenConfirmacionPago, @TipoEntrega, @DireccionEntrega, @LatitudEntrega, @LongitudEntrega, @CostoEnvio)
       `);
     const { IdPedido: idPedido } = insertPedido.recordset[0];
 
@@ -757,6 +819,10 @@ async function crearPedidoPublico(req, res, next) {
         subtotal,
         descuentoPorcentaje,
         segmentoCliente: descuento.segmento,
+        tipoEntrega,
+        costoEnvio,
+        direccionEntrega: entregaDelivery ? entregaDelivery.direccion : null,
+        distanciaKm: entregaDelivery ? entregaDelivery.distanciaKm : null,
         total,
         telefono: telefonoLimpio,
         email: emailNuevo,
@@ -765,12 +831,17 @@ async function crearPedidoPublico(req, res, next) {
       userAgent: req.headers['user-agent'],
     });
 
+    // El personal tiene que saber de entrada que este pedido se LLEVA, no
+    // se recoge — la pantalla de Flutter todavía no muestra la dirección.
+    const avisoDelivery = entregaDelivery
+      ? ` DELIVERY a: ${entregaDelivery.direccion.slice(0, 120)} (envío S/ ${costoEnvio.toFixed(2)} incluido).`
+      : '';
     await notificarPersonalTienda({
       idTienda,
-      titulo: 'Nuevo pedido desde la página web',
+      titulo: entregaDelivery ? 'Nuevo pedido con DELIVERY desde la página web' : 'Nuevo pedido desde la página web',
       cuerpo: exigePagoAdelanto
-        ? `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}. Está pagando con tarjeta; el sistema lo confirma solo en cuanto el pago pase.`
-        : `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}. Cel: ${telefonoLimpio}. Confírmalo en la app.`,
+        ? `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}.${avisoDelivery} Está pagando con tarjeta; el sistema lo confirma solo en cuanto el pago pase.`
+        : `${nombreParaAviso} pidió ${resumen} — S/ ${total.toFixed(2)}.${avisoDelivery} Cel: ${telefonoLimpio}. Confírmalo en la app.`,
       datos: { tipo: 'PEDIDO_SOLICITADO', idTienda: String(idTienda), idPedido: String(idPedido) },
     });
 
@@ -799,6 +870,11 @@ async function crearPedidoPublico(req, res, next) {
       descuentoCliente: descuentoPorcentaje > 0
         ? { segmento: descuento.segmento, porcentaje: descuentoPorcentaje }
         : null,
+      // Delivery: `total` YA incluye `costoEnvio` (0 en recojo). Desglose
+      // para la pantalla: subtotal − descuento + costoEnvio = total.
+      tipoEntrega,
+      costoEnvio,
+      direccionEntrega: entregaDelivery ? entregaDelivery.direccion : null,
     });
   } catch (err) {
     await transaction.rollback();
@@ -1462,9 +1538,18 @@ async function consultarPedidosPublicos(req, res, next) {
       .input('IdCliente', sql.Int, idCliente)
       .query(`SELECT TOP 20 * FROM (${SELECT_PEDIDOS_BASE} WHERE pd.IdCliente = @IdCliente) sub ORDER BY sub.FechaCreacion DESC`);
 
+    // Este seguimiento es SIN login: basta con saber un DNI, y en Perú el DNI
+    // no es un secreto. Por eso acá NO viaja la dirección de entrega ni el pin
+    // del mapa de un pedido con delivery — sería entregarle a cualquiera la
+    // ubicación de la casa de una persona a partir de su DNI. Solo queda
+    // `tipoEntrega` y `costoEnvio`, que alcanzan para mostrar el desglose.
+    const pedidos = (await armarPedidosConItems(pool, pedidosResult.recordset)).map(
+      ({ direccionEntrega, latitudEntrega, longitudEntrega, ...resto }) => resto,
+    );
+
     return res.status(200).json({
       nombre: [nombres, apellidoPaterno].filter(Boolean).join(' '),
-      pedidos: await armarPedidosConItems(pool, pedidosResult.recordset),
+      pedidos,
     });
   } catch (err) {
     return next(err);

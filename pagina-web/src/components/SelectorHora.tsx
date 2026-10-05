@@ -456,6 +456,9 @@ interface SelectorHoraProps {
    * `onIntentoBloqueado` (usado para exigir elegir la fecha primero). */
   puedeAbrir?: boolean;
   onIntentoBloqueado?: () => void;
+  /** Título de la ventana. Por defecto habla de recojo; el formulario lo
+   * cambia cuando el pedido es con delivery ("...de entrega"). */
+  titulo?: string;
 }
 
 /** Selector de hora estilo rueda de celular: tres columnas (hora, minuto,
@@ -475,6 +478,7 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
     maximoSiempre,
     puedeAbrir = true,
     onIntentoBloqueado,
+    titulo = "Elige la hora de recojo",
   },
   ref,
 ) {
@@ -597,7 +601,7 @@ export const SelectorHora = forwardRef<SelectorHoraHandle, SelectorHoraProps>(fu
 
       <SelectorModal
         abierto={abierto}
-        titulo="Elige la hora de recojo"
+        titulo={titulo}
         onCancelar={() => setAbierto(false)}
         onAceptar={aceptar}
         aceptarDeshabilitado={draftInvalido}

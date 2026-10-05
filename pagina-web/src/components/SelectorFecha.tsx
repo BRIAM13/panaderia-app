@@ -32,6 +32,9 @@ interface SelectorFechaProps {
    * para poder elegir la hora"), para cuando este selector se abrió solo
    * porque el cliente intentó abrir la hora sin haber elegido fecha. */
   aviso?: string;
+  /** Título de la ventana. Por defecto habla de recojo; el formulario lo
+   * cambia cuando el pedido es con delivery ("...de entrega"). */
+  titulo?: string;
 }
 
 /** Selector de fecha propio, con la paleta y el estilo del sitio — en vez
@@ -40,7 +43,7 @@ interface SelectorFechaProps {
  * `minimo`. Abre como ventana emergente con Cancelar/Aceptar: el cliente
  * arma su elección primero y recién se aplica al aceptar. */
 export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>(function SelectorFecha(
-  { id, valor, onChange, minimo, placeholder = "Elige una fecha", aviso },
+  { id, valor, onChange, minimo, placeholder = "Elige una fecha", aviso, titulo = "Elige la fecha de recojo" },
   ref,
 ) {
   const [abierto, setAbierto] = useState(false);
@@ -102,7 +105,7 @@ export const SelectorFecha = forwardRef<SelectorFechaHandle, SelectorFechaProps>
 
       <SelectorModal
         abierto={abierto}
-        titulo="Elige la fecha de recojo"
+        titulo={titulo}
         onCancelar={() => setAbierto(false)}
         onAceptar={aceptar}
         aceptarDeshabilitado={draftInvalido}

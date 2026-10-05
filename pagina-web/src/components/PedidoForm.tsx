@@ -3,13 +3,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
   BadgePercent,
-  CalendarClock,
+  Bike,
   CheckCircle2,
   Loader2,
+  PackageCheck,
   Pencil,
   RotateCw,
   ShieldCheck,
   ShoppingBag,
+  Store,
   UserRound,
   WifiOff,
   Wheat,
@@ -56,6 +58,17 @@ import {
   rangoDesdeRespuesta,
   type PagoPendienteGuardado,
 } from "../utils/pagoAdelanto";
+import {
+  COSTO_ENVIO_ESTIMADO,
+  LARGO_MAXIMO_DIRECCION,
+  LARGO_MAXIMO_REFERENCIA,
+  armarDireccionEntrega,
+  esRechazoPorZona,
+  revisarDatosDelivery,
+  totalConEnvio,
+  type Coordenadas,
+  type TipoEntrega,
+} from "../utils/entrega";
 import { EASE_PREMIUM, VIEWPORT_REVEAL } from "../utils/animacion";
 import { EncabezadoSeccion } from "./EncabezadoSeccion";
 import { MascotaPanadero } from "./MascotaPanadero";
@@ -65,6 +78,7 @@ import type { SelectorFechaHandle } from "./SelectorFecha";
 import type { SelectorHoraHandle } from "./SelectorHora";
 import { SelectorProducto } from "./SelectorProducto";
 import { SelectorTipoDocumento } from "./SelectorTipoDocumento";
+import { SelectorTipoEntrega } from "./SelectorTipoEntrega";
 
 // El calendario y la rueda de horas solo existen para el pan vendido por
 // unidad, y recién después de que el visitante eligió un pan — nunca al
@@ -76,6 +90,10 @@ const SelectorFecha = lazy(() =>
   import("./SelectorFecha").then((m) => ({ default: m.SelectorFecha })),
 );
 const SelectorHora = lazy(() => import("./SelectorHora").then((m) => ({ default: m.SelectorHora })));
+// El mapa de delivery trae Leaflet (~40 KB gz) y solo hace falta si el
+// cliente elige "Delivery a domicilio": quien recoge en tienda —o pide pan de
+// hamburguesa— nunca lo descarga.
+const MapaEntrega = lazy(() => import("./MapaEntrega").then((m) => ({ default: m.MapaEntrega })));
 
 /** Misma regla que EMAIL_REGEX en el backend (middlewares/validators.js):
  * un chequeo de forma, no de existencia — evita el viaje al servidor por un
@@ -117,6 +135,20 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   const selectorFechaRef = useRef<SelectorFechaHandle>(null);
   const selectorHoraRef = useRef<SelectorHoraHandle>(null);
   const abrirHoraLuegoDeFechaRef = useRef(false);
+
+  // ---- Cómo recibe el pedido (solo Panadería, pan por unidad) ----
+  // null hasta que el cliente elige: ninguna opción viene marcada por
+  // defecto, igual que el selector de medio de pago del checkout. El pan de
+  // hamburguesa no pasa por acá (siempre recojo, como siempre).
+  const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega | null>(null);
+  const [coordenadasEntrega, setCoordenadasEntrega] = useState<Coordenadas | null>(null);
+  const [direccionEntrega, setDireccionEntrega] = useState("");
+  const [referenciaEntrega, setReferenciaEntrega] = useState("");
+  // true cuando el ÚLTIMO envío lo rechazó el servidor por pin fuera de la
+  // zona de reparto: ahí el error muestra, además del texto, el atajo
+  // "Cambiar a recoger en tienda" para no dejar al cliente trabado.
+  const [rechazadoPorZona, setRechazadoPorZona] = useState(false);
+  const pasoEntregaRef = useRef<HTMLFieldSetElement>(null);
 
   const [tipoDocumento, setTipoDocumento] = useState<TipoDocumento>("DNI");
   const [numeroDocumento, setNumeroDocumento] = useState("");
@@ -239,12 +271,33 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   // Esto es solo el anticipo honesto: el monto que se cobra lo recalcula el
   // servidor al crear el pedido, con el historial real del cliente.
   const subtotal = productoSeleccionado ? productoSeleccionado.precioUnitario * cantidadNum : 0;
-  const total = totalConDescuento(subtotal, descuento?.porcentaje ?? 0);
 
-  // Pan de Agua/Francés (no paquete) muestra el recojo — el pan de
-  // hamburguesa (paquete) no lo usa. Solo aparece una vez que el cliente
-  // eligió activamente un pan (idProducto !== ""), nunca antes.
-  const mostrarCamposRecojo = idProducto !== "" && !esPaquete;
+  // Pan de Agua/Francés (no paquete) elige cómo recibirlo (recojo o
+  // delivery) y después la fecha/hora — el pan de hamburguesa (paquete) no
+  // pasa por nada de esto. Solo aparece una vez que el cliente eligió
+  // activamente un pan (idProducto !== ""), nunca antes.
+  const mostrarEleccionEntrega = idProducto !== "" && !esPaquete;
+  const esDelivery = mostrarEleccionEntrega && tipoEntrega === "DELIVERY";
+  // Fecha y hora se piden en los DOS modos: con recojo es cuándo pasa a
+  // buscarlo; con delivery, cuándo se lo llevan (el servidor exige
+  // `fechaEntrega` para todo pan por unidad, sea como sea que se entregue).
+  // Recién aparecen cuando ya eligió cómo recibirlo, para que el formulario
+  // se lea en orden: qué → cómo → cuándo.
+  const mostrarCamposRecojo = mostrarEleccionEntrega && tipoEntrega !== null;
+
+  // El envío se suma al total SOLO como estimado, y solo mientras el
+  // cliente tiene delivery elegido: el monto real lo decide el servidor y
+  // vuelve en la respuesta (`costoEnvio`), y `total` de la respuesta ya lo
+  // incluye. Acá nunca hay dos totales: el de pantalla pasa a ser el que
+  // lleva envío, y el desglose lo explica.
+  const costoEnvioEstimado = esDelivery ? COSTO_ENVIO_ESTIMADO : 0;
+  const total = totalConEnvio(totalConDescuento(subtotal, descuento?.porcentaje ?? 0), costoEnvioEstimado);
+  // Lo que le falta al delivery para estar completo (pin, dirección,
+  // referencia), o null si está todo. Se usa para marcar el paso como
+  // listo y como primera barrera en `enviar`.
+  const faltaDelivery = esDelivery
+    ? revisarDatosDelivery({ coordenadas: coordenadasEntrega, direccion: direccionEntrega, referencia: referenciaEntrega })
+    : null;
 
   // El cliente puede elegir cualquier fecha (desde hoy) y cualquier hora —
   // esto no bloquea nada, solo decide si se muestra el aviso de que ese
@@ -308,16 +361,38 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
     setCantidad("");
     setFechaRecojo("");
     setHoraRecojo("");
+    // La forma de entrega también se limpia: cambiar de pan vuelve a
+    // preguntar cómo lo recibe (y el pan de hamburguesa ni lo pregunta).
+    setTipoEntrega(null);
+    setCoordenadasEntrega(null);
+    setDireccionEntrega("");
+    setReferenciaEntrega("");
   }, [idProducto]);
 
   // Un mensaje de error queda pegado en pantalla si el cliente corrige el
   // campo que lo causó pero nunca vuelve a presionar "Enviar pedido" —
   // apenas toca cualquier campo, el error de la vez anterior se descarta
-  // para no confundirlo con uno nuevo.
+  // para no confundirlo con uno nuevo. El atajo de "fuera de zona" se va con
+  // él: si movió el pin, lo que corresponde es volver a intentar.
   useEffect(() => {
     setError(null);
+    setRechazadoPorZona(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tipoDocumento, numeroDocumento, telefono, email, idProducto, cantidad, notas, fechaRecojo, horaRecojo]);
+  }, [
+    tipoDocumento,
+    numeroDocumento,
+    telefono,
+    email,
+    idProducto,
+    cantidad,
+    notas,
+    fechaRecojo,
+    horaRecojo,
+    tipoEntrega,
+    coordenadasEntrega,
+    direccionEntrega,
+    referenciaEntrega,
+  ]);
 
   // Al conocerse (o cambiar) el documento, lo que ya tenemos guardado de él
   // manda sobre lo que el cliente hubiera tecleado antes: el campo vuelve a
@@ -403,6 +478,17 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
       setError(`El pedido mínimo es de ${CANTIDAD_MINIMA_UNIDAD} panes.`);
       return;
     }
+    // Panadería tiene que haber dicho CÓMO lo recibe — y si es delivery, con
+    // pin, dirección y referencia completos. Va antes de la fecha porque
+    // así está ordenado en pantalla: cómo → cuándo.
+    if (!esPaquete && tipoEntrega === null) {
+      setError("Elige si recoges tu pedido en tienda o lo quieres por delivery.");
+      return;
+    }
+    if (faltaDelivery) {
+      setError(faltaDelivery);
+      return;
+    }
 
     let fechaEntrega: string | undefined;
     // Hora que de verdad se manda al servidor: arranca igual a la que
@@ -411,7 +497,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
     let horaRecojoFinal = horaRecojo;
     if (!esPaquete) {
       if (!fechaRecojo || !horaRecojo) {
-        setError("Elige una fecha y hora de recojo.");
+        setError(esDelivery ? "Elige la fecha y hora en que quieres recibir tu pedido." : "Elige una fecha y hora de recojo.");
         return;
       }
       if (horarios && fueraDeHorarioAtencion(fechaRecojo, horaRecojo, horarios)) {
@@ -477,6 +563,21 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
       return;
     }
 
+    // Dirección + referencia en el único campo que tiene el backend. Solo
+    // viaja con delivery; con recojo el body es EXACTAMENTE el de siempre
+    // (sin `tipoEntrega`: el servidor lo toma como RECOJO por defecto, así
+    // que no hay nada que mandar ni que pueda romper un backend viejo).
+    const direccionCompleta = esDelivery ? armarDireccionEntrega(direccionEntrega, referenciaEntrega) : undefined;
+    const camposDelivery =
+      esDelivery && coordenadasEntrega
+        ? {
+            tipoEntrega: "DELIVERY" as const,
+            direccionEntrega: direccionCompleta,
+            latitudEntrega: coordenadasEntrega.latitud,
+            longitudEntrega: coordenadasEntrega.longitud,
+          }
+        : {};
+
     setEnviando(true);
     try {
       const respuesta = await crearPedidoPublico({
@@ -489,6 +590,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
         items: [{ idProducto: Number(idProducto), cantidad: cantidadNum }],
         notas: notas.trim() || undefined,
         fechaEntrega,
+        ...camposDelivery,
       });
       // El detalle se congela acá, con lo que realmente se envió: la
       // pantalla de confirmación no debe cambiar si después se limpian los
@@ -504,6 +606,10 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
         fechaRecojo,
         horaRecojo: horaRecojoFinal,
         notas: notas.trim(),
+        // Solo Panadería dice cómo lo recibe; el pan de hamburguesa no lleva
+        // esta fila en la confirmación, igual que antes.
+        ...(esPaquete ? {} : { tipoEntrega: esDelivery ? ("DELIVERY" as const) : ("RECOJO" as const) }),
+        ...(direccionCompleta ? { direccionEntrega: direccionCompleta } : {}),
       };
       setDetalleEnviado(detalle);
       setFueraDeVentanaAlEnviar(!esPaquete && fueraDeVentanaActual);
@@ -529,6 +635,8 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
           fechaRecojo: detalle.fechaRecojo,
           horaRecojo: detalle.horaRecojo,
           notas: detalle.notas,
+          tipoEntrega: detalle.tipoEntrega,
+          direccionEntrega: detalle.direccionEntrega,
           guardadoEn: Date.now(),
         };
         // Se guarda ANTES de mostrar la pantalla de pago, no después: entre
@@ -539,12 +647,36 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.errores?.join(" ") || err.message);
+        // Pin fuera de la zona de reparto: el mensaje del servidor ya lo
+        // explica; acá solo se enciende el atajo para pasar a recojo sin
+        // volver a llenar nada (ver el bloque de error más abajo).
+        setRechazadoPorZona(esDelivery && esRechazoPorZona(err.datos));
       } else {
         setError("No pudimos conectar porque el servidor puede estar despertando. Intenta de nuevo en un momento.");
       }
     } finally {
       setEnviando(false);
     }
+  }
+
+  /**
+   * Salida del rechazo por zona: el cliente se queda con TODO lo que ya
+   * llenó (pan, cantidad, fecha, documento, celular) y solo cambia la forma
+   * de entrega a recojo. El pin y la dirección quedan en memoria por si
+   * vuelve a delivery, pero ya no viajan. Se lleva la vista al paso de
+   * entrega para que vea el cambio y pueda confirmar de nuevo.
+   */
+  function cambiarARecojo() {
+    setTipoEntrega("RECOJO");
+    setRechazadoPorZona(false);
+    setError(null);
+    // Recién DESPUÉS de que el bloque de mapa/dirección terminó de plegarse
+    // (0,35s, ver su `transition`): si se desplaza antes, el plegado le
+    // mueve el contenido debajo del scroll y la vista termina en cualquier
+    // parte menos en el paso de entrega.
+    window.setTimeout(() => {
+      pasoEntregaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 400);
   }
 
   /**
@@ -652,6 +784,11 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
     setNotas("");
     setFechaRecojo("");
     setHoraRecojo("");
+    setTipoEntrega(null);
+    setCoordenadasEntrega(null);
+    setDireccionEntrega("");
+    setReferenciaEntrega("");
+    setRechazadoPorZona(false);
   }
 
   // Cada paso se marca como resuelto en cuanto sus campos están completos.
@@ -659,14 +796,17 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
   // para que el cliente vea de un vistazo qué le falta antes de enviar.
   const pasoPedidoListo =
     idProducto !== "" && cantidadNum > 0 && (esPaquete || cantidadNum >= CANTIDAD_MINIMA_UNIDAD);
-  const pasoRecojoListo = !mostrarCamposRecojo || Boolean(fechaRecojo && horaRecojo);
+  // Entrega lista = eligió cómo, (si es delivery) pin + dirección +
+  // referencia completos, y fecha y hora puestas.
+  const pasoEntregaListo =
+    !mostrarEleccionEntrega || (tipoEntrega !== null && faltaDelivery === null && Boolean(fechaRecojo && horaRecojo));
   // El correo no cuenta para marcar el paso como completo: es opcional. El
   // celular sí, salvo que ya lo tengamos guardado (ahí no hay nada que
   // escribir: el paso queda listo con solo verificar el documento).
   const pasoDatosListo = documentoValido === true && telefonoResuelto;
-  // El recojo solo cuenta como paso propio cuando se muestra (pan por
+  // La entrega solo cuenta como paso propio cuando se muestra (pan por
   // unidad): con el pan de hamburguesa, "Tus datos" es el paso 2, no el 3.
-  const numeroPasoDatos = mostrarCamposRecojo ? 3 : 2;
+  const numeroPasoDatos = mostrarEleccionEntrega ? 3 : 2;
 
   return (
     <section id="pedido" className="px-6 py-24 sm:py-32">
@@ -683,7 +823,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
             icono={ShoppingBag}
             titulo="Haz tu"
             tituloDestacado="pedido"
-            descripcion="Elige tu pan y cuándo lo recoges; los datos te los pedimos al final. No necesitas crear ninguna cuenta ni contraseña."
+            descripcion="Elige tu pan y cómo lo recibes; los datos te los pedimos al final. No necesitas crear ninguna cuenta ni contraseña."
           />
         </motion.div>
 
@@ -886,8 +1026,13 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                           transition={{ duration: 0.28, ease: EASE_PREMIUM }}
                           className="rounded-xl border border-pan-terracota/15 bg-pan-terracota-suave/40 px-4 py-3"
                         >
+                          {/* El desglose se abre con CUALQUIERA de las dos
+                              cosas que separan el total del subtotal: el
+                              descuento (al verificar el documento) o el
+                              envío (al elegir delivery). Cada línea entra y
+                              sale por su cuenta dentro del mismo recuadro. */}
                           <AnimatePresence initial={false}>
-                            {descuento && (
+                            {(descuento || esDelivery) && (
                               <motion.div
                                 key="desglose"
                                 initial={{ opacity: 0, height: 0 }}
@@ -901,15 +1046,47 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                                     <span>Subtotal</span>
                                     <span className="tabular-nums">S/ {subtotal.toFixed(2)}</span>
                                   </div>
-                                  <div className="flex items-start justify-between gap-3 text-sm font-medium text-emerald-700">
-                                    <span className="flex min-w-0 items-center gap-1.5">
-                                      <BadgePercent className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-                                      <span className="min-w-0">{textoDescuento(descuento)}</span>
-                                    </span>
-                                    <span className="shrink-0 tabular-nums">
-                                      − S/ {montoDescontado(subtotal, descuento.porcentaje).toFixed(2)}
-                                    </span>
-                                  </div>
+                                  <AnimatePresence initial={false}>
+                                    {descuento && (
+                                      <motion.div
+                                        key="linea-descuento"
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: "auto" }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                                        className="flex items-start justify-between gap-3 overflow-hidden text-sm font-medium text-emerald-700"
+                                      >
+                                        <span className="flex min-w-0 items-center gap-1.5">
+                                          <BadgePercent className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                                          <span className="min-w-0">{textoDescuento(descuento)}</span>
+                                        </span>
+                                        <span className="shrink-0 tabular-nums">
+                                          − S/ {montoDescontado(subtotal, descuento.porcentaje).toFixed(2)}
+                                        </span>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                  <AnimatePresence initial={false}>
+                                    {esDelivery && (
+                                      <motion.div
+                                        key="linea-envio"
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: "auto" }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.25, ease: EASE_PREMIUM }}
+                                        className="flex items-start justify-between gap-3 overflow-hidden text-sm font-medium text-pan-bronce-oscuro"
+                                      >
+                                        <span className="flex min-w-0 items-center gap-1.5">
+                                          <Bike className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                                          {/* "aprox.": es el estimado de la web;
+                                              el monto real lo confirma el servidor
+                                              al registrar el pedido. */}
+                                          <span className="min-w-0">Envío a domicilio (aprox.)</span>
+                                        </span>
+                                        <span className="shrink-0 tabular-nums">+ S/ {costoEnvioEstimado.toFixed(2)}</span>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
                                 </div>
                                 <div aria-hidden="true" className="mb-2.5 h-px bg-pan-terracota/15" />
                               </motion.div>
@@ -950,23 +1127,110 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                     </div>
                   </fieldset>
 
-                  {/* El bloque de recojo entra y sale animado: al aparecer o
+                  {/* El bloque de entrega entra y sale animado: al aparecer o
                       desaparecer empuja los campos de abajo cada vez que se
                       cambia de pan, y por eso va después del pedido y no
-                      intercalado entre sus campos. */}
+                      intercalado entre sus campos. Adentro, en orden: CÓMO lo
+                      recibe (recojo/delivery) → si es delivery, DÓNDE (mapa +
+                      dirección + referencia) → CUÁNDO (fecha y hora). */}
                   <AnimatePresence initial={false}>
-                    {mostrarCamposRecojo && horarios && (
+                    {mostrarEleccionEntrega && horarios && (
                       <motion.fieldset
+                        ref={pasoEntregaRef}
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.35, ease: EASE_PREMIUM }}
-                        className="overflow-hidden border-0 p-0"
+                        className="scroll-mt-28 overflow-hidden border-0 p-0"
                       >
                         <div className="space-y-5">
-                          <PasoFormulario numero={2} titulo="Recojo" icono={CalendarClock} listo={pasoRecojoListo} />
+                          <PasoFormulario numero={2} titulo="Entrega" icono={PackageCheck} listo={pasoEntregaListo} />
 
-                          <div>
+                          <SelectorTipoEntrega valor={tipoEntrega} onChange={setTipoEntrega} />
+
+                          {/* Dónde entregar: solo con delivery. El mapa llega
+                              diferido; el hueco de espera calca su alto para
+                              que la animación de entrada no salte. */}
+                          <AnimatePresence initial={false}>
+                            {esDelivery && (
+                              <motion.div
+                                key="delivery"
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.35, ease: EASE_PREMIUM }}
+                                className="overflow-hidden"
+                              >
+                                <div className="space-y-5 pt-1">
+                                  <div>
+                                    <p className="mb-1.5 block text-sm font-medium text-pan-carbon">¿Dónde te lo llevamos?</p>
+                                    <Suspense
+                                      fallback={
+                                        <div aria-hidden="true">
+                                          <div className="esqueleto h-64 rounded-2xl border border-pan-borde/50 sm:h-72" />
+                                          <div className="esqueleto mt-2.5 h-11 w-56 rounded-full border border-pan-borde/50" />
+                                        </div>
+                                      }
+                                    >
+                                      <MapaEntrega valor={coordenadasEntrega} onChange={setCoordenadasEntrega} />
+                                    </Suspense>
+                                  </div>
+
+                                  <div>
+                                    <label htmlFor="direccion-entrega" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                                      Dirección
+                                    </label>
+                                    <input
+                                      id="direccion-entrega"
+                                      type="text"
+                                      autoComplete="street-address"
+                                      maxLength={LARGO_MAXIMO_DIRECCION}
+                                      value={direccionEntrega}
+                                      onChange={(e) => setDireccionEntrega(e.target.value)}
+                                      placeholder="Ej: Calle Ayacucho 475, o Mz. B Lt. 12"
+                                      className="campo-pan"
+                                    />
+                                    <p className="mt-1.5 text-xs leading-relaxed text-pan-carbon-suave">
+                                      Escríbela como se la dirías a un taxista: el pin puede fallar por unas cuadras,
+                                      la dirección es lo que usa el repartidor.
+                                    </p>
+                                  </div>
+
+                                  <div>
+                                    <label htmlFor="referencia-entrega" className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                                      Referencia
+                                    </label>
+                                    <input
+                                      id="referencia-entrega"
+                                      type="text"
+                                      autoComplete="off"
+                                      maxLength={LARGO_MAXIMO_REFERENCIA}
+                                      value={referenciaEntrega}
+                                      onChange={(e) => setReferenciaEntrega(e.target.value)}
+                                      placeholder="Ej: casa celeste, al lado de la bodega"
+                                      className="campo-pan"
+                                    />
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          {/* Cuándo: fecha y hora, en los dos modos, recién
+                              después de elegir cómo lo recibe. */}
+                          <AnimatePresence initial={false}>
+                          {mostrarCamposRecojo && (
+                          <motion.div
+                            key="cuando"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.35, ease: EASE_PREMIUM }}
+                            className="overflow-hidden"
+                          >
+                            <p className="mb-1.5 block text-sm font-medium text-pan-carbon">
+                              {esDelivery ? "¿Cuándo te lo llevamos?" : "¿Cuándo lo recoges?"}
+                            </p>
                             {/* Una columna en celular: repartidos en dos, cada
                                 campo quedaba en 133px y una fecha ya elegida
                                 ("Lun 31 de agosto") se partía en TRES
@@ -994,6 +1258,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                                   onChange={setFechaRecojo}
                                   minimo={minimoFechaRecojo}
                                   aviso={avisoFechaPrimero ? "Primero elige la fecha, después podrás elegir la hora." : undefined}
+                                  titulo={esDelivery ? "Elige la fecha de entrega" : "Elige la fecha de recojo"}
                                 />
                                 <SelectorHora
                                   ref={selectorHoraRef}
@@ -1006,16 +1271,18 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                                   maximoSiempre={maximoHoraSiempre}
                                   puedeAbrir={!!fechaRecojo}
                                   onIntentoBloqueado={alIntentarAbrirHoraSinFecha}
+                                  titulo={esDelivery ? "Elige la hora de entrega" : "Elige la hora de recojo"}
                                 />
                               </div>
                             </Suspense>
                             <p className="mt-2 text-xs leading-relaxed text-pan-carbon-suave">
                               {franja
-                                ? `Por ahora, el recojo está disponible de ${formatearHora12(franja.piso)} a ${formatearHora12(franja.tope)}. `
+                                ? `Por ahora, ${esDelivery ? "la entrega" : "el recojo"} está disponible de ${formatearHora12(franja.piso)} a ${formatearHora12(franja.tope)}. `
                                 : "Por ahora no estamos recibiendo pedidos nuevos. "}
-                              Pedidos hasta las {formatearHora12(horarios.horaLimitePedido)} se recogen hoy mismo
-                              desde las {formatearHora12(horarios.horaRecojoMismoDia)}. Después de esa hora, el
-                              recojo pasa para el día siguiente desde las{" "}
+                              Pedidos hasta las {formatearHora12(horarios.horaLimitePedido)}{" "}
+                              {esDelivery ? "se entregan" : "se recogen"} hoy mismo desde las{" "}
+                              {formatearHora12(horarios.horaRecojoMismoDia)}. Después de esa hora,{" "}
+                              {esDelivery ? "la entrega" : "el recojo"} pasa para el día siguiente desde las{" "}
                               {formatearHora12(horarios.horaRecojoDiaSiguiente)}, o desde las{" "}
                               {formatearHora12(horarios.horaRecojoMismoDia)} si el pedido llega pasadas las{" "}
                               {formatearHora12(horarios.horaInicioPedidoTarde)}.
@@ -1031,14 +1298,16 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                                 >
                                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={1.75} />
                                   <p className="text-xs font-medium text-amber-800">
-                                    Ese horario ya cerró para recojo. Igual registramos tu pedido y te
-                                    confirmamos por WhatsApp, al número que dejes, si tenemos stock disponible
-                                    para separarlo.
+                                    Ese horario ya cerró para {esDelivery ? "entrega" : "recojo"}. Igual registramos tu
+                                    pedido y te confirmamos por WhatsApp, al número que dejes, si tenemos stock
+                                    disponible para {esDelivery ? "llevártelo" : "separarlo"}.
                                   </p>
                                 </motion.div>
                               )}
                             </AnimatePresence>
-                          </div>
+                          </motion.div>
+                          )}
+                          </AnimatePresence>
                         </div>
                       </motion.fieldset>
                     )}
@@ -1052,8 +1321,9 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                       listo={pasoDatosListo}
                     />
                     <p className="-mt-2 text-xs leading-relaxed text-pan-carbon-suave">
-                      Los pedimos solo para poder confirmarte el pedido y tenerlo a tu nombre cuando
-                      pases a recogerlo.
+                      {esDelivery
+                        ? "Los pedimos solo para poder confirmarte el pedido y que el repartidor pueda llamarte al llegar."
+                        : "Los pedimos solo para poder confirmarte el pedido y tenerlo a tu nombre cuando pases a recogerlo."}
                     </p>
 
                     <div>
@@ -1257,7 +1527,27 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                         >
                           <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
                             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" strokeWidth={1.75} />
-                            <p className="text-sm font-medium text-red-700">{error}</p>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-red-700">{error}</p>
+                              {/* Fuera de la zona de reparto: la salida está
+                                  acá mismo, al lado del motivo. Un clic y el
+                                  pedido pasa a recojo con todo lo demás
+                                  intacto (pan, cantidad, fecha, documento). */}
+                              {rechazadoPorZona && (
+                                <motion.button
+                                  type="button"
+                                  onClick={cambiarARecojo}
+                                  initial={{ opacity: 0, y: -4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.25, ease: EASE_PREMIUM, delay: 0.1 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  className="boton-relleno mt-2.5 inline-flex min-h-11 items-center gap-2 rounded-full border border-pan-terracota bg-pan-crema-suave px-4 py-2 text-sm font-semibold text-pan-terracota"
+                                >
+                                  <Store className="h-4 w-4" strokeWidth={2} />
+                                  Cambiar a recoger en tienda
+                                </motion.button>
+                              )}
+                            </div>
                           </div>
                         </motion.div>
                       )}
@@ -1307,6 +1597,10 @@ function detalleDesdePendiente(pendiente: PagoPendienteGuardado): DetallePedidoE
     fechaRecojo: pendiente.fechaRecojo,
     horaRecojo: pendiente.horaRecojo,
     notas: pendiente.notas,
+    // Un pendiente guardado antes del delivery no trae esto: se lee como
+    // recojo, que es lo único que existía.
+    tipoEntrega: pendiente.tipoEntrega ?? "RECOJO",
+    direccionEntrega: pendiente.direccionEntrega,
   };
 }
 

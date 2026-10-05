@@ -488,6 +488,11 @@ const SELECT_PEDIDOS_BASE = `
          -- el fiado posterior a la entrega — ver la migración
          -- 2026_09_pago_adelanto_panaderia.sql.
          pd.EstadoPagoAdelanto, pd.CodigoOperacionYape, pd.MontoDeclaradoCliente, pd.MontoConfirmadoStaff,
+         -- Delivery (solo pedido web de Panadería dentro de Pisco; en todo
+         -- otro pedido TipoEntrega = 'RECOJO', CostoEnvio = 0 y las otras tres
+         -- NULL). Ver la migración 2026_10_delivery_panaderia.sql — que tiene
+         -- que correrse ANTES de desplegar este backend.
+         pd.TipoEntrega, pd.DireccionEntrega, pd.LatitudEntrega, pd.LongitudEntrega, pd.CostoEnvio,
          per.DNI AS ClienteDni, per.Nombres AS ClienteNombres,
          per.ApellidoPaterno AS ClienteApellidoPaterno, per.ApellidoMaterno AS ClienteApellidoMaterno,
          c.DescripcionNegocio AS ClienteDescripcionNegocio,
@@ -655,6 +660,15 @@ function mapearFilaPedido(fila, itemsFilas = [], incluirAuditoria = false, ajust
     // Saldo o vuelto pendiente de ESTE pedido, si quedó alguno al verificar
     // el pago. null (lo normal) cuando no hay nada que resolver.
     ajustePago: mapearFilaAjuste(ajusteFila),
+    // Delivery: 'RECOJO' (default de la columna) o 'DELIVERY'. En delivery,
+    // `direccionEntrega` es la dirección escrita + referencia del cliente y
+    // latitud/longitud el pin que marcó en el mapa. `costoEnvio` YA está
+    // sumado dentro de `total`.
+    tipoEntrega: fila.TipoEntrega ?? 'RECOJO',
+    direccionEntrega: fila.DireccionEntrega ?? null,
+    latitudEntrega: fila.LatitudEntrega != null ? Number(fila.LatitudEntrega) : null,
+    longitudEntrega: fila.LongitudEntrega != null ? Number(fila.LongitudEntrega) : null,
+    costoEnvio: fila.CostoEnvio != null ? Number(fila.CostoEnvio) : 0,
     fechaEntregaReal: fila.FechaEntregaReal,
     notas: fila.Notas,
     fechaCreacion: fila.FechaCreacion,

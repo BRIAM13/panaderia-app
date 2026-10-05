@@ -97,6 +97,17 @@ export interface PedidoPublicoInput {
    * backend vuelve a validar el rango horario permitido, nunca confía en
    * lo que mande el cliente. */
   fechaEntrega?: string;
+  /** Cómo recibe el pedido (2026-10-05). Ausente = "RECOJO", así la página
+   * vieja en caché sigue funcionando igual. "DELIVERY" solo existe para
+   * Panadería (pan por unidad) y exige los tres campos de abajo; el backend
+   * rechaza con 400 (`fueraDeZona: true` en el cuerpo) si el pin cae fuera
+   * del radio de reparto — ver utils/entrega.ts. */
+  tipoEntrega?: "RECOJO" | "DELIVERY";
+  /** Dirección escrita + referencia en UN solo texto legible (ver
+   * `armarDireccionEntrega`). Solo con tipoEntrega = "DELIVERY". */
+  direccionEntrega?: string;
+  latitudEntrega?: number;
+  longitudEntrega?: number;
 }
 
 /** Descuento por fidelidad que el backend calculó para un cliente en una
@@ -155,6 +166,13 @@ export interface PedidoPublicoResultado {
    * mandar después el código de operación sin tener login. null/ausente
    * cuando el pedido no se paga por adelantado. */
   tokenConfirmacionPago?: string | null;
+  /** Cómo quedó registrada la entrega. Puede faltar con un backend viejo
+   * (ahí es recojo, que es lo único que existía). */
+  tipoEntrega?: "RECOJO" | "DELIVERY";
+  /** Lo que el SERVIDOR cobró de envío, en soles — 0 en recojo. `total` YA lo
+   * incluye: subtotal − descuento + costoEnvio = total. Es el número que se
+   * muestra desde que existe, en vez del estimado de la web. */
+  costoEnvio?: number;
 }
 
 /** A dónde yapear: el medio de pago activo de una tienda. `null` cuando el

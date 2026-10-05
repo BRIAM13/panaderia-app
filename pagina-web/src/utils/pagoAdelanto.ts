@@ -56,6 +56,10 @@ export interface PagoPendienteGuardado {
   fechaRecojo: string;
   horaRecojo: string;
   notas: string;
+  /** Cómo se entrega (2026-10-05). Opcionales: un pendiente guardado antes
+   * del delivery no los trae, y se lee como recojo. */
+  tipoEntrega?: "RECOJO" | "DELIVERY";
+  direccionEntrega?: string;
   /** Para descartar solo el pendiente si quedó de hace mucho (ver
    * [pagoPendienteVigente]). */
   guardadoEn: number;

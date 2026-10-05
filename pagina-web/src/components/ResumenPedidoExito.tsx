@@ -4,6 +4,7 @@ import { AlertTriangle, BadgePercent, CheckCircle2, CreditCard, ShieldCheck } fr
 import type { PagarConCulqiResultado, PedidoPublicoResultado } from "../services/api";
 import { formatearFechaBonita, formatearHora12 } from "../utils/horariosPan";
 import { montoDescontado, textoDescuento } from "../utils/descuentos";
+import { etiquetaTipoEntrega, type TipoEntrega } from "../utils/entrega";
 import { EASE_PREMIUM } from "../utils/animacion";
 
 export interface DetallePedidoEnviado {
@@ -17,6 +18,11 @@ export interface DetallePedidoEnviado {
   fechaRecojo: string;
   horaRecojo: string;
   notas: string;
+  /** Cómo se entrega. Ausente = recojo (los pedidos por paquete y los
+   * pendientes guardados antes del delivery no lo traen). */
+  tipoEntrega?: TipoEntrega;
+  /** Dirección + referencia tal como se mandó, solo con delivery. */
+  direccionEntrega?: string;
 }
 
 interface ResumenPedidoExitoProps {
@@ -84,6 +90,11 @@ export function ResumenPedidoExito({
   // abajo: cualquier otro caso (no exige pago, o ya pagó/separó) sigue con
   // el check verde de siempre.
   const pagoPendiente = hayPagoPorAdelantado && !pagoConfirmado;
+  // Lo que el SERVIDOR cobró de envío (ya incluido en `total`). Se muestra
+  // solo cuando hubo delivery y el backend lo devolvió: con un backend viejo
+  // o en recojo no hay línea de envío.
+  const esDelivery = detalle.tipoEntrega === "DELIVERY";
+  const costoEnvio = esDelivery && resultado.costoEnvio != null && resultado.costoEnvio > 0 ? resultado.costoEnvio : null;
 
   return (
     <motion.div
@@ -147,6 +158,9 @@ export function ResumenPedidoExito({
       <p className="mt-3 text-lg font-semibold text-pan-terracota">
         Total: S/ {resultado.total.toFixed(2)}
       </p>
+      {costoEnvio !== null && (
+        <p className="mt-0.5 text-xs text-pan-carbon-suave">Incluye S/ {costoEnvio.toFixed(2)} de envío a domicilio.</p>
+      )}
 
       {/* Estado del pago por adelantado. NO se vuelve a decir "recibido"
           (ya lo dice el título de arriba): lo que falta contar acá es en qué
@@ -217,9 +231,17 @@ export function ResumenPedidoExito({
         />
         <FilaDetallePedido etiqueta="Documento" valor={detalle.documento} />
         <FilaDetallePedido etiqueta="Celular" valor={detalle.telefono} />
+        {/* Solo Panadería (pan por unidad) elige cómo recibirlo; el pan de
+            hamburguesa sigue sin esta fila, igual que antes. */}
+        {!detalle.esPaquete && detalle.tipoEntrega && (
+          <FilaDetallePedido etiqueta="Entrega" valor={etiquetaTipoEntrega(detalle.tipoEntrega)} />
+        )}
+        {esDelivery && detalle.direccionEntrega && (
+          <FilaDetallePedido etiqueta="Dirección" valor={detalle.direccionEntrega} />
+        )}
         {!detalle.esPaquete && detalle.fechaRecojo && detalle.horaRecojo && (
           <FilaDetallePedido
-            etiqueta="Recojo"
+            etiqueta={esDelivery ? "Te lo llevamos" : "Recojo"}
             valor={`${formatearFechaBonita(detalle.fechaRecojo)}, ${formatearHora12(detalle.horaRecojo)}`}
           />
         )}
@@ -231,7 +253,7 @@ export function ResumenPedidoExito({
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={1.75} />
           <p className="text-xs font-medium text-amber-800">
             Como el horario elegido ya cerró, te confirmaremos por WhatsApp al número que dejaste si
-            tenemos stock disponible para separar tu pedido.
+            tenemos stock disponible para {esDelivery ? "llevarte" : "separar"} tu pedido.
           </p>
         </div>
       )}
