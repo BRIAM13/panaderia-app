@@ -77,13 +77,27 @@ export function SelectorMetodoPago({
         {/* Dos tarjetas grandes, una por medio. En escritorio van lado a
             lado; en celular y en el panel compacto de "mis pedidos" se
             apilan. Son botones de acción (no radios): acá no hay nada
-            marcado hasta que el cliente toca una. */}
-        <div className={`mt-3 grid grid-cols-1 gap-3 ${compacto ? "" : "sm:grid-cols-2"}`}>
+            marcado hasta que el cliente toca una.
+
+            Lado a lado, la rejilla tiene DOS filas (botón / motivo de
+            "apagada") y cada opción es un subgrid colgado de las dos: así los
+            dos botones miden lo mismo aunque la descripción de uno se parta
+            en dos renglones ("Desde tu app de Yape" lo hace en la tarjeta de
+            576px: quedaba 14px más alto que "Tarjeta"), y el aviso de Yape
+            apagado cae debajo sin estirar la opción de al lado. Sin aviso, la
+            segunda fila mide 0 y no deja hueco (`sm:gap-y-0`; el aire entre
+            botón y aviso lo pone el `mt-2` del aviso). */}
+        <div
+          className={`mt-3 grid grid-cols-1 gap-3 ${
+            compacto ? "" : "sm:grid-cols-2 sm:grid-rows-[auto_auto] sm:gap-y-0"
+          }`}
+        >
           <OpcionMetodo
             titulo="Tarjeta"
             descripcion="Crédito o débito"
             fondoIcono={FONDO_TARJETA_OPCION}
             Icono={CreditCard}
+            enFila={!compacto}
             onClick={() => onElegir("TARJETA")}
           />
           <OpcionMetodo
@@ -92,6 +106,7 @@ export function SelectorMetodoPago({
             fondoIcono={FONDO_YAPE}
             Icono={Smartphone}
             motivoDeshabilitado={yapeNoDisponible}
+            enFila={!compacto}
             onClick={() => onElegir("YAPE")}
           />
         </div>
@@ -137,6 +152,10 @@ interface OpcionMetodoProps {
   /** Con texto, la opción se pinta apagada, no se puede tocar y muestra el
    * motivo debajo. */
   motivoDeshabilitado?: string | null;
+  /** true = desde `sm` va lado a lado con la otra opción, dentro de la
+   * rejilla de dos filas del padre (ver `SelectorMetodoPago`): la opción se
+   * vuelve subgrid para que botón y aviso caigan en las filas compartidas. */
+  enFila: boolean;
   onClick: () => void;
 }
 
@@ -146,11 +165,19 @@ interface OpcionMetodoProps {
  * paso". Levanta y se enciende el borde al pasar el mouse, igual que las
  * tarjetas de `Nosotros`; apagada, ni se levanta ni cambia el cursor.
  */
-function OpcionMetodo({ titulo, descripcion, fondoIcono, Icono, motivoDeshabilitado, onClick }: OpcionMetodoProps) {
+function OpcionMetodo({
+  titulo,
+  descripcion,
+  fondoIcono,
+  Icono,
+  motivoDeshabilitado,
+  enFila,
+  onClick,
+}: OpcionMetodoProps) {
   const deshabilitada = Boolean(motivoDeshabilitado);
 
   return (
-    <div className="flex flex-col">
+    <div className={`flex flex-col ${enFila ? "sm:row-span-2 sm:grid sm:grid-rows-subgrid" : ""}`}>
       <motion.button
         type="button"
         onClick={onClick}

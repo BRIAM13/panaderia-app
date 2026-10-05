@@ -799,9 +799,28 @@ export function PagoCulqi({
                           <input type="hidden" id="card[number]" name="card[number]" value={soloDigitos(numero)} readOnly />
                         </div>
           
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label htmlFor="expiracion-tarjeta" className="mb-1 block text-[13px] font-medium text-pan-carbon">
+                        {/* Dos campos en la misma fila, cada uno con su etiqueta
+                            arriba. La fila es un grid de dos columnas y DOS
+                            filas (etiquetas / campos), y cada campo es un
+                            `grid-rows-subgrid` que se cuelga de esas dos filas:
+                            así la fila de etiquetas mide lo que mida la más
+                            alta de las dos y los inputs arrancan SIEMPRE a la
+                            misma altura, aunque "Expiración (MM/AA)" se parta
+                            en dos renglones (pasa en la columna angosta de
+                            escritorio, ~115px) y "CVC" quede en uno. Antes cada
+                            campo apilaba su etiqueta y su input por su cuenta,
+                            y el input de la izquierda bajaba 19px respecto al
+                            de la derecha. Las etiquetas se pegan al borde de
+                            abajo de su fila (`self-end`), junto a su campo. Los
+                            inputs ocultos de CulqiJS no ocupan celda: son
+                            `type="hidden"` (display: none). Sin soporte de
+                            subgrid, el campo vuelve a apilarse como antes. */}
+                        <div className="grid grid-cols-2 grid-rows-[auto_auto] gap-x-3">
+                          <div className="row-span-2 grid grid-rows-subgrid">
+                            <label
+                              htmlFor="expiracion-tarjeta"
+                              className="mb-1 block self-end text-[13px] font-medium text-pan-carbon"
+                            >
                               Expiración (MM/AA)
                             </label>
                             <input
@@ -832,8 +851,8 @@ export function PagoCulqi({
                               readOnly
                             />
                           </div>
-                          <div>
-                            <label htmlFor="card[cvv]" className="mb-1 block text-[13px] font-medium text-pan-carbon">
+                          <div className="row-span-2 grid grid-rows-subgrid">
+                            <label htmlFor="card[cvv]" className="mb-1 block self-end text-[13px] font-medium text-pan-carbon">
                               CVC
                             </label>
                             <div className="relative">
@@ -939,12 +958,16 @@ export function PagoCulqi({
                     )}
                   </AnimatePresence>
 
-                  {/* Pagar y Cancelar en una misma fila en escritorio (Cancelar a
-                      la izquierda, como en cualquier diálogo; en el DOM va
-                      primero Pagar para que siga siendo el botón por defecto
-                      con Enter). En celular y en el panel compacto se apilan,
-                      Pagar arriba — ahí "Volver a mis pedidos" no cabe al lado. */}
-                  <div className={`flex flex-col gap-2.5 pt-0.5 ${compacto ? "" : "sm:flex-row-reverse"}`}>
+                  {/* Pagar arriba y Cancelar debajo, SIEMPRE apilados. Antes
+                      iban en una misma fila desde `sm`, pero este formulario
+                      vive en la columna derecha de una tarjeta de 576px como
+                      mucho (`max-w-xl` en PedidoForm): la columna mide ~242px
+                      y, con "Cancelar" reservando 128px, a "Pagar S/ 47.24" le
+                      quedaban ~55px de texto y se partía en TRES renglones
+                      (96px de alto) en cualquier escritorio. En el DOM Pagar
+                      sigue primero para que siga siendo el botón por defecto
+                      con Enter. */}
+                  <div className="flex flex-col gap-2.5 pt-0.5">
                     <motion.button
                       type="submit"
                       disabled={enviando || !culqiListo || (metodo === "YAPE" && yapeNoDisponible !== null)}
@@ -975,9 +998,7 @@ export function PagoCulqi({
                         type="button"
                         onClick={onCancelar}
                         whileTap={{ scale: 0.98 }}
-                        className={`boton-relleno flex min-h-12 items-center justify-center rounded-full border border-pan-borde bg-pan-crema-suave px-6 py-3 text-sm font-semibold text-pan-carbon-suave ${
-                          compacto ? "" : "sm:min-w-32"
-                        }`}
+                        className="boton-relleno flex min-h-12 items-center justify-center rounded-full border border-pan-borde bg-pan-crema-suave px-6 py-3 text-sm font-semibold text-pan-carbon-suave"
                         style={
                           {
                             "--color-relleno": "var(--color-pan-crema-muted)",
