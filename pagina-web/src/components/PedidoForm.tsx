@@ -223,6 +223,12 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
 
   const esPaquete = productoSeleccionado?.esPaquete ?? false;
   const cantidadNum = Number(cantidad) || 0;
+  // El pedido mínimo (pan por unidad) se avisa EN VIVO, mientras el cliente
+  // todavía está escribiendo la cantidad — antes solo se enteraba al tocar
+  // "Confirmar pedido", cuando ya había llenado el resto del formulario.
+  // Solo se muestra con algo ya escrito (cantidadNum > 0): un campo recién
+  // vacío no es un pedido insuficiente, es un campo que todavía no se llenó.
+  const cantidadInsuficiente = !esPaquete && cantidadNum > 0 && cantidadNum < CANTIDAD_MINIMA_UNIDAD;
   // `subtotal` = precio de lista por cantidad; `total` = lo que de verdad
   // se paga. Son el MISMO número mientras no haya descuento, y esa es la
   // razón de que en pantalla haya un solo total: el desglose aparece
@@ -828,8 +834,31 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                         onChange={(e) => setCantidad(e.target.value.replace(/\D/g, ""))}
                         placeholder={esPaquete ? "Ingresa cantidad de paquetes" : "Ingresa cantidad de panes"}
                         required
+                        aria-invalid={cantidadInsuficiente}
                         className="campo-pan"
                       />
+                      <AnimatePresence>
+                        {cantidadInsuficiente && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2, ease: EASE_PREMIUM }}
+                            className="overflow-hidden"
+                          >
+                            <div
+                              role="alert"
+                              className="mt-2 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2"
+                            >
+                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" strokeWidth={1.75} />
+                              <p className="text-xs font-medium text-amber-800">
+                                Te faltan {CANTIDAD_MINIMA_UNIDAD - cantidadNum} panes para llegar al pedido
+                                mínimo de {CANTIDAD_MINIMA_UNIDAD}.
+                              </p>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
 
                     {/* El total ya sale acá arriba, pegado a la cantidad —
