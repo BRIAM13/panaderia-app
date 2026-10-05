@@ -110,12 +110,20 @@ export function Footer() {
         <p>
           © {new Date().getFullYear()} {SITE.nombre} · opera bajo {SITE.nombreComercial} · RUC {SITE.ruc}
         </p>
-        <a
-          href="/privacidad/"
-          className="inline-flex min-h-11 items-center rounded font-medium text-pan-carbon-suave transition-colors hover:text-pan-terracota lg:min-h-0"
-        >
-          Política de privacidad
-        </a>
+        <div className="flex items-center gap-4">
+          <a
+            href="/terminos/"
+            className="inline-flex min-h-11 items-center rounded font-medium text-pan-carbon-suave transition-colors hover:text-pan-terracota lg:min-h-0"
+          >
+            Términos y condiciones
+          </a>
+          <a
+            href="/privacidad/"
+            className="inline-flex min-h-11 items-center rounded font-medium text-pan-carbon-suave transition-colors hover:text-pan-terracota lg:min-h-0"
+          >
+            Política de privacidad
+          </a>
+        </div>
       </div>
     </footer>
   );

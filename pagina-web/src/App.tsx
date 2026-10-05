@@ -12,6 +12,8 @@ import { Footer } from "./components/Footer";
 import { BotonWhatsApp } from "./components/BotonWhatsApp";
 import { useCatalogoPublico } from "./hooks/useCatalogoPublico";
 import { PagoCulqi } from "./components/PagoCulqi";
+import { PaginaPrivacidad } from "./components/PaginaPrivacidad";
+import { PaginaTerminos } from "./components/PaginaTerminos";
 
 // Dos bloques que casi nadie necesita al abrir la página: el buscador de
 // pedidos (solo le sirve a quien ya pidió antes) y las preguntas
@@ -52,6 +54,14 @@ const ES_RUTA_ACTIVACION =
 const RUTA_PREVIEW_CULQI = "/preview-culqi";
 const ES_RUTA_PREVIEW_CULQI =
   (window.location.pathname.replace(/\/+$/, "") || "/") === RUTA_PREVIEW_CULQI;
+
+const RUTA_PRIVACIDAD = "/privacidad";
+const ES_RUTA_PRIVACIDAD =
+  (window.location.pathname.replace(/\/+$/, "") || "/") === RUTA_PRIVACIDAD;
+
+const RUTA_TERMINOS = "/terminos";
+const ES_RUTA_TERMINOS =
+  (window.location.pathname.replace(/\/+$/, "") || "/") === RUTA_TERMINOS;
 // `/preview-culqi?total=2500` para ver cómo se comporta el selector cuando el
 // monto se sale del rango de Yape (máx. S/ 2000): sin esto habría que tocar
 // código para probar ese aviso. Sin el parámetro, un pedido de pan normal.
@@ -73,6 +83,12 @@ function EsqueletoSeccion({ className }: { className?: string }) {
 }
 
 function App() {
+  if (ES_RUTA_PRIVACIDAD) {
+    return <PaginaPrivacidad />;
+  }
+  if (ES_RUTA_TERMINOS) {
+    return <PaginaTerminos />;
+  }
   if (ES_RUTA_PREVIEW_CULQI) {
     return (
       <div className="bg-pan-crema flex min-h-screen items-center justify-center px-6 py-16">

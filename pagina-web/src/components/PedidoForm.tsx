@@ -1247,7 +1247,7 @@ export function PedidoForm({ catalogo, onPedidoEnviado, productoElegidoEnMenu }:
                           Enviando…
                         </>
                       ) : (
-                        "Enviar pedido"
+                        "Confirmar pedido"
                       )}
                     </motion.button>
                   </div>
